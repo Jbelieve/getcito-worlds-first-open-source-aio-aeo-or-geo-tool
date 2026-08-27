@@ -7,8 +7,7 @@
 #
 # By opening a pull request that adds your GitHub username to this file,
 # you agree to be bound by the terms of the CLA in respect of all
-# Contributions you have made and will make to projects of Blue Whale
-# Software, LLC.
+# Contributions you have made and will make to Getcito.
 #
 #
 # Format:
@@ -19,7 +18,4 @@
 # ─────────────────────────────────────────────────────────────────────
 
 jrhizor
-prashantindurkar
-jrwrest
-tuliren
-melalj
+

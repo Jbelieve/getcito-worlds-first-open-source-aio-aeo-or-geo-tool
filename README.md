@@ -632,11 +632,15 @@ Tracked on the [GitHub Project board](https://github.com/orgs/ai-search-guru/pro
 
 ## License
 
-Released under the [MIT License](LICENSE.md). © 2026 GetCito. Contributions are covered by the [Contributor License Agreement](CLA.md).
+Released under the [MIT License](LICENSE.md).
+
+GetCito v9 is a fork of [Elmo](https://github.com/elmohq/elmo), © 2026 Blue Whale Software, LLC, used under the MIT License. Modifications and additions in this repository are © 2026 GetCito. Both copyright notices are retained in [LICENSE.md](LICENSE.md).
+
+Contributions are covered by the [Contributor License Agreement](CLA.md).
 
 ## Acknowledgements
 
-Built on TanStack Start, Drizzle ORM, Better Auth, pg-boss, Fumadocs, Biome, and Turborepo, and integrates BrightData, Oxylabs, Olostep, Cloro, DataForSEO, Azure AI Foundry, OpenRouter, Anthropic, OpenAI, and Mistral.
+Based on [Elmo](https://github.com/elmohq/elmo) and built with TanStack Start, Drizzle ORM, Better Auth, pg-boss, Fumadocs, Biome, and Turborepo, and integrates BrightData, Oxylabs, Olostep, Cloro, DataForSEO, Azure AI Foundry, OpenRouter, Anthropic, OpenAI, and Mistral.
 
 ## Contact
 

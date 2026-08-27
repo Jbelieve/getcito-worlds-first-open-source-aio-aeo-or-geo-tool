@@ -1,6 +1,12 @@
 MIT License
 
+Copyright (c) 2026 Blue Whale Software, LLC
 Copyright (c) 2026 GetCito
+
+This project is a derivative work of Elmo (https://github.com/elmohq/elmo),
+Copyright (c) 2026 Blue Whale Software, LLC, used under the MIT License.
+Modifications and additions made in this repository are Copyright (c) 2026
+GetCito and are released under the same license.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

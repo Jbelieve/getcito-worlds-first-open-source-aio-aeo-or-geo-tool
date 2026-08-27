@@ -1,7 +1,7 @@
 # Contributor License Agreement (CLA)
 
 ## 1. Purpose of the CLA
-Thank you for your interest in contributing to Getcito, an open-source project managed by Blue Whale Software, LLC (the "Company"). This Contributor License Agreement ("CLA") clarifies the intellectual property licenses granted with contributions. It protects you, the project, the Company, and its users. It does not change your right to use your own contributions for any other purpose.
+Thank you for your interest in contributing to Getcito, an open-source project managed by GetCito (the "Company"). This Contributor License Agreement ("CLA") clarifies the intellectual property licenses granted with contributions. It protects you, the project, the Company, and its users. It does not change your right to use your own contributions for any other purpose.
 
 ## 2. Copyright Ownership
 You retain copyright ownership, title, and all other rights and interests in your contributions, except for the license specifically granted to the project under this agreement. 

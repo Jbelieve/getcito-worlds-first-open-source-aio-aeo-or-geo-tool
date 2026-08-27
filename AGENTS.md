@@ -4,7 +4,7 @@
 
 ### Project overview
 
-Elmo is an open-source AI visibility tracking platform (Answer Engine Optimization). It is a **pnpm monorepo** using **Turborepo**, **Node.js 24**, and **PostgreSQL 16**.
+GetCito is an open-source AI visibility tracking platform (Answer Engine Optimization), forked from [Elmo](https://github.com/elmohq/elmo). It is a **pnpm monorepo** using **Turborepo**, **Node.js 24**, and **PostgreSQL 16**.
 
 Key apps: `apps/web` (TanStack Start dashboard, port 3000), `apps/worker` (pg-boss background jobs), `apps/cli` (deployment CLI).
 
@@ -19,7 +19,7 @@ Key apps: `apps/web` (TanStack Start dashboard, port 3000), `apps/worker` (pg-bo
 The `.env` file must exist at **both** the repo root AND `apps/web/.env` (Vite reads from its project root; the worker reads from `apps/web/.env` via `--env-file`). Required minimum for local mode:
 
 ```
-DATABASE_URL=postgres://elmo:elmo@localhost:5432/elmo
+DATABASE_URL=postgres://getcito:getcito@localhost:5432/getcito
 DEPLOYMENT_MODE=local
 VITE_DEPLOYMENT_MODE=local
 BETTER_AUTH_SECRET=<random-hex>
