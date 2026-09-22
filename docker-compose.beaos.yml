@@ -13,6 +13,7 @@ services:
       - "127.0.0.1:18081:8080"
 
   web:
+    pull_policy: missing
     restart: unless-stopped
     ports: !override
       - "127.0.0.1:13301:3000"
@@ -35,6 +36,7 @@ services:
       - traefik.http.middlewares.beaos-redirect.redirectscheme.permanent=true
 
   worker:
+    pull_policy: missing
     restart: unless-stopped
 
 networks:
