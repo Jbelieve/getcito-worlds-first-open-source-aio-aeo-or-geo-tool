@@ -1,5 +1,5 @@
 import type { Plugin } from "vite";
-import { ES_UI } from "./i18n-es";
+import { ES_TEXT, ES_UI } from "./i18n-es";
 
 function escapeRegExp(value: string): string {
 return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -24,6 +24,13 @@ out = out.split(dq).join(JSON.stringify(es));
 
 const textRe = new RegExp(">(\\s*)" + escapeRegExp(en) + "(\\s*)<", "g");
 out = out.replace(textRe, ">$1" + es + "$2<");
+}
+for (const [en, es] of Object.entries(ES_TEXT)) {
+if (en === es || en.trim() === "") continue;
+const beforeTag = new RegExp(">(\\s*)" + escapeRegExp(en) + "(\\s*)<", "g");
+out = out.replace(beforeTag, ">$1" + es + "$2<");
+const beforeExpr = new RegExp(">(\\s*)" + escapeRegExp(en) + "(\\s*)\\{", "g");
+out = out.replace(beforeExpr, ">$1" + es + "$2{");
 }
 return out === code ? null : out;
 },
