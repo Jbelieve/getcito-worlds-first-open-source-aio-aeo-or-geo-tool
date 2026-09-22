@@ -1,0 +1,19 @@
+docker-compose.beaos.yml
+  s_13027cf96e42e9::t_3c6c734d552bb8 26,32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "623edd5c8d3c705da93feb3e5dedba2af4a5fc87",
+  "prompts": {},
+  "sessions": {
+    "s_13027cf96e42e9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9b3b9ef0-4e06-4301-8ea9-a289e78b6387",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
