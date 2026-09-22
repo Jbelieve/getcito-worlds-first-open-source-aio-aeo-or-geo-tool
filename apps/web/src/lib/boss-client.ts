@@ -47,6 +47,12 @@ export async function getBoss(): Promise<PgBoss> {
 			retryBackoff: false,
 			expireInSeconds: 60 * 15,
 		});
+		await boss.createQueue("aos-audit", {
+			retryLimit: 2,
+			retryDelay: 30,
+			retryBackoff: true,
+			expireInSeconds: 60 * 5,
+		});
 
 		bossInstance = boss;
 		return boss;

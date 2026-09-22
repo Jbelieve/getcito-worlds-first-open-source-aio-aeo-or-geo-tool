@@ -59,6 +59,13 @@ async function main() {
 			expireInSeconds: 60 * 15, // 15 minute timeout for onboarding brand analysis
 		},
 		{
+			name: "aos-audit",
+			retryLimit: 2,
+			retryDelay: 30,
+			retryBackoff: true,
+			expireInSeconds: 60 * 5,
+		},
+		{
 			name: "schedule-maintenance",
 			retryLimit: 3,
 			retryDelay: 300, // 5 minutes between retries

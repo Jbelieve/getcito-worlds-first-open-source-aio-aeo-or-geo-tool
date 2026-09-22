@@ -1,0 +1,20 @@
+{
+"name": "@workspace/aos-aps",
+"version": "0.1.0",
+"private": true,
+"license": "MIT",
+"exports": {
+".": "./src/index.ts",
+"./aos": "./src/aos/index.ts",
+"./db/schema": "./src/db/schema.ts"
+},
+"dependencies": {
+"@workspace/lib": "workspace:*",
+"drizzle-orm": "^0.45.2",
+"zod": "^4.4.3"
+},
+"devDependencies": {
+"@types/node": "^25.9.3",
+"typescript": "^6.0.3"
+}
+}

@@ -9,6 +9,7 @@ import {
 	IconListDetails,
 	IconListNumbers,
 	IconReport,
+	IconRobot,
 	IconSitemap,
 	IconSpeakerphone,
 	IconTable,
@@ -65,6 +66,11 @@ export function AppSidebar({
 				title: "Overview",
 				url: "/",
 				icon: IconDashboard,
+			},
+			{
+				title: "Agent Ops",
+				url: "/agent-ops",
+				icon: IconRobot,
 			},
 		];
 
