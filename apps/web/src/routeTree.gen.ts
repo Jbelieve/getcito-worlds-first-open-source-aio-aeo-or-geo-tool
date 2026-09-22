@@ -49,6 +49,7 @@ import { Route as AuthedAppBrandQueryFanOutRouteImport } from './routes/_authed/
 import { Route as AuthedAppBrandOpportunitiesRouteImport } from './routes/_authed/app/$brand/opportunities'
 import { Route as AuthedAppBrandCitationsRouteImport } from './routes/_authed/app/$brand/citations'
 import { Route as AuthedAppBrandAgentOpsRouteImport } from './routes/_authed/app/$brand/agent-ops'
+import { Route as AuthedAppBrandAgentEntitiesRouteImport } from './routes/_authed/app/$brand/agent-entities'
 import { Route as AuthedAppBrandSplatRouteImport } from './routes/_authed/app/$brand/$'
 import { Route as ApiPlausibleJsScriptIndexRouteImport } from './routes/api/plausible/js/script/index'
 import { Route as AuthedAppBrandSettingsIndexRouteImport } from './routes/_authed/app/$brand/settings/index'
@@ -266,6 +267,12 @@ const AuthedAppBrandAgentOpsRoute = AuthedAppBrandAgentOpsRouteImport.update({
   path: '/agent-ops',
   getParentRoute: () => AuthedAppBrandRoute,
 } as any)
+const AuthedAppBrandAgentEntitiesRoute =
+  AuthedAppBrandAgentEntitiesRouteImport.update({
+    id: '/agent-entities',
+    path: '/agent-entities',
+    getParentRoute: () => AuthedAppBrandRoute,
+  } as any)
 const AuthedAppBrandSplatRoute = AuthedAppBrandSplatRouteImport.update({
   id: '/$',
   path: '/$',
@@ -354,6 +361,7 @@ export interface FileRoutesByFullPath {
   '/api/og/': typeof ApiOgIndexRoute
   '/api/setup-status/': typeof ApiSetupStatusIndexRoute
   '/app/$brand/$': typeof AuthedAppBrandSplatRoute
+  '/app/$brand/agent-entities': typeof AuthedAppBrandAgentEntitiesRoute
   '/app/$brand/agent-ops': typeof AuthedAppBrandAgentOpsRoute
   '/app/$brand/citations': typeof AuthedAppBrandCitationsRoute
   '/app/$brand/opportunities': typeof AuthedAppBrandOpportunitiesRoute
@@ -402,6 +410,7 @@ export interface FileRoutesByTo {
   '/api/og': typeof ApiOgIndexRoute
   '/api/setup-status': typeof ApiSetupStatusIndexRoute
   '/app/$brand/$': typeof AuthedAppBrandSplatRoute
+  '/app/$brand/agent-entities': typeof AuthedAppBrandAgentEntitiesRoute
   '/app/$brand/agent-ops': typeof AuthedAppBrandAgentOpsRoute
   '/app/$brand/citations': typeof AuthedAppBrandCitationsRoute
   '/app/$brand/opportunities': typeof AuthedAppBrandOpportunitiesRoute
@@ -456,6 +465,7 @@ export interface FileRoutesById {
   '/api/og/': typeof ApiOgIndexRoute
   '/api/setup-status/': typeof ApiSetupStatusIndexRoute
   '/_authed/app/$brand/$': typeof AuthedAppBrandSplatRoute
+  '/_authed/app/$brand/agent-entities': typeof AuthedAppBrandAgentEntitiesRoute
   '/_authed/app/$brand/agent-ops': typeof AuthedAppBrandAgentOpsRoute
   '/_authed/app/$brand/citations': typeof AuthedAppBrandCitationsRoute
   '/_authed/app/$brand/opportunities': typeof AuthedAppBrandOpportunitiesRoute
@@ -510,6 +520,7 @@ export interface FileRouteTypes {
     | '/api/og/'
     | '/api/setup-status/'
     | '/app/$brand/$'
+    | '/app/$brand/agent-entities'
     | '/app/$brand/agent-ops'
     | '/app/$brand/citations'
     | '/app/$brand/opportunities'
@@ -558,6 +569,7 @@ export interface FileRouteTypes {
     | '/api/og'
     | '/api/setup-status'
     | '/app/$brand/$'
+    | '/app/$brand/agent-entities'
     | '/app/$brand/agent-ops'
     | '/app/$brand/citations'
     | '/app/$brand/opportunities'
@@ -611,6 +623,7 @@ export interface FileRouteTypes {
     | '/api/og/'
     | '/api/setup-status/'
     | '/_authed/app/$brand/$'
+    | '/_authed/app/$brand/agent-entities'
     | '/_authed/app/$brand/agent-ops'
     | '/_authed/app/$brand/citations'
     | '/_authed/app/$brand/opportunities'
@@ -948,6 +961,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAppBrandAgentOpsRouteImport
       parentRoute: typeof AuthedAppBrandRoute
     }
+    '/_authed/app/$brand/agent-entities': {
+      id: '/_authed/app/$brand/agent-entities'
+      path: '/agent-entities'
+      fullPath: '/app/$brand/agent-entities'
+      preLoaderRoute: typeof AuthedAppBrandAgentEntitiesRouteImport
+      parentRoute: typeof AuthedAppBrandRoute
+    }
     '/_authed/app/$brand/$': {
       id: '/_authed/app/$brand/$'
       path: '/$'
@@ -1050,6 +1070,7 @@ const AuthedAdminRouteWithChildren = AuthedAdminRoute._addFileChildren(
 
 interface AuthedAppBrandRouteChildren {
   AuthedAppBrandSplatRoute: typeof AuthedAppBrandSplatRoute
+  AuthedAppBrandAgentEntitiesRoute: typeof AuthedAppBrandAgentEntitiesRoute
   AuthedAppBrandAgentOpsRoute: typeof AuthedAppBrandAgentOpsRoute
   AuthedAppBrandCitationsRoute: typeof AuthedAppBrandCitationsRoute
   AuthedAppBrandOpportunitiesRoute: typeof AuthedAppBrandOpportunitiesRoute
@@ -1069,6 +1090,7 @@ interface AuthedAppBrandRouteChildren {
 
 const AuthedAppBrandRouteChildren: AuthedAppBrandRouteChildren = {
   AuthedAppBrandSplatRoute: AuthedAppBrandSplatRoute,
+  AuthedAppBrandAgentEntitiesRoute: AuthedAppBrandAgentEntitiesRoute,
   AuthedAppBrandAgentOpsRoute: AuthedAppBrandAgentOpsRoute,
   AuthedAppBrandCitationsRoute: AuthedAppBrandCitationsRoute,
   AuthedAppBrandOpportunitiesRoute: AuthedAppBrandOpportunitiesRoute,

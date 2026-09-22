@@ -1,4 +1,5 @@
 import { lookup } from "node:dns/promises";
+import { verifyBrandSignature } from "./signature";
 import { isIP } from "node:net";
 import { classifyBusinessType, evaluateStandards, type Probes, type StandardsResult } from "./requirements";
 
@@ -130,6 +131,7 @@ probeJson(base, "/openapi.json", timeoutMs),
 fetchWithTimeout(base.toString(), timeoutMs),
 ]);
 const html = homepage ? await homepage.text().catch(() => "") : "";
+	const signatureValid = brandJson ? await verifyBrandSignature(base, timeoutMs) : false;
 const probes: Probes = {
 llms_txt: llmsTxt,
 agents_md: agentsMd,
@@ -141,7 +143,7 @@ mcp_server_card: mcpServerCard,
 openapi: openapiWellKnown || openapiRoot,
 brand_json: brandJson,
 keys_json: keysJson,
-signature_valid: false,
+signature_valid: signatureValid,
 };
 const businessType = classifyBusinessType({
 hasOpenApi: probes.openapi,

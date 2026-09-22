@@ -72,6 +72,11 @@ export function AppSidebar({
 				url: "/agent-ops",
 				icon: IconRobot,
 			},
+			{
+				title: "Agent Entities",
+				url: "/agent-entities",
+				icon: IconLink,
+			},
 		];
 
 		// Only show Visibility and Citations if the brand is onboarded

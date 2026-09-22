@@ -6,6 +6,7 @@
 "exports": {
 ".": "./src/index.ts",
 "./aos": "./src/aos/index.ts",
+		"./maasy": "./src/maasy/index.ts",
 "./db/schema": "./src/db/schema.ts"
 },
 "dependencies": {
