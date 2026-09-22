@@ -1,0 +1,14 @@
+apps/web/src/lib/i18n-es.ts
+  h_c5ca005a78c880 201-328
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "49aa13fe1f5c98b993eb7b40d35f59fa3c44153f",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
