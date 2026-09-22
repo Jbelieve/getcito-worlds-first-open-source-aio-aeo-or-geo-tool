@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import { beaosI18nEs } from "./src/lib/i18n-plugin";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { nitro } from "nitro/vite";
 import viteReact from "@vitejs/plugin-react";
@@ -55,6 +56,7 @@ export default defineConfig({
 		},
 	},
 	plugins: [
+		beaosI18nEs(),
 		embedBinaries(),
 		devtools(),
 		tailwindcss(),
