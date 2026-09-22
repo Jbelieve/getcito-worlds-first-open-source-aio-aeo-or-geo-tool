@@ -66,6 +66,7 @@ export default defineConfig({
 			},
 			noExternals: [
 				"@opentelemetry/instrumentation",
+				"@takumi-rs/wasm",
 				"@opentelemetry/api",
 				"@prisma/instrumentation",
 			],
