@@ -30,7 +30,7 @@ data: {
 brandId,
 projectId: brand.id,
 name: brand.name,
-entityType: "product",
+entityType: (entities.data ?? []).length === 0 ? "umbrella" : "product",
 isPrimary: false,
 },
 });

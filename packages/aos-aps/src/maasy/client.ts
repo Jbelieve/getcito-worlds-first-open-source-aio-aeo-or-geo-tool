@@ -49,9 +49,12 @@ return payload.result as T;
 }
 
 export async function listMaasyBrands(): Promise<MaasyBrand[]> {
-const result = await callMaasyTool<MaasyBrand[] | { brands?: MaasyBrand[] }>("list_brands");
-if (Array.isArray(result)) return result;
-return Array.isArray(result.brands) ? result.brands : [];
+	const result = await callMaasyTool<Array<Record<string, unknown>> | { brands?: Array<Record<string, unknown>> }>("list_brands");
+	const rawBrands = Array.isArray(result) ? result : Array.isArray(result.brands) ? result.brands : [];
+	return rawBrands.map((entry) => ({
+		id: String(entry.id ?? ""),
+		name: typeof entry.name === "string" && entry.name.length > 0 ? entry.name : String(entry.brand_name ?? entry.id ?? "Marca"),
+	}));
 }
 
 export async function getMaasyBrandContext(projectId: string): Promise<MaasyBrandContext> {
