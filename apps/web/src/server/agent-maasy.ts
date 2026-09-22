@@ -1,9 +1,10 @@
+import { createHash } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@workspace/lib/db/db";
-import { agentBrandEntities } from "@workspace/aos-aps/db/schema";
-import { listMaasyBrands } from "@workspace/aos-aps/maasy";
+import { agentBrandDnaSnapshots, agentBrandEntities } from "@workspace/aos-aps/db/schema";
+import { getMaasyBrandContext, listMaasyBrands } from "@workspace/aos-aps/maasy";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 
 function requireAdmin(session: { user: { role?: string | null } }): void {
@@ -75,4 +76,48 @@ maasyProjectId: data.projectId,
 isPrimary: data.isPrimary ?? false,
 });
 return { ok: true, updated: false };
+});
+
+export const syncAgentDnaFn = createServerFn({ method: "POST" })
+.validator(
+z.object({
+brandId: z.string().min(1),
+entityId: z.string().uuid(),
+projectId: z.string().min(1),
+}),
+)
+.handler(async ({ data }) => {
+const session = await requireAuthSession();
+await requireOrgAccess(session.user.id, data.brandId);
+const payload = await getMaasyBrandContext(data.projectId);
+const json = JSON.stringify(payload);
+const hash = createHash("sha256").update(json).digest("hex");
+await db.insert(agentBrandDnaSnapshots).values({
+brandId: data.brandId,
+entityId: data.entityId,
+maasyProjectId: data.projectId,
+payload,
+hash,
+});
+return { ok: true, hash };
+});
+
+export const getAgentDnaSnapshotsFn = createServerFn({ method: "POST" })
+.validator(z.object({ brandId: z.string().min(1) }))
+.handler(async ({ data }) => {
+const session = await requireAuthSession();
+await requireOrgAccess(session.user.id, data.brandId);
+const rows = await db
+.select({
+id: agentBrandDnaSnapshots.id,
+entityId: agentBrandDnaSnapshots.entityId,
+maasyProjectId: agentBrandDnaSnapshots.maasyProjectId,
+hash: agentBrandDnaSnapshots.hash,
+syncedAt: agentBrandDnaSnapshots.syncedAt,
+})
+.from(agentBrandDnaSnapshots)
+.where(eq(agentBrandDnaSnapshots.brandId, data.brandId))
+.orderBy(desc(agentBrandDnaSnapshots.syncedAt))
+.limit(20);
+return rows.map((row) => ({ ...row, syncedAt: row.syncedAt.toISOString() }));
 });

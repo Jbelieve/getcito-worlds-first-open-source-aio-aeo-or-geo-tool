@@ -38,7 +38,24 @@ error: text("error"),
 createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const agentBrandDnaSnapshots = pgTable("agent_brand_dna_snapshots", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	brandId: text("brand_id")
+		.references(() => brands.id, { onDelete: "cascade" })
+		.notNull(),
+	entityId: uuid("entity_id")
+		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+		.notNull(),
+	maasyProjectId: text("maasy_project_id").notNull(),
+	source: text("source").default("maasy-mcp").notNull(),
+	payload: json("payload").notNull(),
+	hash: text("hash").notNull(),
+	syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type AgentBrandEntity = typeof agentBrandEntities.$inferSelect;
 export type NewAgentBrandEntity = typeof agentBrandEntities.$inferInsert;
 export type AgentAosAudit = typeof agentAosAudits.$inferSelect;
 export type NewAgentAosAudit = typeof agentAosAudits.$inferInsert;
+export type AgentBrandDnaSnapshot = typeof agentBrandDnaSnapshots.$inferSelect;
+export type NewAgentBrandDnaSnapshot = typeof agentBrandDnaSnapshots.$inferInsert;
