@@ -1,0 +1,18 @@
+apps/web/package.json
+  h_c5ca005a78c880 23-24
+apps/web/src/styles.css
+  h_c5ca005a78c880 2-7
+pnpm-lock.yaml
+  h_c5ca005a78c880 61-66,1256-1261,6997-7000
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4ebff4ca9e97cbf87e82bf21f3f42e4335d6db03",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
