@@ -85,6 +85,7 @@ Modelos y proveedores habilitados para el brand. En BeAOS están configurados:
 - `chatgpt:openai-api:gpt-5.5:online` para ChatGPT con búsqueda web.
 - `google-ai-mode:brightdata:online` para Google AI Mode vía BrightData.
 - `perplexity:brightdata:online` para Perplexity vía BrightData.
+- `claude:anthropic-api:claude-sonnet-4-6:online` para Claude vía Anthropic API (requiere crédito en la cuenta).
 
 Los proveedores se configuran por variables de entorno y se validan al arrancar el worker.
 
