@@ -1,0 +1,19 @@
+apps/web/src/lib/i18n-es.ts
+  s_5c5521e7e28146::t_caba966d46beca 1-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d4c5c22d0166618204603442fdeeb8054371b918",
+  "prompts": {},
+  "sessions": {
+    "s_5c5521e7e28146": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "193225c1-4a16-45cc-a633-a3fadc6eede0",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
