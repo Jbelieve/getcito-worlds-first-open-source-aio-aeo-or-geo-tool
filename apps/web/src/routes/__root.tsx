@@ -8,9 +8,7 @@ import { DEFAULT_APP_ICON, Getcito_THEME_COLOR } from "@workspace/config/constan
 import type { DeploymentMode } from "@workspace/config/types";
 import type { MissingEnvVar } from "@workspace/config/env";
 import { getClientConfig, getEnvValidationStateFn, type PublicClientConfig } from "@/server/config";
-import { usesWordmarkFont } from "@/components/logo";
 import MissingEnvPage from "@/components/missing-env-page";
-import titanOneFont from "@fontsource/titan-one/files/titan-one-latin-400-normal.woff2?url";
 import queryDevtools from "@/integrations/tanstack-query/devtools";
 import { initPostHog } from "@/lib/posthog";
 import appCss from "../styles.css?url";
@@ -103,25 +101,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 				{ name: "twitter:image", content: ogImage },
 			],
 			links: [
-				// The wordmark is the only thing using Titan One and it sits above the
-				// fold, so without a preload the logo paints in the fallback face and
-				// visibly swaps once the woff2 arrives. Discovering the font through
-				// the stylesheet is a request too late. Whitelabel deployments render
-				// an icon plus a system-font name, so there the font would be
-				// downloaded for nothing.
-				...(usesWordmarkFont(branding)
-					? [
-							{
-								rel: "preload",
-								as: "font",
-								type: "font/woff2",
-								href: titanOneFont,
-								// Inside a conditional spread the literal widens to `string`,
-								// which doesn't satisfy React's `CrossOrigin` union.
-								crossOrigin: "anonymous" as const,
-							},
-						]
-					: []),
 				{ rel: "stylesheet", href: appCss },
 				{ rel: "manifest", href: "/api/manifest" },
 				// Whitelabel uses its own icon URL for both favicon and iOS touch;
