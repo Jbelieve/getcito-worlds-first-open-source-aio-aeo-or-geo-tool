@@ -1,0 +1,16 @@
+.env.beaos.example
+  h_c5ca005a78c880 17,20
+MANUAL-BEAOS.md
+  h_c5ca005a78c880 88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8af772c86d44580f56008514f9b2e4cca2785ce1",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
