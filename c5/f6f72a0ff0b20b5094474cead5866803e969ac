@@ -1,0 +1,48 @@
+.env.beaos.example
+  h_c5ca005a78c880 1-21
+.env.example
+  h_c5ca005a78c880 15-16
+apps/web/.env.example
+  h_c5ca005a78c880 11-12
+apps/web/package.json
+  h_c5ca005a78c880 22
+apps/web/public/icons/beaos-icon.svg
+  h_c5ca005a78c880 1-5
+apps/web/src/components/logo.tsx
+  h_c5ca005a78c880 39,43
+apps/web/src/routes/__root.tsx
+  h_c5ca005a78c880 61,138-139
+apps/web/src/routes/api/manifest/index.ts
+  h_c5ca005a78c880 44,49
+apps/web/src/routes/api/og/index.ts
+  h_c5ca005a78c880 6,116-117,119
+apps/web/src/styles.css
+  h_c5ca005a78c880 2,21-23,61-95,99-129
+docker-compose.beaos.yml
+  h_c5ca005a78c880 1-39
+packages/config/src/constants.ts
+  h_c5ca005a78c880 12-13,19-23,35-38,40-42,44-45,48-49,52-54
+packages/local/src/auth-provider.ts
+  h_c5ca005a78c880 30
+packages/og/src/render.ts
+  h_c5ca005a78c880 7,59,67,87,94
+packages/og/src/virtual.d.ts
+  h_c5ca005a78c880 11-15
+packages/og/src/vite-plugin.ts
+  h_c5ca005a78c880 10-11
+packages/ui/src/styles/globals.css
+  h_c5ca005a78c880 15-17,54-88,92-122
+pnpm-lock.yaml
+  h_c5ca005a78c880 55-57,1244-1246,3790,6981-6982
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c5f6f72a0ff0b20b5094474cead5866803e969ac",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
