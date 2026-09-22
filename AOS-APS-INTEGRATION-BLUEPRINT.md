@@ -51,7 +51,7 @@ BeAOS aporta lo que Getcito ya tiene: prompts, visibilidad, citas, competidores,
 Son las superficies que contestan los prompts APS. No se sustituyen.
 
 - ChatGPT: OpenAI API `gpt-5.5`.
-- Claude: Anthropic API `claude-sonnet-4-6` cuando tenga saldo.
+- Claude: Anthropic API `claude-sonnet-5` (fallback `claude-sonnet-4-6` si la key no lo habilita) cuando tenga saldo.
 - Perplexity: BrightData.
 
 ### Capa 2 — Trabajo interno
@@ -109,24 +109,46 @@ agent-assets
 - `/api/v1/agent-assets/*`
 - `.well-known/brand.json`, `llms.txt`, `agent.json`, MCP card.
 
-## Modelo de entidades
+## Modelo de entidades (revision post-review)
+
+Decision: `brands.id` sigue siendo la unica identidad de marca/tenant de Getcito. No se crea una segunda nocion de marca. Las rutas `$brand` siguen siendo `brands.id`.
+
+Se agrega una tabla de mapeo/entidad agentica:
 
 ```text
-brand_entity
-  id
-  parent_entity_id
-  entity_type: umbrella | product
-  name
-  website_url
-  maasy_project_id
-  is_primary
+agent_brand_entities
+  id uuid pk
+  brand_id text not null references brands(id) on delete cascade
+  parent_entity_id uuid null references agent_brand_entities(id) on delete cascade
+  entity_type text not null check (umbrella | product)
+  name text not null
+  website_url text
+  maasy_project_id uuid null
+  is_primary boolean default false
+  created_at, updated_at
 ```
+
+Reglas:
+
+- `brand_id` = `brands.id`. Es el eje de permisos, prompts, competidores y worker.
+- `parent_entity_id` es solo jerarquia de entidades agenticas, no reemplaza `brands`.
+- `maasy_project_id` mapea al proyecto de Maasy. Un `brand` puede tener N entidades/proyectos.
+- `$brand` en rutas siempre es `brands.id`; la entidad se selecciona con `?entity=<id>` o ruta anidada.
+- AOS/APS se guarda por `agent_brand_entities.id`.
+- Rollup por `brand_id` y `parent_entity_id`.
+
+Permisos:
+
+- Acceso a `agent_brand_entities` hereda de `requireOrgAccess(userId, brands.id)`.
+- Worker scoping por `brand_id` y `entity_id`.
+- Sync Maasy server-side con `MAASY_MCP_TOKEN`, nunca browser.
 
 Caso Believe:
 
-- Believe = umbrella.
-- Subproductos = hijas con URL propia.
-- AOS/APS se mide por entidad y se puede rollup a la sombrilla.
+- `brands.id` de Believe en Getcito = marca sombrilla.
+- `agent_brand_entities`: Believe umbrella + subproductos.
+- Cada subproducto tiene `website_url` y `maasy_project_id` propios.
+- Getcito sigue siendo la fuente de verdad de brand/prompts/worker; la tabla agentica solo mapea jerarquia y proyectos Maasy.
 
 ## Contratos Maasy MCP
 
@@ -199,6 +221,47 @@ Reglas:
 - commits chicos y rebaseables,
 - cada parche upstream debe poder aplicarse sobre una version nueva con minimo conflicto.
 
+## Budget guard APS
+
+Variables:
+
+```text
+APS_MAX_PROMPTS=50
+APS_MAX_MODELS=3
+APS_MAX_REPETITIONS=3
+APS_MAX_CALLS_PER_RUN=450
+APS_DAILY_BUDGET_USD=<definir>
+APS_BUDGET_POLICY=stop | reduce_repetitions
+```
+
+Politica default: `stop`.
+
+- Si el run proyectado excede el cap, se marca `budget_exceeded`.
+- No se calcula score parcial como si fuera completo.
+- Nunca se degrada la capa de medicion a un LLM barato.
+- Opcion permitida: `reduce_repetitions` explicito y visible en el run.
+
+## Versionado de judge y scoring
+
+La capa interna puede cambiar de modelo/banda, pero la serie historica no debe corromperse.
+
+`agent_aps_observations` guarda:
+
+- `judge_model_alias`
+- `judge_model_version`
+- `judge_pipeline_version`
+- `parsed_at`
+
+`agent_aps_scores` guarda:
+
+- `scoring_version`
+- `measurement_version`
+- `judge_model_alias`
+- `judge_model_version`
+- `prompt_library_version`
+
+Cada corrida fija estos valores. Un cambio de judge o de algoritmo crea una nueva serie comparable, no una mezcla silenciosa.
+
 ## Fases
 
 ### Fase 0 - Scout + PRD
@@ -220,21 +283,23 @@ Sync de Chrome extension con BeAOS.
 ### Fase 5 - HPI + Getcito
 AOS + APS + GEO + citas en un solo reporte.
 
-## Riesgos abiertos
+## Riesgos residuales
 
-1. Bridge de auth Maasy/BeAOS: se evita consumiendo MCP, pero hay que cuidar rate limits.
-2. Costo de APS: prompts x modelos x repeticiones. Hace falta budget guard.
-3. Judge APS: fijar version y banda para comparabilidad.
-4. Jerarquia de marcas: validar rollups y permisos por entidad.
+1. Bridge de auth Maasy/BeAOS: se evita consumiendo MCP, pero hay que cuidar rate limits y rotacion del token.
+2. Costo de APS: resuelto con budget guard explicito; queda definir el numero de USD del cap.
+3. Judge APS: resuelto con `judge_model_alias`, `judge_model_version` y `judge_pipeline_version` persistidos por corrida.
+4. Jerarquia de marcas: resuelta con `agent_brand_entities.brand_id -> brands.id`; `brands.id` es la unica identidad y la seguridad hereda de `organization`.
 5. Assets publicos: decidir si se sirven desde BeAOS o se publican en el sitio del cliente.
 
 ## Credenciales necesarias
 
 - `MAASY_MCP_TOKEN` (ya verificado).
 - `LLM_GATEWAY_URL` (ya verificado).
-- `LLM_GATEWAY_KEY_BEADS` temporal.
+- `LLM_GATEWAY_KEY_BEADS` temporal mientras se crea la dedicada.
 - `LLM_GATEWAY_KEY_BEAOS` dedicada (pendiente).
+- `ANTHROPIC_MEASUREMENT_MODEL=claude-sonnet-5` (fallback `claude-sonnet-4-6`).
 - Llaves de medicion: OpenAI, Anthropic, BrightData (ya configuradas).
+- Private key Ed25519 y HMAC del Operator en Infisical (pendiente de portar/verificar).
 
 ---
 
