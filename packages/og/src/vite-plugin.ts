@@ -7,6 +7,8 @@ const EMBEDDED_BINARIES: Record<string, string> = {
 		"@takumi-rs/wasm/takumi_wasm_bg.wasm",
 	"virtual:font/titan-one-400":
 		"@fontsource/titan-one/files/titan-one-latin-400-normal.woff2",
+	"virtual:font/fraunces-500":
+		"@fontsource/fraunces/files/fraunces-latin-500-normal.woff2",
 	"virtual:font/geist-sans-400":
 		"@fontsource/geist-sans/files/geist-sans-latin-400-normal.woff2",
 	"virtual:font/geist-sans-500":

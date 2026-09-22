@@ -58,7 +58,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 		}
 
 		const hasCustomIcon = Boolean(branding?.icon && branding.icon !== DEFAULT_APP_ICON);
-		const appName = branding?.name || "Getcito";
+		const appName = branding?.name || "BeAOS";
 		const themeColor = hasCustomIcon ? "#000000" : Getcito_THEME_COLOR;
 		const appUrl = branding?.url ? branding.url.replace(/\/$/, "") : undefined;
 
@@ -135,10 +135,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 							// Icons live under /icons/ (not the root) so browsers' default
 							// probes for /favicon.ico and /apple-touch-icon.png 404 on
 							// whitelabel deployments instead of picking up Getcito assets.
-							{ rel: "icon", type: "image/svg+xml", href: "/icons/getcito-icon.svg" },
-							{ rel: "icon", type: "image/png", sizes: "96x96", href: "/icons/getcito-icon-96.png" },
-							{ rel: "icon", type: "image/x-icon", href: "/icons/favicon.ico" },
-							{ rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
+							{ rel: "icon", type: "image/svg+xml", href: "/icons/beaos-icon.svg" },
+																					{ rel: "apple-touch-icon", href: "/icons/beaos-icon.svg" },
 						]),
 			],
 			scripts,

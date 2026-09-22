@@ -4,7 +4,7 @@ import {
 	Getcito_BRAND_COLOR,
 } from "@workspace/config/constants";
 
-export const ACCENT_COLORS = ["#2563eb", "#f4d35e", "#ee964b", "#f95738"];
+export const ACCENT_COLORS = ["#0c3bb9", "#00aaff", "#16a34a", "#f59e0b"];
 export const DEFAULT_TAGLINE = "AI Search Optimization";
 export const DEFAULT_DESCRIPTION =
 	"Track and optimize your brand's visibility across AI models.";
@@ -56,7 +56,7 @@ export function renderOgImage({
 					{
 						style: {
 							position: "absolute",
-							fontFamily: "Titan One",
+							fontFamily: "Fraunces",
 							fontSize: 700,
 							color: watermarkColor,
 							lineHeight: 1,
@@ -64,7 +64,7 @@ export function renderOgImage({
 							top: -60,
 						},
 					},
-					"e",
+					"B",
 				)
 			: null,
 		createElement(
@@ -84,14 +84,14 @@ export function renderOgImage({
 						"div",
 						{
 							style: {
-								fontFamily: "Titan One",
+								fontFamily: "Fraunces",
 								fontSize: 140,
 								color: Getcito_BRAND_COLOR,
 								lineHeight: 1,
 								marginBottom: 40,
 							},
 						},
-						"Getcito",
+						"BeAOS", createElement("span", { style: { color: "#00aaff" } }, "."),
 					)
 				: iconDataUri
 					? createElement("img", {
