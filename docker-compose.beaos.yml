@@ -1,5 +1,6 @@
 services:
   postgres:
+    container_name: beaos-postgres
     restart: unless-stopped
     ports: !override
       - "127.0.0.1:15433:5432"
