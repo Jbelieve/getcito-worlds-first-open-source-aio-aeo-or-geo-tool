@@ -1,0 +1,14 @@
+apps/web/src/components/chart-export-preview.tsx
+  h_c5ca005a78c880 49,114-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "064b123b952fd97d67b73f079b0e022a08325ee7",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
