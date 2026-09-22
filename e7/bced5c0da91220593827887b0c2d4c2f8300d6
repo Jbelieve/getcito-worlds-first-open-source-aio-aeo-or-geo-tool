@@ -1,0 +1,19 @@
+packages/lib/src/db/provisioning.ts
+  s_5df9439764eab5::t_6457dafed0cd22 69-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e7bced5c0da91220593827887b0c2d4c2f8300d6",
+  "prompts": {},
+  "sessions": {
+    "s_5df9439764eab5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a777a595-847b-4467-a0fb-3f097ab95761",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
