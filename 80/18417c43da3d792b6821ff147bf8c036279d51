@@ -1,0 +1,29 @@
+apps/web/src/components/brand-priority-button.tsx
+  s_8a93d1d4dca631::t_86c1bfcc56b642 70
+apps/web/src/routes/_authed/admin/queue.tsx
+  s_85f6feab8926af::t_0f3f3bd4c427a6 176,189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8018417c43da3d792b6821ff147bf8c036279d51",
+  "prompts": {},
+  "sessions": {
+    "s_85f6feab8926af": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "53be6cfd-f3b2-4cde-a826-5fb5d117cecc",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    },
+    "s_8a93d1d4dca631": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61ec03f3-96e2-46c4-9462-e6b78147fec4",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
