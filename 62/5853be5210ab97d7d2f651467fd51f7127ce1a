@@ -1,0 +1,61 @@
+apps/web/src/components/app-sidebar.tsx
+  s_ef06f9ce6d10ff::t_137fdf349767d2 75-79
+apps/web/src/routeTree.gen.ts
+  s_ef06f9ce6d10ff::t_a7366fa623b26b 52,270-275,364,413,468,523,572,626,964-970,1073,1093
+apps/web/src/routes/_authed/app/$brand/agent-entities.tsx
+  s_ef06f9ce6d10ff::t_e6ae69c08f62b9 1-105
+apps/web/src/server/agent-maasy.ts
+  s_ef06f9ce6d10ff::t_ce665178dbd585 1-78
+packages/aos-aps/package.json
+  s_8fb57756e9e84a::t_ce6bc0eb5babd6 9
+packages/aos-aps/src/aos/audit.ts
+  s_f746077356a513::t_2540c8f3b174c1 2,134,146
+packages/aos-aps/src/aos/signature.ts
+  s_f746077356a513::t_10aca56c5217e7 1-78
+packages/aos-aps/src/index.ts
+  s_8fb57756e9e84a::t_7a87bce70b0a6b 2
+packages/aos-aps/src/maasy/client.ts
+  s_8a93d1d4dca631::t_2a6f811122581f 1-59
+packages/aos-aps/src/maasy/index.ts
+  s_f746077356a513::t_a45fa27f68b8b0 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "625853be5210ab97d7d2f651467fd51f7127ce1a",
+  "prompts": {},
+  "sessions": {
+    "s_8a93d1d4dca631": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61ec03f3-96e2-46c4-9462-e6b78147fec4",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    },
+    "s_8fb57756e9e84a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4ee7a198-16c2-4c52-b2bd-8f971df14bb9",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    },
+    "s_ef06f9ce6d10ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20817a50-c05d-4da6-9b61-090a3f04cc9a",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    },
+    "s_f746077356a513": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3fdde923-4ed0-4251-9add-ff308ddef14a",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
