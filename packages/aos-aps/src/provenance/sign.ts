@@ -7,7 +7,7 @@ if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
 try {
 const normalized = raw.replace(/-/g, "+").replace(/_/g, "/");
 const buf = Buffer.from(normalized, "base64");
-return buf.length === 32 ? buf : null;
+return buf.length >= 32 ? buf.subarray(0, 32) : null;
 } catch {
 return null;
 }
