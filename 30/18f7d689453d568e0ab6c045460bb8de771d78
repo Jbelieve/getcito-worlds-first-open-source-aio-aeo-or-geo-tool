@@ -1,0 +1,14 @@
+docker/Dockerfile
+  h_c5ca005a78c880 99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3018f7d689453d568e0ab6c045460bb8de771d78",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
