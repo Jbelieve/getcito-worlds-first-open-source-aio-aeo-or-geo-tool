@@ -1,0 +1,19 @@
+apps/web/src/routes/_authed/app/$brand/agent-entities.tsx
+  s_83eb0c85ef1ba9::t_2b90e199c320d2 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "aee0e5d88c815a9c7c5e61f2fa851e76adc632c0",
+  "prompts": {},
+  "sessions": {
+    "s_83eb0c85ef1ba9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6096dbd5-552c-41d6-a4f3-06e4bf967c90",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
