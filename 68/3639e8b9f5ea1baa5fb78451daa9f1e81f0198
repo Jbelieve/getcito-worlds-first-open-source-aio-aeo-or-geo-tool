@@ -1,0 +1,16 @@
+apps/web/vite.config.ts
+  h_c5ca005a78c880 69
+docker/Dockerfile
+  h_c5ca005a78c880 95-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "683639e8b9f5ea1baa5fb78451daa9f1e81f0198",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
