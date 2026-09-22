@@ -10,6 +10,7 @@ timeoutMs?: number;
 
 export interface AosAuditResult {
 url: string;
+operatorDetected: boolean;
 businessType: "brand" | "product_api";
 probes: Probes;
 standards: StandardsResult;
@@ -87,6 +88,10 @@ return body.trim().length > 0;
 return false;
 }
 }
+function detectOperator(html: string): boolean {
+	return html.includes("operator.maasy.ai/operator/v1/operator.js") || html.includes("data-maasy-operator");
+}
+
 function hasJsonLdIdentity(html: string): boolean {
 	if (html.includes("application/ld+json") === false) return false;
 	const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)];
@@ -131,6 +136,7 @@ probeJson(base, "/openapi.json", timeoutMs),
 fetchWithTimeout(base.toString(), timeoutMs),
 ]);
 const html = homepage ? await homepage.text().catch(() => "") : "";
+	const operatorDetected = detectOperator(html);
 	const signatureValid = brandJson ? await verifyBrandSignature(base, timeoutMs) : false;
 const probes: Probes = {
 llms_txt: llmsTxt,
@@ -144,6 +150,7 @@ openapi: openapiWellKnown || openapiRoot,
 brand_json: brandJson,
 keys_json: keysJson,
 signature_valid: signatureValid,
+		operator_detected: operatorDetected,
 };
 const businessType = classifyBusinessType({
 hasOpenApi: probes.openapi,
@@ -153,6 +160,7 @@ const standards = evaluateStandards(probes, businessType);
 const score = standards.aos_standards;
 return {
 url: base.toString(),
+		operatorDetected,
 businessType,
 probes,
 standards,

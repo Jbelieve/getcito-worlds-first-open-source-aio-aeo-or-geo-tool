@@ -4,6 +4,7 @@ import {
 	IconChartBar,
 	IconCpu,
 	IconDashboard,
+	IconFileDescription,
 	IconGauge,
 	IconLink,
 	IconListDetails,
@@ -76,6 +77,11 @@ export function AppSidebar({
 				title: "Agent Entities",
 				url: "/agent-entities",
 				icon: IconLink,
+			},
+			{
+				title: "Agent Assets",
+				url: "/agent-assets",
+				icon: IconFileDescription,
 			},
 		];
 

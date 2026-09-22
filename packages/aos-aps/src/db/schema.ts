@@ -53,9 +53,26 @@ export const agentBrandDnaSnapshots = pgTable("agent_brand_dna_snapshots", {
 	syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const agentAssets = pgTable("agent_assets", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	brandId: text("brand_id")
+		.references(() => brands.id, { onDelete: "cascade" })
+		.notNull(),
+	entityId: uuid("entity_id")
+		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+		.notNull(),
+	path: text("path").notNull(),
+	type: text("type").notNull(),
+	content: text("content").notNull(),
+	hash: text("hash").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type AgentBrandEntity = typeof agentBrandEntities.$inferSelect;
 export type NewAgentBrandEntity = typeof agentBrandEntities.$inferInsert;
 export type AgentAosAudit = typeof agentAosAudits.$inferSelect;
 export type NewAgentAosAudit = typeof agentAosAudits.$inferInsert;
 export type AgentBrandDnaSnapshot = typeof agentBrandDnaSnapshots.$inferSelect;
 export type NewAgentBrandDnaSnapshot = typeof agentBrandDnaSnapshots.$inferInsert;
+export type AgentAsset = typeof agentAssets.$inferSelect;
+export type NewAgentAsset = typeof agentAssets.$inferInsert;
