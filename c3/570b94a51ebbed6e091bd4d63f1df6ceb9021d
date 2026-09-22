@@ -1,0 +1,19 @@
+.env.beaos.example
+  s_4e2ce39fc1f66d::t_4e94ea9927d62a 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c3570b94a51ebbed6e091bd4d63f1df6ceb9021d",
+  "prompts": {},
+  "sessions": {
+    "s_4e2ce39fc1f66d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7df934e6-3094-4ad1-9a08-e87632ffbb1a",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
