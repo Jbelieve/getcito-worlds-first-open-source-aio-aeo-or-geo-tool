@@ -12,7 +12,7 @@ enforce: "pre",
 transform(code, id) {
 const cleanId = id.split("?")[0];
 if (cleanId.endsWith(".ts") === false && cleanId.endsWith(".tsx") === false) return null;
-if (cleanId.includes("/apps/web/src/") === false) return null;
+if (cleanId.includes("/apps/web/src/") === false && cleanId.includes("/packages/ui/src/") === false) return null;
 if (cleanId.endsWith("/lib/i18n-es.ts")) return null;
 if (cleanId.endsWith("/lib/i18n-plugin.ts")) return null;
 
