@@ -1,0 +1,27 @@
+apps/web/src/routes/_authed/app/$brand/agent-entities.tsx
+  s_f746077356a513::t_cc18dbd2926bb1 7,34,47-66,95-116
+apps/web/src/server/agent-maasy.ts
+  s_f746077356a513::t_227203be8f7689 1,6-7,80-123
+packages/lib/src/db/migrations/0015_agent_brand_dna.sql
+  s_f746077356a513::t_f61c7bc9647fa6 1-13
+packages/lib/src/db/migrations/meta/0015_snapshot.json
+  s_f746077356a513::t_36b9b2ceb77769 1-2210
+packages/lib/src/db/migrations/meta/_journal.json
+  s_f746077356a513::t_d701ac10ffc756 109-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9ce6d030c163207a393ea764b6a416fc8b3720e8",
+  "prompts": {},
+  "sessions": {
+    "s_f746077356a513": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3fdde923-4ed0-4251-9add-ff308ddef14a",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
