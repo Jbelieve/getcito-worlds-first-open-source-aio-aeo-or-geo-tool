@@ -35,11 +35,11 @@ const beforeExpr = new RegExp(">(\\s*)" + escapeRegExp(en) + "(\\s*)\\{", "g");
 out = out.replace(beforeExpr, ">$1" + es + "$2{");
 }
 if (cleanId.endsWith(".tsx")) {
-out = out.replace(/>([\s\S]*?)</g, (match, inner) => {
+out = out.replace(/>([^<>{}]+?)</g, (match, inner) => {
 const es = ES_UI[normalizeText(inner)] ?? ES_TEXT[normalizeText(inner)];
 return es ? ">" + es + "<" : match;
 });
-out = out.replace(/>([\s\S]*?)\{/g, (match, inner) => {
+out = out.replace(/>([^<>{}]+?)\{/g, (match, inner) => {
 const es = ES_UI[normalizeText(inner)] ?? ES_TEXT[normalizeText(inner)];
 return es ? ">" + es + " {" : match;
 });

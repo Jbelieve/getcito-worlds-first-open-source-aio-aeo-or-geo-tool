@@ -454,7 +454,6 @@ export const ES_UI: Record<string, string> = {
   "Run the onboarding analysis for any brand without creating it. Same pipeline as the wizard and": "Ejecuta el análisis de onboarding para cualquier marca sin crearla. Mismo pipeline que el wizard y",
   "Brand analysis": "Análisis de marca",
   "Analyze a website to discover its competitors, additional brand domains, aliases, and suggested AI tracking prompts. Works with any configured LLM provider.": "Analiza un sitio web para descubrir competidores, dominios adicionales, aliases y prompts sugeridos de seguimiento. Funciona con cualquier provider LLM configurado.",
-  "Run first": "Ejecutar primero",
   "\"Run first\" moves a brand's waiting prompts to the front. The bump lasts for one run - the next cycle takes its normal turn.": "\"Ejecutar primero\" mueve los prompts en espera de una marca al frente. El bump dura una ejecución; el siguiente ciclo vuelve a su turno normal.",
   "The order the worker will pull these in: highest priority first, then oldest. Showing": "El orden en que el worker los tomará: primero mayor prioridad, luego más antiguos. Mostrando",
   "Monitor prompt scheduling, job execution, and worker health": "Monitorea la programación de prompts, ejecución de jobs y salud del worker",
@@ -480,6 +479,16 @@ export const ES_UI: Record<string, string> = {
   "Completed": "Completados",
   "total prompts": "prompts totales",
   "additional recently expired": "adicionales recientemente vencidos",
+  "Configure Job Delay for": "Configurar retraso de jobs para",
+  "Set a custom delay for how often prompt jobs run. Default is": "Define un retraso personalizado para la frecuencia de ejecución de prompts. El valor por defecto es",
+  "Custom Delay": "Retraso personalizado",
+  "Weeks": "Semanas",
+  "Days": "Días",
+  "Hours": "Horas",
+  "Current:": "Actual:",
+  "Configure LLMs for": "Configurar LLMs para",
+  "Select which AI models should evaluate this brand.": "Selecciona qué modelos de IA deben evaluar esta marca.",
+  "Available Models": "Modelos disponibles",
 };
 
 export const ES_TEXT: Record<string, string> = {

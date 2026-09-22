@@ -173,7 +173,7 @@ function QueuePage() {
 				<StatCard
 					title="Waiting now"
 					value={data.summary.readyNow}
-					hint={`${data.summary.brandsWaiting} brand(s) waiting`}
+					hint={`${data.summary.brandsWaiting} marca(s) esperando`}
 					icon={<Clock className="h-4 w-4 text-blue-500" />}
 					tone="text-blue-600"
 				/>
@@ -186,7 +186,7 @@ function QueuePage() {
 				<StatCard
 					title="Prioritised"
 					value={data.summary.prioritised}
-					hint={`waiting jobs above priority 0 (bump = ${data.priorityValue})`}
+					hint={`jobs en espera con prioridad mayor a 0 (bump = ${data.priorityValue})`}
 					icon={<ArrowUp className="h-4 w-4 text-violet-500" />}
 					tone="text-violet-600"
 				/>
