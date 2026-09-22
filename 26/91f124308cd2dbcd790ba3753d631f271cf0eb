@@ -1,0 +1,16 @@
+.env.beaos.example
+  h_c5ca005a78c880 5
+docker-compose.beaos.yml
+  h_c5ca005a78c880 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2691f124308cd2dbcd790ba3753d631f271cf0eb",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
