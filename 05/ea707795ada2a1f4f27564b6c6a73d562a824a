@@ -1,0 +1,14 @@
+AOS-APS-INTEGRATION-BLUEPRINT.md
+  h_c5ca005a78c880 54,112-116,119-128,131-145,148-151,224-264,286,288-291,298,300,302
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "05ea707795ada2a1f4f27564b6c6a73d562a824a",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
