@@ -1,0 +1,16 @@
+apps/web/src/components/nav-app-info.test.tsx
+  h_c5ca005a78c880 2,7-8,10-13
+apps/web/src/components/nav-app-info.tsx
+  h_c5ca005a78c880 2-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e447375351567587e461800fa6eed896a3176045",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
