@@ -1,0 +1,21 @@
+apps/web/src/components/nav-app-info.test.tsx
+  s_c07796e7d2fdcf::t_4485aa2c3d8380 7,11
+apps/web/src/components/nav-app-info.tsx
+  s_c07796e7d2fdcf::t_1f4ef57a701b33 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9f93f2701a02f430c8dc4e851c60481d9874e0ca",
+  "prompts": {},
+  "sessions": {
+    "s_c07796e7d2fdcf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "52717ce0-c11e-4a1e-afd6-1d7a91af4142",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
