@@ -1,0 +1,75 @@
+apps/web/src/components/app-sidebar.tsx
+  s_f746077356a513::t_f51ba5eccabe51 12,70-74
+apps/web/src/lib/boss-client.ts
+  s_ef06f9ce6d10ff::t_ce5d334a539986 50-55
+apps/web/src/routeTree.gen.ts
+  s_f746077356a513::t_4bf0409aea01ab 51,264-268,357,405,459,513,561,614,944-950,1053,1072
+apps/web/src/routes/_authed/app/$brand/agent-ops.tsx
+  s_f746077356a513::t_3d38811e1c3efe 1-134
+apps/web/src/server/agent-ops.ts
+  s_ef06f9ce6d10ff::t_605493b18ee09f 1-51
+apps/worker/package.json
+  s_ef8da92209b2e3::t_a527d2b17f4d72 14
+apps/worker/src/handlers.ts
+  s_f746077356a513::t_a23ba218f80926 9,71-77
+apps/worker/src/jobs/aos-audit.ts
+  s_ef06f9ce6d10ff::t_6795efdef1a3e2 1-41
+packages/aos-aps/src/aos/audit.ts
+  s_ef06f9ce6d10ff::t_ad18736bd6939f 1-160
+packages/aos-aps/src/aos/index.ts
+  s_ef8da92209b2e3::t_d060edefcafc89 1-2
+packages/aos-aps/src/aos/requirements.ts
+  s_ef8da92209b2e3::t_3aa3b036592320 1-75
+packages/aos-aps/src/db/schema.ts
+  s_ef8da92209b2e3::t_56745fa1cb53df 1-44
+packages/aos-aps/src/index.ts
+  s_ef8da92209b2e3::t_3333e3fb1cce79 1-2
+packages/lib/src/db/migrations/0014_agent_aos_aps.sql
+  s_8a93d1d4dca631::t_f2acf02a173bd7 1-32
+packages/lib/src/db/migrations/meta/0014_snapshot.json
+  s_8a93d1d4dca631::t_a82737bc79a3cd 1-2119
+packages/lib/src/db/migrations/meta/_journal.json
+  s_8a93d1d4dca631::t_f8a7f539318d13 102-108,111
+pnpm-lock.yaml
+  s_ef8da92209b2e3::t_04422026522a8f 115-117,254-256,307-325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f830c4be5a4e789e583892a38f160d183c24af7a",
+  "prompts": {},
+  "sessions": {
+    "s_8a93d1d4dca631": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61ec03f3-96e2-46c4-9462-e6b78147fec4",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    },
+    "s_ef06f9ce6d10ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20817a50-c05d-4da6-9b61-090a3f04cc9a",
+        "model": "unknown"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    },
+    "s_ef8da92209b2e3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d5c7f823-d528-4080-ae87-5c5b7bbec300",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    },
+    "s_f746077356a513": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3fdde923-4ed0-4251-9add-ff308ddef14a",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
