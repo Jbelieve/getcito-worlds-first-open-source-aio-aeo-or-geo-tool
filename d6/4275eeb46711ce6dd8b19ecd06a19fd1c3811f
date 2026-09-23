@@ -1,0 +1,21 @@
+AOS-APS-ESTADO.md
+  s_d70e4d37c42cfe::t_5b545db0fa379d 1-300
+MANUAL-BEAOS.md
+  s_d70e4d37c42cfe::t_dac4a03865ddc4 164-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d64275eeb46711ce6dd8b19ecd06a19fd1c3811f",
+  "prompts": {},
+  "sessions": {
+    "s_d70e4d37c42cfe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1bfd85b7-47f3-4d6a-8f6a-666848028d2a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
