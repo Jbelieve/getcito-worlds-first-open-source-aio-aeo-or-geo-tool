@@ -18,12 +18,44 @@ export interface RobustnessRow {
 export const VERIFIABLE_SOURCE_PATTERN =
 	/https?:\/\/|www\.[a-z0-9-]+\.[a-z]{2,}|\b[a-z0-9-]+\.(com|io|co|org|net)\b|según\s+[\w.]+|fuente:\s*[\w.]+/i;
 
-/** Prompt injection / Strategic Text Sequences embedded in what should be a genuine answer. */
+/**
+ * Prompt injection / Strategic Text Sequences embedded in what should be a genuine answer.
+ *
+ * The hard part is not finding the words, it is finding them **as an instruction to the model**
+ * rather than as prose about instructions. In this domain — brand legibility for AI agents, prompt
+ * libraries, GEO — the vocabulary of injection IS the subject matter: an answer that lists "System
+ * prompts" as a consultancy deliverable is doing its job, not attacking the judge. Measured in
+ * production: a correct answer to a question about brand consulting was quarantined, and therefore
+ * dropped from the score, because a bullet read `- System prompts.`
+ *
+ * So the patterns are anchored to the shapes an actual injection takes:
+ *
+ *   - an instruction that starts its own line (a quoted example inside a paragraph does not),
+ *   - a role declaration with the punctuation of a declaration (`System prompt:`), not a noun,
+ *   - a role reassignment that names the new role (`you are now a ...`).
+ *
+ * Being too strict here costs a manipulated answer its quarantine; being too loose costs every
+ * answer in our own market a place in the score. The second is the one that happens by default.
+ */
 export const INJECTION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-	{ pattern: /ignor[ae]\s+(todas\s+)?(las\s+)?instruccion/i, reason: "intento de ignorar instrucciones previas" },
-	{ pattern: /ignore\s+(all\s+)?(previous|prior)\s+instructions/i, reason: "prompt injection en inglés" },
 	{
-		pattern: /system\s*prompt|you\s+are\s+now|disregard\s+the\s+above/i,
+		pattern: /^[ \t]*ignor[ae]\s+(todas\s+)?(las\s+)?instruccion/im,
+		reason: "intento de ignorar instrucciones previas",
+	},
+	{
+		pattern: /^[ \t]*ignore\s+(all\s+)?(previous|prior)\s+instructions/im,
+		reason: "prompt injection en inglés",
+	},
+	{
+		pattern: /^[ \t]*(system[ \t]*prompt|system)[ \t]*[::>]/im,
+		reason: "intento de redefinir el rol del modelo",
+	},
+	{
+		pattern: /\byou\s+are\s+now\s+(a|an|the)\b/i,
+		reason: "intento de redefinir el rol del modelo",
+	},
+	{
+		pattern: /^[ \t]*disregard\s+(the\s+)?(above|previous|prior)/im,
 		reason: "intento de redefinir el rol del modelo",
 	},
 	{
