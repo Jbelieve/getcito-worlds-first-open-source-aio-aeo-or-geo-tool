@@ -1,0 +1,24 @@
+apps/web/src/components/app-sidebar.tsx
+  h_c5ca005a78c880 86-90
+apps/web/src/routeTree.gen.ts
+  h_c5ca005a78c880 53,281-286,402,456,516,576,630,689,1037-1043,1177,1199
+apps/web/src/routes/_authed/app/$brand/agent-preference.tsx
+  h_c5ca005a78c880 1-320
+apps/web/src/server/agent-aps.ts
+  h_c5ca005a78c880 12,25-26,28,236-313
+packages/aos-aps/src/aps/gateway.test.ts
+  h_c5ca005a78c880 2-7,105-170
+packages/aos-aps/src/aps/gateway.ts
+  h_c5ca005a78c880 13-21,128-246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "59462aa9303ef913d8d9db247b6f7ba03cfdeefd",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
