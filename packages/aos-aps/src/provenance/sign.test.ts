@@ -1,5 +1,6 @@
 import { generateKeyPairSync, verify as verifyBytes } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { signingKeyFromEnv } from "./keying";
 import {
 	buildKeysJson,
 	decodeSigningMaterial,
@@ -10,16 +11,6 @@ import {
 	signingKeyInfo,
 } from "./sign";
 
-const originalKey = process.env.BELIEVE_SIGNING_KEY_ED25519;
-
-afterEach(() => {
-	if (originalKey === undefined) {
-		delete process.env.BELIEVE_SIGNING_KEY_ED25519;
-	} else {
-		process.env.BELIEVE_SIGNING_KEY_ED25519 = originalKey;
-	}
-});
-
 function newEd25519() {
 	const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 	const pkcs8 = privateKey.export({ format: "der", type: "pkcs8" }) as Buffer;
@@ -27,10 +18,15 @@ function newEd25519() {
 	return { privateKey, publicKey, pkcs8, rawPublic };
 }
 
+function keyFromEnvRecord(record: Record<string, string>): NonNullable<ReturnType<typeof signingKeyFromEnv>> {
+	const key = signingKeyFromEnv(record);
+	if (key === null) throw new Error("expected a signing key");
+	return key;
+}
+
 describe("decodeSigningMaterial", () => {
 	it("reads a 32-byte raw seed from base64 and hex", () => {
-		const { privateKey } = newEd25519();
-		const pkcs8 = privateKey.export({ format: "der", type: "pkcs8" }) as Buffer;
+		const { pkcs8 } = newEd25519();
 		const seed = pkcs8.subarray(16);
 
 		expect(decodeSigningMaterial(seed.toString("base64"))).toEqual({ seed, format: "seed" });
@@ -67,15 +63,47 @@ describe("decodeSigningMaterial", () => {
 	});
 });
 
+describe("signingKeyFromEnv", () => {
+	it("defaults the key id to the umbrella key and accepts overrides", () => {
+		const { pkcs8 } = newEd25519();
+		const material = pkcs8.toString("base64");
+
+		expect(signingKeyFromEnv({ BELIEVE_SIGNING_KEY_ED25519: material })).toEqual({
+			keyId: "believe-2026-primary",
+			material,
+		});
+		expect(signingKeyFromEnv({ BELIEVE_SIGNING_KEY_ED25519: material, BELIEVE_SIGNING_KEY_ID: "otra-marca" })).toEqual({
+			keyId: "otra-marca",
+			material,
+		});
+	});
+
+	it("carries the umbrella keys uri when given", () => {
+		const { pkcs8 } = newEd25519();
+		const key = signingKeyFromEnv(
+			{ BELIEVE_SIGNING_KEY_ED25519: pkcs8.toString("base64") },
+			"https://believe-global.com/.well-known/keys.json",
+		);
+		expect(key?.keysUri).toBe("https://believe-global.com/.well-known/keys.json");
+	});
+
+	it("returns null when the variable is absent or unusable", () => {
+		expect(signingKeyFromEnv({})).toBeNull();
+		expect(signingKeyFromEnv({ BELIEVE_SIGNING_KEY_ED25519: "   " })).toBeNull();
+		expect(signingKeyFromEnv({ BELIEVE_SIGNING_KEY_ED25519: Buffer.alloc(48, 3).toString("base64") })).toBeNull();
+	});
+});
+
 describe("signDetached", () => {
 	it("signs the exact bytes with the key derived from PKCS#8 material", () => {
 		const { pkcs8, publicKey, rawPublic } = newEd25519();
-		process.env.BELIEVE_SIGNING_KEY_ED25519 = pkcs8.toString("base64");
+		const key = keyFromEnvRecord({ BELIEVE_SIGNING_KEY_ED25519: pkcs8.toString("base64") });
 
 		const body = JSON.stringify({ brand: { name: "Believe" } });
-		const signature = signDetached(body);
+		const signature = signDetached(body, key);
 		expect(signature).not.toBeNull();
 		expect(signature?.alg).toBe("Ed25519");
+		expect(signature?.public_key_url).toBe("/.well-known/keys.json");
 
 		expect(verifyBytes(null, Buffer.from(body, "utf8"), publicKey, Buffer.from(signature?.value ?? "", "base64"))).toBe(
 			true,
@@ -85,41 +113,51 @@ describe("signDetached", () => {
 			verifyBytes(null, Buffer.from(`${body} `, "utf8"), publicKey, Buffer.from(signature?.value ?? "", "base64")),
 		).toBe(false);
 
-		const info = signingKeyInfo();
+		const info = signingKeyInfo(key);
 		expect(info?.format).toBe("pkcs8");
+		expect(info?.keyId).toBe("believe-2026-primary");
 		expect(info?.publicKeyB64).toBe(rawPublic.toString("base64"));
 		expect(info?.kid).toBe(kidFromRawPublicKey(rawPublic));
 		expect(publicKeyRawFromSeed(pkcs8.subarray(16)).equals(rawPublic)).toBe(true);
 	});
 
+	it("points the signature at the umbrella keys uri so a sub-brand verifies against the umbrella", () => {
+		const { pkcs8 } = newEd25519();
+		const key = keyFromEnvRecord({ BELIEVE_SIGNING_KEY_ED25519: pkcs8.toString("base64") });
+		const withUri = { ...key, keysUri: "https://believe-global.com/.well-known/keys.json" };
+		expect(signDetached("{}", withUri)?.public_key_url).toBe("https://believe-global.com/.well-known/keys.json");
+	});
+
 	it("returns null when no signing key is configured", () => {
-		delete process.env.BELIEVE_SIGNING_KEY_ED25519;
-		expect(hasSigningKey()).toBe(false);
-		expect(signDetached("{}")).toBeNull();
-		expect(buildKeysJson()).toBeNull();
+		expect(hasSigningKey(null)).toBe(false);
+		const unusable = { keyId: "x", material: Buffer.alloc(48, 3).toString("base64") };
+		expect(hasSigningKey(unusable)).toBe(false);
+		expect(signDetached("{}", unusable)).toBeNull();
+		expect(buildKeysJson(unusable)).toBeNull();
 	});
 });
 
 describe("buildKeysJson", () => {
-	it("publishes the spec fields an agent verifier looks for", () => {
+	it("publishes the umbrella key id and the field names agents already read", () => {
 		const { pkcs8, rawPublic } = newEd25519();
-		process.env.BELIEVE_SIGNING_KEY_ED25519 = pkcs8.toString("base64");
+		const key = keyFromEnvRecord({ BELIEVE_SIGNING_KEY_ED25519: pkcs8.toString("base64") });
 
-		const keys = buildKeysJson("2026-07-11");
+		const keys = buildKeysJson(key, "2026-07-11");
 		expect(keys).not.toBeNull();
-		const key = keys?.keys[0];
-		expect(key).toMatchObject({
-			key_id: "beaos-primary",
+		const entry = keys?.keys[0];
+		expect(entry).toMatchObject({
+			key_id: "believe-2026-primary",
 			kid: kidFromRawPublicKey(rawPublic),
 			kty: "OKP",
 			crv: "Ed25519",
 			alg: "Ed25519",
+			algorithm: "Ed25519",
 			use: "sig",
 			status: "active",
 			created_at: "2026-07-11",
 		});
-		expect(Buffer.from(String(key?.public_key_b64), "base64")).toEqual(rawPublic);
-		expect(key?.public_key).toBe(key?.public_key_b64);
-		expect(key?.public_key_hex).toBe(rawPublic.toString("hex"));
+		expect(Buffer.from(String(entry?.public_key_b64), "base64")).toEqual(rawPublic);
+		expect(entry?.public_key).toBe(entry?.public_key_b64);
+		expect(entry?.public_key_hex).toBe(rawPublic.toString("hex"));
 	});
 });

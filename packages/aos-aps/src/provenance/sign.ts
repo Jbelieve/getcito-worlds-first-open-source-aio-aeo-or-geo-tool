@@ -1,10 +1,13 @@
 import { createHash, createPrivateKey, createPublicKey, sign as signBytes } from "node:crypto";
+import type { SigningKey } from "./keying";
 
 /**
  * Ed25519 signing for the AOS/APS provenance layer.
  * Spec: aos-aps-standard spec/signing.md
  *
  * The private key never leaves the signer; only the public key is published at /.well-known/keys.json.
+ * Key material and the published key id arrive as an explicit SigningKey so that sub-brands can be
+ * signed with their umbrella's key (see ./keying.ts).
  */
 
 /** PKCS#8 DER prefix for an Ed25519 private key: the 32-byte seed is the tail. */
@@ -46,12 +49,6 @@ export function decodeSigningMaterial(value: string): SigningMaterial | null {
 	return null;
 }
 
-function signingMaterial(): SigningMaterial | null {
-	const raw = process.env.BELIEVE_SIGNING_KEY_ED25519;
-	if (raw === undefined || raw.length === 0) return null;
-	return decodeSigningMaterial(raw);
-}
-
 export function privateKeyFromSeed(seed: Buffer) {
 	return createPrivateKey({
 		key: Buffer.concat([PKCS8_ED25519_PREFIX, seed]),
@@ -72,17 +69,19 @@ export function kidFromRawPublicKey(raw: Buffer): string {
 }
 
 export interface SigningKeyInfo {
+	keyId: string;
 	kid: string;
 	publicKeyHex: string;
 	publicKeyB64: string;
 	format: SigningMaterialFormat;
 }
 
-export function signingKeyInfo(): SigningKeyInfo | null {
-	const material = signingMaterial();
+export function signingKeyInfo(key: SigningKey): SigningKeyInfo | null {
+	const material = decodeSigningMaterial(key.material);
 	if (material === null) return null;
 	const raw = publicKeyRawFromSeed(material.seed);
 	return {
+		keyId: key.keyId,
 		kid: kidFromRawPublicKey(raw),
 		publicKeyHex: raw.toString("hex"),
 		publicKeyB64: raw.toString("base64"),
@@ -90,8 +89,8 @@ export function signingKeyInfo(): SigningKeyInfo | null {
 	};
 }
 
-export function hasSigningKey(): boolean {
-	return signingKeyInfo() !== null;
+export function hasSigningKey(key: SigningKey | null): boolean {
+	return key !== null && decodeSigningMaterial(key.material) !== null;
 }
 
 export interface DetachedSignature {
@@ -102,17 +101,17 @@ export interface DetachedSignature {
 	note: string;
 }
 
-export function signDetached(body: string): DetachedSignature | null {
-	const material = signingMaterial();
+export function signDetached(body: string, key: SigningKey): DetachedSignature | null {
+	const material = decodeSigningMaterial(key.material);
 	if (material === null) return null;
-	const info = signingKeyInfo();
+	const info = signingKeyInfo(key);
 	if (info === null) return null;
 	const signature = signBytes(null, Buffer.from(body, "utf8"), privateKeyFromSeed(material.seed));
 	return {
 		alg: "Ed25519",
 		kid: info.kid,
 		value: signature.toString("base64"),
-		public_key_url: "/.well-known/keys.json",
+		public_key_url: key.keysUri ?? "/.well-known/keys.json",
 		note: "Firma Ed25519 sobre los bytes exactos de este documento. Verificable por cualquier agente contra la clave publica en public_key_url.",
 	};
 }
@@ -122,21 +121,22 @@ export interface KeysJson {
 }
 
 /**
- * `/.well-known/keys.json` in the shape spec/signing.md publishes. `public_key_b64` is the
- * canonical field; `public_key` and `public_key_hex` are kept for verifiers written against
- * the earlier BeAOS draft.
+ * `/.well-known/keys.json` in the shape spec/signing.md publishes, plus the field names already
+ * live at believe-global.com (`public_key`, `algorithm`). `key_id` is the umbrella's, so a
+ * sub-brand publishes the same identity its umbrella signs with.
  */
-export function buildKeysJson(createdAt = new Date().toISOString().slice(0, 10)): KeysJson | null {
-	const info = signingKeyInfo();
+export function buildKeysJson(key: SigningKey, createdAt = new Date().toISOString().slice(0, 10)): KeysJson | null {
+	const info = signingKeyInfo(key);
 	if (info === null) return null;
 	return {
 		keys: [
 			{
-				key_id: "beaos-primary",
+				key_id: info.keyId,
 				kid: info.kid,
 				kty: "OKP",
 				crv: "Ed25519",
 				alg: "Ed25519",
+				algorithm: "Ed25519",
 				use: "sig",
 				public_key_b64: info.publicKeyB64,
 				public_key_hex: info.publicKeyHex,

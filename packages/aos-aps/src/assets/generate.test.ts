@@ -1,22 +1,14 @@
 import { generateKeyPairSync, type KeyObject, verify as verifyBytes } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { SigningKey } from "../provenance";
 import { generateAgentAssets } from "./generate";
 
-const originalKey = process.env.BELIEVE_SIGNING_KEY_ED25519;
-
-afterEach(() => {
-	if (originalKey === undefined) {
-		delete process.env.BELIEVE_SIGNING_KEY_ED25519;
-	} else {
-		process.env.BELIEVE_SIGNING_KEY_ED25519 = originalKey;
-	}
-});
-
-function withSigningKey(): KeyObject {
+function newSigningKey(keysUri?: string): { publicKey: KeyObject; signing: SigningKey } {
 	const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 	const pkcs8 = privateKey.export({ format: "der", type: "pkcs8" }) as Buffer;
-	process.env.BELIEVE_SIGNING_KEY_ED25519 = pkcs8.toString("base64");
-	return publicKey;
+	const signing: SigningKey = { keyId: "believe-2026-primary", material: pkcs8.toString("base64") };
+	if (keysUri !== undefined) signing.keysUri = keysUri;
+	return { publicKey, signing };
 }
 
 const dna = {
@@ -118,8 +110,8 @@ describe("generateAgentAssets", () => {
 
 describe("generateAgentAssets signing", () => {
 	it("serves a signature over the exact brand.json bytes", () => {
-		const publicKey = withSigningKey();
-		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna });
+		const { publicKey, signing } = newSigningKey();
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna, signing });
 		const brand = assetByPath(assets, "/.well-known/brand.json");
 		const signature = assetByPath(assets, "/.well-known/brand.json.sig");
 		const keys = assetByPath(assets, "/.well-known/keys.json");
@@ -140,15 +132,42 @@ describe("generateAgentAssets signing", () => {
 		).toBe(true);
 
 		const parsedKeys = JSON.parse(keys?.content ?? "{}");
+		expect(parsedKeys.keys[0].key_id).toBe("believe-2026-primary");
 		expect(parsedKeys.keys[0].kid).toBe(parsedSignature.kid);
 		expect(parsedKeys.keys[0].public_key_b64.length).toBeGreaterThan(0);
 	});
 
+	it("signs a sub-brand with the umbrella identity", () => {
+		const { publicKey, signing } = newSigningKey("https://believe-global.com/.well-known/keys.json");
+		const assets = generateAgentAssets({ name: "Felix Schorle", websiteUrl: "https://felix.com", dna, signing });
+		const brand = assetByPath(assets, "/.well-known/brand.json");
+		const signature = JSON.parse(assetByPath(assets, "/.well-known/brand.json.sig")?.content ?? "{}");
+		const keys = JSON.parse(assetByPath(assets, "/.well-known/keys.json")?.content ?? "{}");
+
+		// The bundle lives on the sub-brand's site but points at the umbrella's published key.
+		expect(signature.public_key_url).toBe("https://believe-global.com/.well-known/keys.json");
+		expect(keys.keys[0].key_id).toBe("believe-2026-primary");
+		expect(
+			verifyBytes(null, Buffer.from(brand?.content ?? "", "utf8"), publicKey, Buffer.from(signature.value, "base64")),
+		).toBe(true);
+	});
+
 	it("omits the provenance assets when no signing key is configured", () => {
-		delete process.env.BELIEVE_SIGNING_KEY_ED25519;
 		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna });
 		expect(assetByPath(assets, "/.well-known/brand.json")).toBeDefined();
 		expect(assetByPath(assets, "/.well-known/brand.json.sig")).toBeUndefined();
 		expect(assetByPath(assets, "/.well-known/keys.json")).toBeUndefined();
+	});
+
+	it("omits the provenance assets when the key material is unusable", () => {
+		const unusable = { keyId: "believe-2026-primary", material: Buffer.alloc(48, 3).toString("base64") };
+		const assets = generateAgentAssets({
+			name: "Believe",
+			websiteUrl: "https://believe-global.com",
+			dna,
+			signing: unusable,
+		});
+		expect(assetByPath(assets, "/.well-known/brand.json")).toBeDefined();
+		expect(assetByPath(assets, "/.well-known/brand.json.sig")).toBeUndefined();
 	});
 });
