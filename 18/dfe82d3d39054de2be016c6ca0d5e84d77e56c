@@ -1,0 +1,20 @@
+AOS-APS-ESTADO.md
+  h_c5ca005a78c880 97-98,100-129
+apps/web/src/components/status-tone.test.ts
+  h_c5ca005a78c880 5,140-185
+apps/web/src/routes/_authed/app/$brand/agent-entities.tsx
+  h_c5ca005a78c880 7,79,129
+apps/web/src/routes/_authed/app/$brand/index.tsx
+  h_c5ca005a78c880 34-36,38-40,44-46,50-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "18dfe82d3d39054de2be016c6ca0d5e84d77e56c",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
