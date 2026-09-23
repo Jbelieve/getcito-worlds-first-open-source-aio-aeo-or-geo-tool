@@ -1,0 +1,21 @@
+packages/aos-aps/src/aps/capture.test.ts
+  s_d70e4d37c42cfe::t_c0e1eef47d0e10 107-176
+packages/aos-aps/src/aps/targets.test.ts
+  s_d70e4d37c42cfe::t_36acfcd1a89d9b 2,54-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0ec757efe86919fdadc507cc5db04cc41edaa677",
+  "prompts": {},
+  "sessions": {
+    "s_d70e4d37c42cfe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1bfd85b7-47f3-4d6a-8f6a-666848028d2a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
