@@ -263,6 +263,21 @@ Dos cosas que valen más que los números: **google-ai-mode recuperó 6 observac
 estaba tirando en silencio, y **los tres modelos siguen coincidiendo** (misma banda, P10–P90 solapados),
 o sea que la medición es reproducible entre corridas.
 
+**Impacto del arreglo de la cuarentena** (PR #35), repuntuando `afabc82e` en memoria desde las
+observaciones guardadas (no se volvió a pagar ningún modelo):
+
+| Modelo | Antes | Después |
+|---|---|---|
+| chatgpt | APS **39** · 17 obs · [35/40/44] | APS **39** · **18 obs** · [35/**38**/42] |
+| claude | APS 34 · 16 obs · [31/34/37] | igual |
+| google-ai-mode | APS 40 · 18 obs · [37/40/44] | APS 40 · 18 obs · [37/40/**43**] |
+| rollup | 38 · agent_opaque | **38 · agent_opaque** |
+
+El arreglo **recupera una observación legítima** (51 → 52 puntuables) y mueve apenas la banda de
+varianza, pero **no mueve el número**. Decisión: **no se bumpea `MEASUREMENT_VERSION`** — es un bug fix
+que devuelve datos que nunca debieron excluirse, no un cambio de fórmula, y los APS puntuales quedan
+idénticos. Bumpear forzaría un corte de serie por un cambio que no cambia el resultado.
+
 **Historial con el mismo instrumento:** `518eeea9` dio chatgpt 27 / google 24 con **1 repetición**
 (P10 = P50 = P90, una banda vacía de sentido porque no había varianza que medir). La comparación entre
 esa corrida y las de 3 repeticiones **no es válida**: misma biblioteca, distinta cantidad de repeticiones.
