@@ -52,6 +52,9 @@
 	--color-secondary: var(--secondary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary: var(--primary);
+	--color-believe-700: var(--believe-700);
+	--color-believe-900: var(--believe-900);
+	--color-signal: var(--signal);
 	--color-popover-foreground: var(--popover-foreground);
 	--color-popover: var(--popover);
 	--color-card-foreground: var(--card-foreground);
@@ -75,6 +78,13 @@
 	--popover-foreground: #1a1a1a;
 	--primary: #0c3bb9;
 	--primary-foreground: #ffffff;
+	/* Believe brand inks (believe-brandbook-2026). The system is six tokens and the brandbook forbids
+	   inventing hex values, so every state colour on the AOS/APS surfaces is derived from these:
+	   paper = --background, Believe Blue 700 = --primary, Believe Blue 900, Cyan 400 = signal,
+	   Ink 900 = --foreground, Ink 500 = --muted-foreground. */
+	--believe-700: #0c3bb9;
+	--believe-900: #062778;
+	--signal: #00aaff;
 	--secondary: #eef4ff;
 	--secondary-foreground: #0c3bb9;
 	--muted: #f1f5f9;
@@ -109,6 +119,9 @@
 	--popover-foreground: #f8fafc;
 	--primary: #4f8cff;
 	--primary-foreground: #07101f;
+	--believe-700: #7aa2ff;
+	--believe-900: #dbe6ff;
+	--signal: #6ed0ff;
 	--secondary: #1f2937;
 	--secondary-foreground: #f8fafc;
 	--muted: #1f2937;

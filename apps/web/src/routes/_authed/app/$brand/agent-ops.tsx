@@ -14,20 +14,20 @@ import {
 	AosScoreRing,
 	AosStatusPill,
 	aosDiagnosis,
-	aosBand,
 	stageSummaries,
 } from "@/components/aos-visual";
+import { BLOCKING_TEXT, aosBand, levelFromScore, toneOf } from "@/components/status-tone";
 
 export const Route = createFileRoute("/_authed/app/$brand/agent-ops")({
 	component: AgentOpsPage,
 });
 
+/** Los cortes de banda del AOS. La regla vive acá, el color vive en status-tone. */
+const AOS_CUTS = { full: 80, high: 60, mid: 35 };
+
 function scoreColor(score: number | null | undefined): string {
 	if (score === null || score === undefined) return "text-muted-foreground";
-	if (score >= 80) return "text-emerald-600";
-	if (score >= 60) return "text-amber-600";
-	if (score >= 35) return "text-orange-600";
-	return "text-rose-600";
+	return toneOf(levelFromScore(score, AOS_CUTS)).text;
 }
 
 function AgentOpsPage() {
@@ -62,7 +62,7 @@ function AgentOpsPage() {
 	});
 
 	if (isLoading) return <div className="text-sm text-muted-foreground">Cargando brand…</div>;
-	if (brand === undefined) return <div className="text-sm text-red-600">Brand no encontrado.</div>;
+	if (brand === undefined) return <div className={`text-sm ${BLOCKING_TEXT}`}>Brand no encontrado.</div>;
 
 	const latest = audits.data?.[0];
 	const requirements = (latest?.requirements ?? []) as AosRequirement[];
@@ -96,7 +96,7 @@ function AgentOpsPage() {
 							{start.isPending ? "Auditando…" : "Auditar AOS"}
 						</Button>
 					</div>
-					{error && <p className="text-sm text-red-600">{error}</p>}
+					{error && <p className={`text-sm ${BLOCKING_TEXT}`}>{error}</p>}
 				</CardContent>
 			</Card>
 
@@ -104,7 +104,7 @@ function AgentOpsPage() {
 				<>
 					<Card>
 						<CardContent className="space-y-5 pt-6">
-							{latest.error && <p className="text-sm text-red-600">Error: {latest.error}</p>}
+							{latest.error && <p className={`text-sm ${BLOCKING_TEXT}`}>Error: {latest.error}</p>}
 							<div className="flex flex-wrap items-center gap-6">
 								<AosScoreRing score={score ?? 0} band={bandName} />
 								<div className="min-w-[16rem] flex-1 space-y-3">
@@ -201,7 +201,7 @@ function AgentOpsPage() {
 							<span className="truncate text-muted-foreground">{audit.url}</span>
 							<span className="flex items-center gap-2">
 								<span className={`font-semibold ${scoreColor(audit.score)}`}>{audit.score ?? "—"}</span>
-								<span className={`text-xs ${aosBand(audit.band ?? "").tone}`}>{aosBand(audit.band ?? "").label}</span>
+								<span className={`text-xs ${aosBand(audit.band).tone.text}`}>{aosBand(audit.band).label}</span>
 							</span>
 						</div>
 					))}

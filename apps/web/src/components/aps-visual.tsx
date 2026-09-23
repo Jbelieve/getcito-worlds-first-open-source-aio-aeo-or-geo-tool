@@ -5,24 +5,18 @@
  * and a bootstrap distribution. This turns that into something readable: the band, the shape of the
  * distribution, and where the score comes from dimension by dimension — so a marketer can see why
  * the number is what it is instead of trusting a lone figure.
+ *
+ * Dos APS conviven y no hay que confundirlas: el APS del perfil declarado (claims y proofs, que se
+ * calcula sin costo) y el APS medido contra modelos reales, que es el que se muestra acá.
+ *
+ * El color no decora: el número va en tinta de marca, la banda lleva la rampa azul, y el cian es el
+ * subrayado del número — la única señal de la sección. Ver status-tone.tsx.
  */
 import { Bar, BarChart, Cell, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@workspace/ui/components/chart";
-import { Badge } from "@workspace/ui/components/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { IconInfoCircle } from "@tabler/icons-react";
-
-export const APS_BANDS: Record<string, { label: string; tone: string; bg: string }> = {
-	agent_native: { label: "Agent-Native", tone: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" },
-	agent_ready: { label: "Agent-Ready", tone: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" },
-	agent_visible: { label: "Agent-Visible", tone: "text-amber-700", bg: "bg-amber-50 border-amber-200" },
-	agent_opaque: { label: "Agent-Opaque", tone: "text-orange-700", bg: "bg-orange-50 border-orange-200" },
-	agent_blind: { label: "Agent-Blind", tone: "text-rose-700", bg: "bg-rose-50 border-rose-200" },
-};
-
-export function bandOf(band: string) {
-	return APS_BANDS[band] ?? { label: band, tone: "text-foreground", bg: "bg-muted border-border" };
-}
+import { BandChip, BLOCKING_TEXT, MONO_LABEL, SIGNAL_BAR, apsBand } from "@/components/status-tone";
 
 /** The five dimensions, with the weight each one carries. Labels are the product's words. */
 const DIMENSIONS: Array<{ key: string; label: string; weight: number; hint: string }> = [
@@ -124,7 +118,7 @@ export function ApsDistributionChart({ samples, aps }: { samples: number[]; aps:
 				<span className="flex items-center gap-1 font-medium text-muted-foreground">
 					Distribución de {samples.length} remuestras <InfoHint text="Bootstrap sobre la varianza de las repeticiones: remuestrea una respuesta por prompt, 500 veces, y recalcula el APS." />
 				</span>
-				<span className="text-muted-foreground">P10 · P50 · P90</span>
+				<span className={MONO_LABEL}>P10 · P50 · P90</span>
 			</div>
 			<ChartContainer config={config} className="h-32 w-full">
 				<BarChart data={bins} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
@@ -186,10 +180,10 @@ export function ApsBand({ aps, p10, p50, p90 }: { aps: number; p10: number | nul
 				<div className="absolute inset-y-[-2px] w-0.5 bg-primary/70" style={{ left: `${mid}%` }} title={`P50 ${p50}`} />
 				<div className="absolute inset-y-[-3px] w-1 rounded-full bg-primary" style={{ left: `${point}%` }} title={`APS ${aps}`} />
 			</div>
-			<div className="flex justify-between text-[10px] text-muted-foreground">
-				<span>P10 {p10}</span>
-				<span>P50 {p50}</span>
-				<span>P90 {p90}</span>
+			<div className="flex justify-between">
+				<span className={MONO_LABEL}>P10 {p10}</span>
+				<span className={MONO_LABEL}>P50 {p50}</span>
+				<span className={MONO_LABEL}>P90 {p90}</span>
 			</div>
 		</div>
 	);
@@ -207,7 +201,7 @@ export function ApsDimensionBars({ dimensions }: { dimensions: Record<string, nu
 					<div key={dimension.key} className="space-y-1">
 						<div className="flex items-center gap-1.5 text-xs">
 							<span className="font-medium">{dimension.label}</span>
-							<span className="text-muted-foreground">peso {dimension.weight}</span>
+							<span className="font-mono text-[10px] text-muted-foreground">peso {dimension.weight}</span>
 							<InfoHint text={dimension.hint} />
 							<span className={`ml-auto tabular-nums ${present ? "font-semibold" : "text-muted-foreground"}`}>
 								{present ? Math.round(value) : "sin dato"}
@@ -248,7 +242,10 @@ export function ApsSubMetrics({ subMetrics }: { subMetrics: Record<string, numbe
 	);
 }
 
-/** Recommended share of the band, for the section header. */
+/**
+ * Recommended share of the band, for the section header. El número es el dato de la sección y va en
+ * tinta de marca con el subrayado cian del brandbook: la única señal acá.
+ */
 export function ApsHeadline({
 	aps,
 	band,
@@ -262,29 +259,30 @@ export function ApsHeadline({
 	observations: number;
 	models: number;
 }) {
-	const tone = bandOf(band);
+	const meta = apsBand(band);
 	return (
 		<div className="flex flex-wrap items-end gap-4">
 			<div className="flex items-end gap-3">
-				<span
-					className={`font-display font-semibold tracking-tight tabular-nums ${tone.tone}`}
-					style={{ fontSize: "clamp(2.5rem, 5vw, 4rem)", lineHeight: 1 }}
-				>
-					{aps}
+				<span className="relative inline-block">
+					<span
+						className="font-display font-semibold tracking-tight tabular-nums text-believe-900"
+						style={{ fontSize: "clamp(2.5rem, 5vw, 4rem)", lineHeight: 1 }}
+					>
+						{aps}
+					</span>
+					<span className={`absolute -bottom-2 left-0 h-1.5 w-[120px] ${SIGNAL_BAR}`} />
 				</span>
 				<div className="space-y-1 pb-1">
-					<Badge variant="outline" className={`font-normal ${tone.bg} ${tone.tone}`}>
-						{tone.label}
-					</Badge>
-					<p className="text-xs text-muted-foreground">
+					<BandChip label={meta.label} level={meta.level} />
+					<p className={MONO_LABEL}>
 						{observations} respuestas · {models} {models === 1 ? "modelo" : "modelos"}
 					</p>
 				</div>
 			</div>
 			{recommendationProbability !== null && (
 				<div className="pb-1">
-					<p className="text-xs text-muted-foreground">Probabilidad de recomendación</p>
-					<p className="font-display text-2xl font-semibold tabular-nums">
+					<p className={MONO_LABEL}>Probabilidad de recomendación</p>
+					<p className="font-display text-2xl font-semibold tabular-nums text-believe-900">
 						{recommendationProbability}
 						<span className="text-base text-muted-foreground">%</span>
 					</p>
@@ -293,7 +291,6 @@ export function ApsHeadline({
 		</div>
 	);
 }
-
 
 export interface ApsScoreView {
 	model: string;
@@ -344,6 +341,9 @@ export function rollupOf(scores: ApsScoreView[]): { aps: number; band: string } 
 /**
  * One run, presented. The newest run opens fully (headline, band, dimensions, distribution); older
  * runs stay compact so the history does not bury the current number.
+ *
+ * Una corrida parcial se dice, no se pinta: el estado va en la etiqueta mono, porque el color acá
+ * está reservado para cuánto hay y no para advertir.
  */
 export function ApsRunBlock({ run, expanded, statusLabel }: { run: ApsRunView; expanded: boolean; statusLabel: string }) {
 	const rollup = rollupOf(run.scores);
@@ -358,14 +358,17 @@ export function ApsRunBlock({ run, expanded, statusLabel }: { run: ApsRunView; e
 				</span>
 			</div>
 			{run.repetitionsReduced && (
-				<p className="text-xs text-amber-600">Medición parcial: se redujeron las repeticiones para entrar en el presupuesto.</p>
-			)}
-			{run.partial && run.partialReason && (
-				<p className="text-xs text-amber-600">
-					Medición parcial: {run.partialReason} El score es de la muestra, no del total planificado.
+				<p className="text-xs text-muted-foreground">
+					<span className={MONO_LABEL}>parcial</span> · se redujeron las repeticiones para entrar en el presupuesto.
 				</p>
 			)}
-			{run.error && <p className="text-xs text-red-600">{run.error}</p>}
+			{run.partial && run.partialReason && (
+				<p className="text-xs text-muted-foreground">
+					<span className={MONO_LABEL}>parcial</span> · {run.partialReason} El score es de la muestra, no del total
+					planificado.
+				</p>
+			)}
+			{run.error && <p className={`text-xs ${BLOCKING_TEXT}`}>{run.error}</p>}
 
 			{run.scores.length > 0 && expanded && rollup !== null && (
 				<ApsHeadline
@@ -385,45 +388,48 @@ export function ApsRunBlock({ run, expanded, statusLabel }: { run: ApsRunView; e
 
 			{run.scores.length > 0 && (
 				<div className="space-y-3">
-					{run.scores.map((score) => (
-						<div key={score.model} className="space-y-3 rounded-lg border p-4">
-							<div className="flex flex-wrap items-end justify-between gap-2">
-								<div className="flex items-end gap-2">
-									<code className="font-mono text-sm">{score.model}</code>
-									<span className={`font-display text-3xl font-semibold tabular-nums ${bandOf(score.band).tone}`}>
-										{score.aps}
-									</span>
-									<span className={`text-sm ${bandOf(score.band).tone}`}>{bandOf(score.band).label}</span>
-								</div>
-								<div className="text-right text-xs text-muted-foreground">
-									<p>
-										{score.observations} respuestas
-										{score.recommendationProbability === null
-											? ""
-											: ` · recomendación ${score.recommendationProbability}%`}
-									</p>
-									{score.partial === true && <p className="text-amber-600">parcial</p>}
-								</div>
-							</div>
-
-							<ApsBand aps={score.aps} p10={score.p10} p50={score.p50} p90={score.p90} />
-							{expanded && (
-								<div className="grid gap-4 lg:grid-cols-2">
-									<div className="space-y-3">
-										<p className="text-xs font-medium text-muted-foreground">De dónde sale el score</p>
-										<ApsDimensionBars dimensions={score.dimensions} />
+					{run.scores.map((score) => {
+						const meta = apsBand(score.band);
+						return (
+							<div key={score.model} className="space-y-3 rounded-lg border p-4">
+								<div className="flex flex-wrap items-end justify-between gap-2">
+									<div className="flex items-end gap-2">
+										<code className="font-mono text-sm">{score.model}</code>
+										<span className="font-display text-3xl font-semibold tabular-nums text-believe-900">
+											{score.aps}
+										</span>
+										<BandChip label={meta.label} level={meta.level} className="mb-1" />
 									</div>
-									<div className="space-y-3">
-										<ApsDistributionChart samples={score.distribution ?? []} aps={score.aps} />
-										<div className="space-y-1.5">
-											<p className="text-xs font-medium text-muted-foreground">Sub-métricas medidas</p>
-											<ApsSubMetrics subMetrics={score.subMetrics} />
+									<div className="text-right text-xs text-muted-foreground">
+										<p>
+											{score.observations} respuestas
+											{score.recommendationProbability === null
+												? ""
+												: ` · recomendación ${score.recommendationProbability}%`}
+										</p>
+										{score.partial === true && <p className={MONO_LABEL}>parcial</p>}
+									</div>
+								</div>
+
+								<ApsBand aps={score.aps} p10={score.p10} p50={score.p50} p90={score.p90} />
+								{expanded && (
+									<div className="grid gap-4 lg:grid-cols-2">
+										<div className="space-y-3">
+											<p className="text-xs font-medium text-muted-foreground">De dónde sale el score</p>
+											<ApsDimensionBars dimensions={score.dimensions} />
+										</div>
+										<div className="space-y-3">
+											<ApsDistributionChart samples={score.distribution ?? []} aps={score.aps} />
+											<div className="space-y-1.5">
+												<p className="text-xs font-medium text-muted-foreground">Sub-métricas medidas</p>
+												<ApsSubMetrics subMetrics={score.subMetrics} />
+											</div>
 										</div>
 									</div>
-								</div>
-							)}
-						</div>
-					))}
+								)}
+							</div>
+						);
+					})}
 				</div>
 			)}
 		</div>

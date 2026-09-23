@@ -5,10 +5,25 @@
  * Same information the audit already produced — the score, the requirement statuses, the diagnostics
  * — arranged so a marketer can read it in five seconds and know what to do. Light, same language as
  * the rest of BeAOS.
+ *
+ * El color no decora: el anillo lleva cuánto hay (rampa azul), la tinta lleva qué tan grave es, y el
+ * cian queda para lo único que hay que hacer. Ver status-tone.tsx.
  */
-import { Badge } from "@workspace/ui/components/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { IconInfoCircle } from "@tabler/icons-react";
+import {
+	BandChip,
+	BLOCKING_TEXT,
+	Eyebrow,
+	REQUIREMENT_GLYPH,
+	REQUIREMENT_TONE,
+	SIGNAL_RULE,
+	STAGE_LABEL,
+	STAGE_LEVEL,
+	type StageStatus,
+	aosBand,
+	toneOf,
+} from "@/components/status-tone";
 
 export interface AosRequirement {
 	id: string;
@@ -16,17 +31,6 @@ export interface AosRequirement {
 	status: "pass" | "fail" | "n_a";
 	strength?: "MUST" | "SHOULD" | "MAY";
 	diagnostic?: boolean;
-}
-
-export const AOS_BANDS: Record<string, { label: string; tone: string; ring: string; bg: string }> = {
-	"Agent-Operable": { label: "Operable", tone: "text-emerald-700", ring: "#059669", bg: "bg-emerald-50 border-emerald-200" },
-	"Agent-Attemptable": { label: "Intentable", tone: "text-amber-700", ring: "#d97706", bg: "bg-amber-50 border-amber-200" },
-	"Agent-Blocked": { label: "Bloqueado", tone: "text-orange-700", ring: "#ea580c", bg: "bg-orange-50 border-orange-200" },
-	"Agent-Inert": { label: "Inerte", tone: "text-rose-700", ring: "#e11d48", bg: "bg-rose-50 border-rose-200" },
-};
-
-export function aosBand(band: string) {
-	return AOS_BANDS[band] ?? { label: band, tone: "text-foreground", ring: "#0c3bb9", bg: "bg-muted border-border" };
 }
 
 /** What to do about each requirement, in the operator's words. */
@@ -89,7 +93,7 @@ export interface StageSummary {
 	key: string;
 	title: string;
 	hint: string;
-	status: "listo" | "a medias" | "bloqueado" | "sin datos";
+	status: StageStatus;
 	points: number;
 	total: number;
 	failing: AosRequirement[];
@@ -106,7 +110,7 @@ export function stageSummaries(requirements: AosRequirement[]): StageSummary[] {
 			.filter((requirement) => requirement.status === "pass")
 			.reduce((sum, requirement) => sum + (STRENGTH_POINTS[requirement.strength ?? "MUST"] ?? 1), 0);
 		const failing = all.filter((requirement) => requirement.status === "fail");
-		const status: StageSummary["status"] =
+		const status: StageStatus =
 			scored.length === 0 ? "sin datos" : points === total ? "listo" : points === 0 ? "bloqueado" : "a medias";
 		return { key: stage.key, title: stage.title, hint: stage.hint, status, points, total, failing };
 	});
@@ -123,9 +127,12 @@ function InfoHint({ text }: { text: string }) {
 	);
 }
 
-/** The gauge: score over 100, coloured by band. */
+/**
+ * The gauge. El trazo lleva el nivel; el número va en tinta de marca, porque un número es un dato y
+ * no se pinta por lo que vale: quien juzga es el chip de al lado.
+ */
 export function AosScoreRing({ score, band }: { score: number; band: string }) {
-	const tone = aosBand(band);
+	const tone = aosBand(band).tone;
 	const radius = 52;
 	const circumference = 2 * Math.PI * radius;
 	const filled = (Math.max(0, Math.min(100, score)) / 100) * circumference;
@@ -135,7 +142,7 @@ export function AosScoreRing({ score, band }: { score: number; band: string }) {
 				viewBox="0 0 132 132"
 				className="h-full w-full -rotate-90"
 				role="img"
-				aria-label={`AOS ${score} de 100, banda ${tone.label}`}
+				aria-label={`AOS ${score} de 100, banda ${aosBand(band).label}`}
 			>
 				<circle cx="66" cy="66" r={radius} fill="none" stroke="currentColor" strokeWidth="10" className="text-muted" />
 				<circle
@@ -143,28 +150,23 @@ export function AosScoreRing({ score, band }: { score: number; band: string }) {
 					cy="66"
 					r={radius}
 					fill="none"
-					stroke={tone.ring}
+					stroke={tone.mark}
 					strokeWidth="10"
 					strokeLinecap="round"
 					strokeDasharray={`${filled} ${circumference}`}
 				/>
 			</svg>
 			<div className="absolute inset-0 flex flex-col items-center justify-center">
-				<span className={`font-display text-4xl font-semibold tabular-nums ${tone.tone}`}>{score}</span>
-				<span className="text-xs text-muted-foreground">/100</span>
+				<span className="font-display text-4xl font-semibold tabular-nums text-believe-900">{score}</span>
+				<span className="font-mono text-[10px] text-muted-foreground">/100</span>
 			</div>
 		</div>
 	);
 }
 
 export function AosStatusPill({ band }: { band: string }) {
-	const tone = aosBand(band);
-	return (
-		<span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium ${tone.bg} ${tone.tone}`}>
-			<span className="h-2 w-2 rounded-full" style={{ backgroundColor: tone.ring }} />
-			{tone.label}
-		</span>
-	);
+	const meta = aosBand(band);
+	return <BandChip label={meta.label} level={meta.level} />;
 }
 
 /** One line a marketer can read without knowing what any of this is called. */
@@ -176,7 +178,10 @@ export function aosDiagnosis(score: number, failing: AosRequirement[]): string {
 	return "Invisible para agentes. No hay nada que puedan leer ni operar.";
 }
 
-/** One next step: the heaviest scored failure, with what to do about it. */
+/**
+ * One next step: the heaviest scored failure, with what to do about it. Este es el único cian de la
+ * sección — la señal de qué hacer, que es lo único que el color tiene permitido gritar.
+ */
 export function AosNextStep({ failing }: { failing: AosRequirement[] }) {
 	const scored = failing.filter((requirement) => requirement.diagnostic !== true);
 	const ordered = [...scored].sort(
@@ -185,8 +190,8 @@ export function AosNextStep({ failing }: { failing: AosRequirement[] }) {
 	const next = ordered[0] ?? failing[0];
 	if (next === undefined) return null;
 	return (
-		<div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-			<p className="text-xs font-medium tracking-wide text-primary">EL PRÓXIMO PASO</p>
+		<div className={`border-l-2 ${SIGNAL_RULE} bg-muted/40 py-3 pl-4`}>
+			<Eyebrow>El próximo paso</Eyebrow>
 			<p className="mt-1 text-sm">
 				<span className="font-medium">{next.title}</span>
 				{next.diagnostic === true ? " (fuera del puntaje, pero suma)" : ""} —{" "}
@@ -196,33 +201,32 @@ export function AosNextStep({ failing }: { failing: AosRequirement[] }) {
 	);
 }
 
-const STAGE_TONE: Record<StageSummary["status"], { label: string; className: string; dot: string }> = {
-	listo: { label: "LISTO", className: "text-emerald-700 border-emerald-200 bg-emerald-50", dot: "text-emerald-600" },
-	"a medias": { label: "A MEDIAS", className: "text-amber-700 border-amber-200 bg-amber-50", dot: "text-amber-500" },
-	bloqueado: { label: "BLOQUEADO", className: "text-rose-700 border-rose-200 bg-rose-50", dot: "text-rose-500" },
-	"sin datos": { label: "SIN DATOS", className: "text-muted-foreground border-border bg-muted", dot: "text-muted-foreground" },
-};
-
 /** The journey, stage by stage, with the concrete missing pieces under each one. */
 export function AosJourney({ stages }: { stages: StageSummary[] }) {
 	return (
 		<div className="space-y-4">
-			<p className="text-xs font-medium tracking-wide text-muted-foreground">EL CAMINO DE UN AGENTE</p>
+			<Eyebrow>El camino de un agente</Eyebrow>
 			<div className="space-y-4">
 				{stages.map((stage, index) => {
-					const tone = STAGE_TONE[stage.status];
+					const level = STAGE_LEVEL[stage.status];
+					const tone = toneOf(level);
 					return (
 						<div key={stage.key} className="relative pl-6">
 							{index < stages.length - 1 && <span className="absolute left-[7px] top-6 h-full w-px bg-border" />}
-							<span className={`absolute left-0 top-1.5 h-3.5 w-3.5 rounded-full border-2 border-current bg-background ${tone.dot}`} />
+							<span
+								className="absolute left-0 top-1.5 h-3.5 w-3.5 rounded-full bg-background"
+								style={
+									tone.solid
+										? { border: `2px solid ${tone.mark}`, backgroundColor: tone.mark }
+										: { border: `2px solid ${tone.mark}` }
+								}
+							/>
 							<div className="space-y-2">
 								<div className="flex flex-wrap items-center gap-2">
 									<span className="text-sm font-medium">{stage.title}</span>
-									<Badge variant="outline" className={`font-normal text-[10px] ${tone.className}`}>
-										{tone.label}
-									</Badge>
+									<BandChip label={STAGE_LABEL[stage.status]} level={level} className="font-mono text-[10px] tracking-[0.14em]" />
 									{stage.total > 0 && (
-										<span className="text-xs tabular-nums text-muted-foreground">
+										<span className="font-mono text-[10px] tabular-nums text-muted-foreground">
 											{stage.points} / {stage.total} pts
 										</span>
 									)}
@@ -232,7 +236,7 @@ export function AosJourney({ stages }: { stages: StageSummary[] }) {
 									<ul className="space-y-1">
 										{stage.failing.map((requirement) => (
 											<li key={requirement.id} className="flex items-start gap-2 text-xs">
-												<span className="text-rose-500">✕</span>
+												<span className={BLOCKING_TEXT}>✕</span>
 												<span>{FIX_HINTS[requirement.id] ?? requirement.title}</span>
 												{requirement.diagnostic === true && (
 													<span className="text-muted-foreground">· fuera del puntaje</span>
@@ -241,7 +245,7 @@ export function AosJourney({ stages }: { stages: StageSummary[] }) {
 										))}
 									</ul>
 								) : (
-									<p className="text-xs text-emerald-700">Sin pendientes en esta etapa.</p>
+									<p className="text-xs text-muted-foreground">Sin pendientes en esta etapa.</p>
 								)}
 							</div>
 						</div>
@@ -258,11 +262,9 @@ export function AosChecklist({ requirements }: { requirements: AosRequirement[] 
 	const diagnostics = requirements.filter((requirement) => requirement.diagnostic === true);
 	const row = (requirement: AosRequirement) => (
 		<li key={requirement.id} className="flex items-center gap-2 text-xs">
-			<span className={requirement.status === "pass" ? "text-emerald-600" : requirement.status === "n_a" ? "text-muted-foreground" : "text-rose-500"}>
-				{requirement.status === "pass" ? "✓" : requirement.status === "n_a" ? "—" : "✕"}
-			</span>
+			<span className={REQUIREMENT_TONE[requirement.status]}>{REQUIREMENT_GLYPH[requirement.status]}</span>
 			<code className="font-mono text-[11px] text-muted-foreground">{requirement.id}</code>
-			<span className={requirement.status === "fail" ? "" : "text-muted-foreground"}>{requirement.title}</span>
+			<span className={requirement.status === "fail" ? BLOCKING_TEXT : "text-muted-foreground"}>{requirement.title}</span>
 			{requirement.status === "n_a" && <span className="text-muted-foreground">(no aplica)</span>}
 		</li>
 	);

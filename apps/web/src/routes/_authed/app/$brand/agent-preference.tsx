@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@work
 import { useBrand } from "@/hooks/use-brands";
 import { listAgentEntitiesFn } from "@/server/agent-maasy";
 import { ApsRunBlock } from "@/components/aps-visual";
+import { BLOCKING_TEXT } from "@/components/status-tone";
 import {
 estimateApsRunFn,
 generateApsLibraryFn,
@@ -25,22 +26,6 @@ const KINDS: Array<{ key: string; label: string; target: number; hint: string }>
 { key: "use_case", label: "Caso de uso", target: 30, hint: "situaciones concretas de compra" },
 { key: "category", label: "Categoría", target: 20, hint: "qué existe en la categoría" },
 ];
-
-const BANDS: Record<string, { label: string; className: string }> = {
-agent_native: { label: "Agent-Native", className: "text-emerald-600" },
-agent_ready: { label: "Agent-Ready", className: "text-emerald-600" },
-agent_visible: { label: "Agent-Visible", className: "text-amber-600" },
-agent_opaque: { label: "Agent-Opaque", className: "text-orange-600" },
-agent_blind: { label: "Agent-Blind", className: "text-red-600" },
-};
-
-function bandLabel(band: string): string {
-return BANDS[band]?.label ?? band;
-}
-
-function bandColor(band: string): string {
-return BANDS[band]?.className ?? "text-muted-foreground";
-}
 
 function statusLabel(status: string): string {
 const labels: Record<string, string> = {
@@ -159,7 +144,7 @@ onError: (mutationError) => setError(mutationError instanceof Error ? mutationEr
 });
 
 if (isLoading) return <div className="text-sm text-muted-foreground">Cargando brand…</div>;
-if (brand === undefined) return <div className="text-sm text-red-600">Brand no encontrado.</div>;
+if (brand === undefined) return <div className={`text-sm ${BLOCKING_TEXT}`}>Brand no encontrado.</div>;
 
 const active = library.data?.library;
 const estimateData = estimate.data;
@@ -167,9 +152,10 @@ const estimateData = estimate.data;
 return (
 <div className="space-y-6 max-w-5xl">
 <div>
-<h1 className="text-3xl font-bold">Agent Preference</h1>
+<h1 className="text-3xl font-bold">APS</h1>
 <p className="text-muted-foreground">
-APS medido contra modelos reales: biblioteca de prompts unaided, corridas on-demand y su varianza.
+Agent Preference Score: si los modelos te prefieren cuando un comprador pregunta sin nombrarte. Medido contra
+modelos reales con una biblioteca de prompts unaided, en corridas on-demand y con su varianza.
 </p>
 </div>
 
@@ -189,7 +175,7 @@ onChange={(event) => setEntityId(event.target.value)}
 <option key={entity.id} value={entity.id}>{entity.name}</option>
 ))}
 </select>
-{error && <p className="pt-3 text-sm text-red-600">{error}</p>}
+{error && <p className={`pt-3 text-sm ${BLOCKING_TEXT}`}>{error}</p>}
 </CardContent>
 </Card>
 
@@ -276,7 +262,7 @@ Gateway ({gateway.data.budget.models.join(", ") || "sin bandas"}): gastado USD{"
 </p>
 )}
 {gateway.data?.configured === false && (
-<p className="text-xs text-amber-600">Gateway sin configurar: la generacion y el juez no van a funcionar.</p>
+<p className={`text-xs ${BLOCKING_TEXT}`}>Gateway sin configurar: la generación y el juez no van a funcionar.</p>
 )}
 <div className="flex flex-wrap gap-2">
 <Button size="sm" variant="outline" onClick={() => estimate.mutate()} disabled={estimate.isPending || entityId.length === 0}>
@@ -304,7 +290,7 @@ disabled={start.isPending || entityId.length === 0 || estimateData?.status !== "
 AOS usado como capacidad de acción: {estimateData.capacidadAccion ?? "sin auditoría"} · biblioteca v
 {estimateData.libraryVersion ?? "—"}
 </p>
-{estimateData.reasons.length > 0 && <p className="text-amber-600">{estimateData.reasons.join(" ")}</p>}
+{estimateData.reasons.length > 0 && <p className={BLOCKING_TEXT}>{estimateData.reasons.join(" ")}</p>}
 </div>
 )}
 </CardContent>
