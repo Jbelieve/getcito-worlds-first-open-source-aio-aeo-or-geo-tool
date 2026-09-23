@@ -310,6 +310,12 @@ export interface ApsScoreView {
 export interface ApsRunView {
 	id: string;
 	createdAt: string;
+	/**
+	 * The models the run planned. Shown because the plan is derived from SCRAPE_TARGETS and can come
+	 * out shorter than the operator expects — a run once measured two models out of four and nothing
+	 * on screen said so.
+	 */
+	models?: string[];
 	completedCalls: number;
 	plannedCalls: number;
 	partial: boolean;
@@ -352,6 +358,12 @@ export function ApsRunBlock({ run, expanded, statusLabel }: { run: ApsRunView; e
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<span className="text-muted-foreground">
 					{new Date(run.createdAt).toLocaleString()} · {statusLabel} · {run.completedCalls}/{run.plannedCalls} llamadas
+					{run.models !== undefined && run.models.length > 0 && (
+						<>
+							{" · "}
+							<span className={MONO_LABEL}>{run.models.join(" ")}</span>
+						</>
+					)}
 				</span>
 				<span className="font-mono text-xs text-muted-foreground">
 					v{run.promptLibraryVersion} · {run.judgeModelAlias}@{run.judgeModelVersion} · {run.measurementVersion}

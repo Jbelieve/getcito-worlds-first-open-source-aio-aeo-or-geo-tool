@@ -17,6 +17,12 @@ export interface MeasurementTargetConfig {
 	provider: string;
 	version?: string;
 	webSearch: boolean;
+	/**
+	 * How long this model may take, when it needs more than the run-wide ceiling. A scraper that
+	 * polls an async snapshot needs minutes where a chat API needs seconds, and one shared ceiling
+	 * can only fit one of them. Undefined keeps the run-wide default.
+	 */
+	timeoutMs?: number;
 }
 
 export type ProviderInvoker = (config: MeasurementTargetConfig, prompt: string) => Promise<string>;
@@ -39,7 +45,12 @@ export function queryTargetsFrom(
 			continue;
 		}
 		seen.add(config.model);
-		targets.push({ target: config.model, query: (prompt: string) => invoke(config, prompt) });
+		targets.push({
+			target: config.model,
+			query: (prompt: string) => invoke(config, prompt),
+			// Only when set: undefined leaves captureRun's run-wide ceiling in charge.
+			...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }),
+		});
 	}
 
 	return { targets, duplicateModels };
@@ -55,4 +66,38 @@ export function measurableModels(configs: MeasurementTargetConfig[]): string[] {
 		models.push(config.model);
 	}
 	return models;
+}
+
+/**
+ * Per-model call ceilings, read from `APS_CALL_TIMEOUTS` (`"perplexity=600000"`, milliseconds).
+ *
+ * Exists because one run-wide ceiling cannot fit both kinds of provider: a chat API answers in
+ * seconds while BrightData's perplexity path polls an async snapshot for up to 520s. With a single
+ * 90s ceiling the provider was still willing to work when the capture had already given up, so that
+ * model could never succeed — not because it was broken, but because we stopped waiting.
+ *
+ * Malformed entries are ignored instead of failing the run, and a model with no entry keeps the
+ * run-wide default. A ceiling below one second is treated as a typo, not as a decision.
+ */
+export function callTimeoutsFromEnv(env: Record<string, string | undefined> = process.env): Record<string, number> {
+	const raw = env.APS_CALL_TIMEOUTS?.trim();
+	if (raw === undefined || raw.length === 0) return {};
+
+	const ceilings: Record<string, number> = {};
+	for (const entry of raw.split(",")) {
+		const [model, value] = entry.split("=").map((part) => part.trim());
+		if (model === undefined || model.length === 0 || value === undefined || value.length === 0) continue;
+		const ms = Number(value);
+		if (!Number.isFinite(ms) || ms < 1000) continue;
+		ceilings[model] = Math.floor(ms);
+	}
+	return ceilings;
+}
+
+/** The same configs with each model's ceiling applied, leaving the rest untouched. */
+export function withCallTimeouts<T extends { model: string }>(configs: T[], ceilings: Record<string, number>): T[] {
+	return configs.map((config) => {
+		const timeoutMs = ceilings[config.model];
+		return timeoutMs === undefined ? config : { ...config, timeoutMs };
+	});
 }
