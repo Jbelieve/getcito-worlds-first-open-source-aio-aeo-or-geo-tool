@@ -1,0 +1,21 @@
+packages/aos-aps/src/preference/score.test.ts
+  s_83eb0c85ef1ba9::t_0bd7e5c7b6fb72 1-213
+packages/aos-aps/src/provenance/sign.test.ts
+  s_83eb0c85ef1ba9::t_edde15f40efea2 1-123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e74839f2275d8a80967fd72f26b961361b1080d0",
+  "prompts": {},
+  "sessions": {
+    "s_83eb0c85ef1ba9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6096dbd5-552c-41d6-a4f3-06e4bf967c90",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
