@@ -76,15 +76,18 @@ export function extractJsonObject(content: string): unknown {
  * data.
  */
 export function judgeConfigFromEnv(env: Record<string, string | undefined> = process.env): GatewayJudgeConfig | null {
-	const url = env.LLM_GATEWAY_URL?.trim();
-	const key = (env.LLM_GATEWAY_KEY_BEAOS ?? env.LLM_GATEWAY_KEY_BEADS)?.trim();
-	if (url === undefined || url.length === 0 || key === undefined || key.length === 0) return null;
-	const model = env.APS_JUDGE_MODEL?.trim() ?? "believe-deep";
+	// An empty variable must fall through to the temporary key: a rendered .env commonly carries
+	// `LLM_GATEWAY_KEY_BEAOS=` until the dedicated key exists, and `??` alone would treat that as set.
+	const firstSet = (...values: Array<string | undefined>): string | undefined =>
+		values.map((value) => value?.trim()).find((value) => value !== undefined && value.length > 0);
+	const url = firstSet(env.LLM_GATEWAY_URL);
+	const key = firstSet(env.LLM_GATEWAY_KEY_BEAOS, env.LLM_GATEWAY_KEY_BEADS);
+	if (url === undefined || key === undefined) return null;
 	return {
 		url,
 		key,
-		model: model.length > 0 ? model : "believe-deep",
-		version: env.APS_JUDGE_VERSION?.trim() ?? "unpinned",
+		model: firstSet(env.APS_JUDGE_MODEL) ?? "believe-deep",
+		version: firstSet(env.APS_JUDGE_VERSION) ?? "unpinned",
 	};
 }
 
@@ -148,9 +151,7 @@ Reglas duras:
  * Generation runs on a cheaper band than the judge: writing prompts is authoring work, not the
  * measurement judgement, and the operator reviews the candidate list before anything is locked.
  */
-export function libraryConfigFromEnv(
-	env: Record<string, string | undefined> = process.env,
-): GatewayJudgeConfig | null {
+export function libraryConfigFromEnv(env: Record<string, string | undefined> = process.env): GatewayJudgeConfig | null {
 	const judge = judgeConfigFromEnv(env);
 	if (judge === null) return null;
 	const model = env.APS_LIBRARY_MODEL?.trim();
@@ -234,7 +235,9 @@ export async function generateLibraryWithGateway(
 		const prompt = asLibraryPrompt(candidate);
 		if (prompt === null) {
 			const text =
-				candidate !== null && typeof candidate === "object" && typeof (candidate as { text?: unknown }).text === "string"
+				candidate !== null &&
+				typeof candidate === "object" &&
+				typeof (candidate as { text?: unknown }).text === "string"
 					? String((candidate as { text: string }).text)
 					: "";
 			rejected.push({ text, reason: "kind, funnel_stage o texto invalido" });
