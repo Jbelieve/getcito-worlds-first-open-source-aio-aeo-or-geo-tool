@@ -2,45 +2,45 @@ import { boolean, integer, json, pgTable, text, timestamp, uuid, type AnyPgColum
 import { brands } from "@workspace/lib/db/schema";
 
 export const agentBrandEntities = pgTable("agent_brand_entities", {
-id: uuid("id").defaultRandom().primaryKey().notNull(),
-brandId: text("brand_id")
-.references(() => brands.id, { onDelete: "cascade" })
-.notNull(),
-parentEntityId: uuid("parent_entity_id").references((): AnyPgColumn => agentBrandEntities.id, {
-onDelete: "cascade",
-}),
-entityType: text("entity_type").$type<"umbrella" | "product">().notNull(),
-name: text("name").notNull(),
-websiteUrl: text("website_url"),
-maasyProjectId: text("maasy_project_id"),
-isPrimary: boolean("is_primary").default(false).notNull(),
-createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-updatedAt: timestamp("updated_at", { withTimezone: true })
-.defaultNow()
-.$onUpdate(() => new Date())
-.notNull(),
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	brandId: text("brand_id")
+		.references(() => brands.id, { onDelete: "cascade" })
+		.notNull(),
+	parentEntityId: uuid("parent_entity_id").references((): AnyPgColumn => agentBrandEntities.id, {
+		onDelete: "cascade",
+	}),
+	entityType: text("entity_type").$type<"umbrella" | "product">().notNull(),
+	name: text("name").notNull(),
+	websiteUrl: text("website_url"),
+	maasyProjectId: text("maasy_project_id"),
+	isPrimary: boolean("is_primary").default(false).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true })
+		.defaultNow()
+		.$onUpdate(() => new Date())
+		.notNull(),
 });
 
 export const agentAosAudits = pgTable("agent_aos_audits", {
-id: uuid("id").defaultRandom().primaryKey().notNull(),
-brandId: text("brand_id")
-.references(() => brands.id, { onDelete: "cascade" })
-.notNull(),
-entityId: uuid("entity_id").references(() => agentBrandEntities.id, { onDelete: "cascade" }),
-url: text("url").notNull(),
-score: integer("score"),
-band: text("band"),
-businessType: text("business_type"),
-standards: json("standards"),
-probes: json("probes"),
-requirements: json("requirements"),
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	brandId: text("brand_id")
+		.references(() => brands.id, { onDelete: "cascade" })
+		.notNull(),
+	entityId: uuid("entity_id").references(() => agentBrandEntities.id, { onDelete: "cascade" }),
+	url: text("url").notNull(),
+	score: integer("score"),
+	band: text("band"),
+	businessType: text("business_type"),
+	standards: json("standards"),
+	probes: json("probes"),
+	requirements: json("requirements"),
 	/** Spec APS from the served Claims & Proofs layer. Null when no usable brand.json was served. */
 	apsScore: integer("aps_score"),
 	apsBreakdown: json("aps_breakdown"),
 	/** Scoring algorithm version, so a formula change never mixes incomparable history. */
 	scoringVersion: text("scoring_version"),
 	error: text("error"),
-createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const agentBrandDnaSnapshots = pgTable("agent_brand_dna_snapshots", {

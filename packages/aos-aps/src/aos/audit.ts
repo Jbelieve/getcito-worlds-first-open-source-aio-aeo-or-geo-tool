@@ -219,9 +219,7 @@ export async function runAosAudit(input: AosAuditInput): Promise<AosAuditResult>
 	const profile = parseBrandProfile(brandJsonDocument.body);
 	const signatureValid =
 		brandJsonDocument.present === true && (await verifyBrandSignature(base, timeoutMs, brandJsonDocument.text));
-	const aps = brandJsonDocument.present
-		? computeApsScore(profile, { signedProvenanceVerified: signatureValid })
-		: null;
+	const aps = brandJsonDocument.present ? computeApsScore(profile, { signedProvenanceVerified: signatureValid }) : null;
 
 	const probes: Probes = {
 		llms_txt: llmsTxt,

@@ -26,9 +26,30 @@ export interface RequirementDef {
 }
 
 export const REQUIREMENTS: RequirementDef[] = [
-	{ id: "AOS-DISC-01", axis: "AOS", strength: "SHOULD", title: "llms.txt", applies: ["brand", "product_api"], signal: "llms_txt" },
-	{ id: "AOS-DISC-02", axis: "AOS", strength: "MAY", title: "llms-full.txt", applies: ["brand", "product_api"], signal: "llms_full_txt" },
-	{ id: "AOS-DISC-03", axis: "AOS", strength: "SHOULD", title: "AGENTS.md", applies: ["brand", "product_api"], signal: "agents_md" },
+	{
+		id: "AOS-DISC-01",
+		axis: "AOS",
+		strength: "SHOULD",
+		title: "llms.txt",
+		applies: ["brand", "product_api"],
+		signal: "llms_txt",
+	},
+	{
+		id: "AOS-DISC-02",
+		axis: "AOS",
+		strength: "MAY",
+		title: "llms-full.txt",
+		applies: ["brand", "product_api"],
+		signal: "llms_full_txt",
+	},
+	{
+		id: "AOS-DISC-03",
+		axis: "AOS",
+		strength: "SHOULD",
+		title: "AGENTS.md",
+		applies: ["brand", "product_api"],
+		signal: "agents_md",
+	},
 	{
 		id: "AOS-DISC-04",
 		axis: "AOS",
@@ -37,7 +58,14 @@ export const REQUIREMENTS: RequirementDef[] = [
 		applies: ["brand", "product_api"],
 		signal: "robots_sitemap",
 	},
-	{ id: "AOS-CONT-01", axis: "AOS", strength: "SHOULD", title: "JSON-LD identity", applies: ["brand", "product_api"], signal: "jsonld" },
+	{
+		id: "AOS-CONT-01",
+		axis: "AOS",
+		strength: "SHOULD",
+		title: "JSON-LD identity",
+		applies: ["brand", "product_api"],
+		signal: "jsonld",
+	},
 	{
 		id: "AOS-CONT-02",
 		axis: "AOS",
@@ -54,7 +82,14 @@ export const REQUIREMENTS: RequirementDef[] = [
 		applies: ["brand", "product_api"],
 		signal: "markdown_negotiation",
 	},
-	{ id: "AOS-IDEN-01", axis: "AOS", strength: "MUST", title: "A2A Agent Card", applies: ["brand", "product_api"], signal: "agent_card" },
+	{
+		id: "AOS-IDEN-01",
+		axis: "AOS",
+		strength: "MUST",
+		title: "A2A Agent Card",
+		applies: ["brand", "product_api"],
+		signal: "agent_card",
+	},
 	{
 		id: "AOS-IDEN-02",
 		axis: "AOS",
@@ -71,7 +106,14 @@ export const REQUIREMENTS: RequirementDef[] = [
 		applies: ["brand", "product_api"],
 		signal: "mcp_server_card",
 	},
-	{ id: "AOS-CAPA-02", axis: "AOS", strength: "SHOULD", title: "NLWeb /ask endpoint", applies: ["brand", "product_api"], signal: "nlweb_ask" },
+	{
+		id: "AOS-CAPA-02",
+		axis: "AOS",
+		strength: "SHOULD",
+		title: "NLWeb /ask endpoint",
+		applies: ["brand", "product_api"],
+		signal: "nlweb_ask",
+	},
 	{
 		id: "AOS-API-01",
 		axis: "AOS",
@@ -121,7 +163,14 @@ export const REQUIREMENTS: RequirementDef[] = [
 		applies: ["brand", "product_api"],
 		signal: "signature_valid",
 	},
-	{ id: "APS-PROV-02", axis: "APS", strength: "SHOULD", title: "Public key (keys.json)", applies: ["brand", "product_api"], signal: "keys_json" },
+	{
+		id: "APS-PROV-02",
+		axis: "APS",
+		strength: "SHOULD",
+		title: "Public key (keys.json)",
+		applies: ["brand", "product_api"],
+		signal: "keys_json",
+	},
 	{
 		id: "APS-PROV-03",
 		axis: "APS",

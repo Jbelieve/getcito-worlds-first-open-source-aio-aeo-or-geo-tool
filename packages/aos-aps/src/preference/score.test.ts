@@ -33,9 +33,19 @@ function proof(id: string, claimId: string, overrides: Partial<Proof> = {}): Pro
 		title: `Caso ${id}`,
 		claim_refs: [claimId],
 		evidence: { summary: "Evidencia auditada.", client: "Cliente" },
-		verification: { verifiable_by: "signed_client", source_uri: "https://example.com/casos", date_verified: null, external_auditor: null },
+		verification: {
+			verifiable_by: "signed_client",
+			source_uri: "https://example.com/casos",
+			date_verified: null,
+			external_auditor: null,
+		},
 		confidentiality: "public",
-		signature: { algorithm: "Ed25519", value: "sig", signer_role: "signed_provenance", signed_at: "2026-07-11T00:00:00Z" },
+		signature: {
+			algorithm: "Ed25519",
+			value: "sig",
+			signer_role: "signed_provenance",
+			signed_at: "2026-07-11T00:00:00Z",
+		},
 		...overrides,
 	};
 }
@@ -78,9 +88,10 @@ describe("computeApsScore", () => {
 	});
 
 	it("never promotes a public_url proof above its own weight", () => {
-		const publicProof = profile([claim("CLM-R01", "PRF-R01")], [
-			proof("PRF-R01", "CLM-R01", { verification: { verifiable_by: "public_url" } }),
-		]);
+		const publicProof = profile(
+			[claim("CLM-R01", "PRF-R01")],
+			[proof("PRF-R01", "CLM-R01", { verification: { verifiable_by: "public_url" } })],
+		);
 		expect(scoreBrandProfile(publicProof, { signedProvenanceVerified: true }).evidence_strength).toBe(1);
 	});
 
@@ -107,7 +118,11 @@ describe("computeApsScore", () => {
 
 	it("treats a marker not_applicable_for as explicit but not real", () => {
 		const marked = profile(
-			[claim("CLM-R01", "PRF-R01", { boundary: { applicable_for: "Casos con datos.", not_applicable_for: "⚠ CONFIRMAR" } })],
+			[
+				claim("CLM-R01", "PRF-R01", {
+					boundary: { applicable_for: "Casos con datos.", not_applicable_for: "⚠ CONFIRMAR" },
+				}),
+			],
 			[proof("PRF-R01", "CLM-R01")],
 		);
 		const parsed = parseBrandProfile(marked);
@@ -119,7 +134,10 @@ describe("computeApsScore", () => {
 
 	it("subtracts prohibited-term hits from the smoke component", () => {
 		const smoking = profile(
-			[claim("CLM-R01", "PRF-R01", { statement: "Nuestra estrategia integral produjo el resultado." }), claim("CLM-R02", "PRF-R02")],
+			[
+				claim("CLM-R01", "PRF-R01", { statement: "Nuestra estrategia integral produjo el resultado." }),
+				claim("CLM-R02", "PRF-R02"),
+			],
 			[proof("PRF-R01", "CLM-R01"), proof("PRF-R02", "CLM-R02")],
 		);
 		const breakdown = scoreBrandProfile(smoking, { signedProvenanceVerified: true });
@@ -133,9 +151,10 @@ describe("computeApsScore", () => {
 		const nda = profile([claim("CLM-R01", "PRF-R01")], [proof("PRF-R01", "CLM-R01", { confidentiality: "nda" })]);
 		expect(scoreBrandProfile(nda).evidence_strength).toBe(0.18);
 
-		const unknown = profile([claim("CLM-R01", "PRF-R01")], [
-			proof("PRF-R01", "CLM-R01", { verification: { verifiable_by: "trust_me" } }),
-		]);
+		const unknown = profile(
+			[claim("CLM-R01", "PRF-R01")],
+			[proof("PRF-R01", "CLM-R01", { verification: { verifiable_by: "trust_me" } })],
+		);
 		const parsed = parseBrandProfile(unknown);
 		expect(parsed.signals.proofsLinkClaims).toBe(false);
 		expect(computeApsScore(parsed).evidence_strength).toBe(0.2);
@@ -180,12 +199,18 @@ describe("parseBrandProfile", () => {
 	});
 
 	it("enforces derived confidence instead of self-assigned values", () => {
-		const selfAssigned = profile([claim("CLM-R01", "PRF-R01", { metric: { n: 1 }, confidence: 0.9 })], [proof("PRF-R01", "CLM-R01")]);
+		const selfAssigned = profile(
+			[claim("CLM-R01", "PRF-R01", { metric: { n: 1 }, confidence: 0.9 })],
+			[proof("PRF-R01", "CLM-R01")],
+		);
 		const parsed = parseBrandProfile(selfAssigned);
 		expect(parsed.signals.derivedConfidence).toBe(false);
 		expect(parsed.findings.some((finding) => finding.code === "APS-CLAIM-04")).toBe(true);
 
-		const derived = profile([claim("CLM-R01", "PRF-R01", { metric: { n: 100 }, confidence: 0.9 })], [proof("PRF-R01", "CLM-R01")]);
+		const derived = profile(
+			[claim("CLM-R01", "PRF-R01", { metric: { n: 100 }, confidence: 0.9 })],
+			[proof("PRF-R01", "CLM-R01")],
+		);
 		expect(parseBrandProfile(derived).signals.derivedConfidence).toBe(true);
 	});
 

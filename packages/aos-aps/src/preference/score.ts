@@ -95,7 +95,10 @@ export function computeApsScore(parsed: ParsedBrandProfile, options: ApsScoreOpt
 		const applicable = claim.boundary?.applicable_for;
 		const notApplicable = claim.boundary?.not_applicable_for;
 		const realBoth =
-			isRealString(applicable) && isMarker(applicable) === false && isRealString(notApplicable) && isMarker(notApplicable) === false;
+			isRealString(applicable) &&
+			isMarker(applicable) === false &&
+			isRealString(notApplicable) &&
+			isMarker(notApplicable) === false;
 		if (realBoth) claimsWithBoundary += 1;
 	}
 

@@ -77,11 +77,13 @@ describe("signDetached", () => {
 		expect(signature).not.toBeNull();
 		expect(signature?.alg).toBe("Ed25519");
 
-		expect(verifyBytes(null, Buffer.from(body, "utf8"), publicKey, Buffer.from(signature?.value ?? "", "base64"))).toBe(true);
-		// A signature is over the exact served bytes: one extra byte must break it.
-		expect(verifyBytes(null, Buffer.from(`${body} `, "utf8"), publicKey, Buffer.from(signature?.value ?? "", "base64"))).toBe(
-			false,
+		expect(verifyBytes(null, Buffer.from(body, "utf8"), publicKey, Buffer.from(signature?.value ?? "", "base64"))).toBe(
+			true,
 		);
+		// A signature is over the exact served bytes: one extra byte must break it.
+		expect(
+			verifyBytes(null, Buffer.from(`${body} `, "utf8"), publicKey, Buffer.from(signature?.value ?? "", "base64")),
+		).toBe(false);
 
 		const info = signingKeyInfo();
 		expect(info?.format).toBe("pkcs8");
