@@ -1,0 +1,16 @@
+apps/web/src/routeTree.gen.ts
+  h_c5ca005a78c880 27,143-147,383,436,495,554,607,665,715,842-848,1275
+apps/web/src/routes/agent/$entityId/$.ts
+  h_c5ca005a78c880 1-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "035e09bf617169a4baa21dcae6bb481adea407d1",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
