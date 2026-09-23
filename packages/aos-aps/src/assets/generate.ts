@@ -1,4 +1,4 @@
-import { buildKeysJson, signDetached } from "../provenance";
+import { buildKeysJson, signDetached, type SigningKey } from "../provenance";
 import type { Claim, Proof } from "../preference";
 
 /**
@@ -25,6 +25,11 @@ export interface AgentAssetInput {
 	industry?: string;
 	brief?: string;
 	dna?: Record<string, unknown>;
+	/**
+	 * Key that signs brand.json. A sub-brand passes its umbrella's key (see provenance/keying.ts),
+	 * so the bundle carries the umbrella identity. Absent => no provenance assets are emitted.
+	 */
+	signing?: SigningKey;
 }
 
 function asString(value: unknown): string | undefined {
@@ -235,14 +240,14 @@ export function generateAgentAssets(input: AgentAssetInput): GeneratedAsset[] {
 	}
 
 	// The signature is over the exact bytes served as brand.json.
-	const signature = signDetached(brand);
-	if (signature !== null) {
+	const signature = input.signing === undefined ? null : signDetached(brand, input.signing);
+	if (signature !== null && input.signing !== undefined) {
 		assets.push({
 			path: "/.well-known/brand.json.sig",
 			type: "application/json",
 			content: `${JSON.stringify(signature, null, 2)}\n`,
 		});
-		const keys = buildKeysJson();
+		const keys = buildKeysJson(input.signing);
 		if (keys !== null) {
 			assets.push({
 				path: "/.well-known/keys.json",
