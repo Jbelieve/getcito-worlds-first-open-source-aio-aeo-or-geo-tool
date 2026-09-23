@@ -19,6 +19,12 @@ export const MONTECARLO_ITERATIONS = 500;
 /** Only fixes the shape: APS 50 -> P 50%, APS 70 -> P≈83%, APS 85 -> P≈94%. */
 export const SIGMOID_K = 0.08;
 
+/**
+ * Version of the measurement pipeline (sub-metrics, dimensions, bootstrap). Persisted per run so a
+ * formula change creates a new comparable series instead of silently mixing history.
+ */
+export const MEASUREMENT_VERSION = "aos-aps/measurement-v1";
+
 /** Weights over 100, from the design mockup (D1..D5). */
 export const DIMENSION_WEIGHTS = {
 	discoverabilidad_agentica: 25,
