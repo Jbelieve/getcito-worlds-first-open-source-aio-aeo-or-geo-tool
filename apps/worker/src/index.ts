@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/node";
 import { PROCESS_PROMPT_JOB_POLICY } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
 import { getProvider, parseScrapeTargets, validateScrapeTargets } from "@workspace/lib/providers";
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import boss from "./boss";
 import { registerHandlers } from "./handlers";
 import { shutdownTelemetry } from "./telemetry";
@@ -114,12 +114,19 @@ async function main() {
 
 	for (const { name, ...options } of queueOptions) {
 		await boss.createQueue(name, options);
+		// Only the columns actually provided are updated. Drizzle drops `undefined` parameters, so
+		// writing all four would leave a dangling comma (`retry_delay = ,`) and the worker would
+		// refuse to start — reachable by any queue that omits one option.
+		const assignments = [
+			options.retryLimit === undefined ? null : sql`retry_limit = ${options.retryLimit}`,
+			options.retryDelay === undefined ? null : sql`retry_delay = ${options.retryDelay}`,
+			options.retryBackoff === undefined ? null : sql`retry_backoff = ${options.retryBackoff}`,
+			options.expireInSeconds === undefined ? null : sql`expire_seconds = ${options.expireInSeconds}`,
+		].filter((assignment): assignment is SQL => assignment !== null);
+		if (assignments.length === 0) continue;
 		await db.execute(sql`
 			UPDATE pgboss.queue
-			SET retry_limit = ${options.retryLimit},
-			    retry_delay = ${options.retryDelay},
-			    retry_backoff = ${options.retryBackoff},
-			    expire_seconds = ${options.expireInSeconds}
+			SET ${sql.join(assignments, sql`, `)}
 			WHERE name = ${name}
 		`);
 	}
