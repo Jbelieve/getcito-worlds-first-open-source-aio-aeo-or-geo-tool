@@ -9,27 +9,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { IconInfoCircle, IconArrowRight } from "@tabler/icons-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { Badge } from "@workspace/ui/components/badge";
 import { Progress } from "@workspace/ui/components/progress";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { getAgentOverviewFn } from "@/server/agent-overview";
 import { ApsMiniBand } from "@/components/aps-visual";
-
-const AOS_BANDS: Record<string, { label: string; tone: string }> = {
-	"Agent-Operable": { label: "Operable por agentes", tone: "text-emerald-600" },
-	"Agent-Attemptable": { label: "Intentable", tone: "text-amber-600" },
-	"Agent-Blocked": { label: "Bloqueada", tone: "text-orange-600" },
-	"Agent-Inert": { label: "Inerte", tone: "text-rose-600" },
-};
-
-const APS_BANDS: Record<string, { label: string; tone: string }> = {
-	agent_native: { label: "Agent-Native", tone: "text-emerald-600" },
-	agent_ready: { label: "Agent-Ready", tone: "text-emerald-600" },
-	agent_visible: { label: "Agent-Visible", tone: "text-amber-600" },
-	agent_opaque: { label: "Agent-Opaque", tone: "text-orange-600" },
-	agent_blind: { label: "Agent-Blind", tone: "text-rose-600" },
-};
+import { BandChip, MONO_LABEL, apsBand, aosBand } from "@/components/status-tone";
 
 function titleWithTooltip(title: string, tooltip: string) {
 	return (
@@ -45,9 +30,12 @@ function titleWithTooltip(title: string, tooltip: string) {
 	);
 }
 
-function BigScore({ score, tone }: { score: number; tone: string }) {
+function BigScore({ score }: { score: number }) {
 	return (
-		<span className={`font-bold tracking-tight tabular-nums ${tone}`} style={{ fontSize: "clamp(2rem, 4vw, 3.25rem)" }}>
+		<span
+			className="font-display font-semibold tracking-tight tabular-nums text-believe-900"
+			style={{ fontSize: "clamp(2rem, 4vw, 3.25rem)" }}
+		>
 			{score}
 		</span>
 	);
@@ -118,11 +106,9 @@ export function AgentScoreCards({ brandId }: { brandId: string | undefined }) {
 						) : (
 							<>
 								<div className="flex items-end gap-3">
-									<BigScore score={aos.score} tone={AOS_BANDS[aos.band]?.tone ?? "text-foreground"} />
+									<BigScore score={aos.score} />
 									<div className="pb-1.5 space-y-1">
-										<Badge variant="secondary" className="font-normal">
-											{AOS_BANDS[aos.band]?.label ?? aos.band}
-										</Badge>
+										<BandChip label={aosBand(aos.band).label} level={aosBand(aos.band).level} />
 										<p className="text-xs text-muted-foreground">
 											{aos.passed} de {aos.applicable} requerimientos · {aos.businessType === "product_api" ? "producto/API" : "marca"}
 										</p>
@@ -134,14 +120,17 @@ export function AgentScoreCards({ brandId }: { brandId: string | undefined }) {
 										<p className="text-xs font-medium text-muted-foreground">Lo que falta</p>
 										<div className="flex flex-wrap gap-1.5">
 											{aos.failing.map((requirement) => (
-												<Badge key={requirement.id} variant="outline" className="font-normal text-amber-700 border-amber-200">
+												<span
+													key={requirement.id}
+													className="rounded-full border border-dashed border-foreground/25 px-2.5 py-0.5 text-xs text-foreground"
+												>
 													{requirement.title}
-												</Badge>
+												</span>
 											))}
 										</div>
 									</div>
 								) : (
-									<p className="text-xs text-emerald-700">Sin pendientes en el rubric puntuado.</p>
+									<p className="text-xs text-muted-foreground">Sin pendientes en el rubric puntuado.</p>
 								)}
 								{aos.diagnosticsFailing > 0 && (
 									<p className="text-xs text-muted-foreground">
@@ -179,11 +168,9 @@ export function AgentScoreCards({ brandId }: { brandId: string | undefined }) {
 						) : (
 							<>
 								<div className="flex items-end gap-3">
-									<BigScore score={aps.aps} tone={APS_BANDS[aps.band]?.tone ?? "text-foreground"} />
+									<BigScore score={aps.aps} />
 									<div className="pb-1.5 space-y-1">
-										<Badge variant="secondary" className="font-normal">
-											{APS_BANDS[aps.band]?.label ?? aps.band}
-										</Badge>
+										<BandChip label={apsBand(aps.band).label} level={apsBand(aps.band).level} />
 										<p className="text-xs text-muted-foreground">
 											{new Date(aps.createdAt).toLocaleDateString()} · {aps.answered} de {aps.planned} respuestas
 										</p>
@@ -194,7 +181,7 @@ export function AgentScoreCards({ brandId }: { brandId: string | undefined }) {
 									{aps.models.map((model) => (
 										<div key={model.model} className="flex items-center gap-2 text-xs">
 											<span className="w-32 truncate font-mono">{model.model}</span>
-											<span className={`font-semibold tabular-nums ${APS_BANDS[model.band]?.tone ?? ""}`}>{model.aps}</span>
+											<span className="font-semibold tabular-nums text-believe-900">{model.aps}</span>
 											<ApsMiniBand aps={model.aps} p10={model.p10} p90={model.p90} />
 											<span className="text-muted-foreground">
 												{model.observations} respuestas
@@ -204,8 +191,8 @@ export function AgentScoreCards({ brandId }: { brandId: string | undefined }) {
 									))}
 								</div>
 								{aps.partial && (
-									<p className="text-xs text-amber-600">
-										Medición parcial: {aps.partialReason ?? `${aps.answered} de ${aps.planned}`}
+									<p className="text-xs text-muted-foreground">
+										<span className={MONO_LABEL}>parcial</span> · {aps.partialReason ?? `${aps.answered} de ${aps.planned}`}
 									</p>
 								)}
 								<Link

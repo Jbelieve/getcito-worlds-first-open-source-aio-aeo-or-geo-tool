@@ -24,6 +24,7 @@ import { useDashboardSummary } from "@/hooks/use-dashboard-summary";
 import { useShareOfVoice } from "@/hooks/use-share-of-voice";
 import { TrendChart } from "@/components/trend-chart";
 import { AgentScoreCards } from "@/components/agent-score-cards";
+import { type StatusTone, levelFromScore, toneOf } from "@/components/status-tone";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Button } from "@workspace/ui/components/button";
 import { Skeleton } from "@workspace/ui/components/skeleton";
@@ -31,22 +32,26 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/component
 import type { ClientConfig } from "@workspace/config/types";
 import { setPersonProperties } from "@/lib/posthog";
 
+/**
+ * Los cortes de visibilidad heredados de Getcito. La regla vive acá; el color sale de la misma rampa
+ * azul que usan AOS y APS, para que el tablero no hable dos idiomas visuales.
+ */
+const VISIBILITY_CUTS = { full: 75, high: 45 };
+
+function visibilityTone(value: number): StatusTone {
+	return toneOf(levelFromScore(value, VISIBILITY_CUTS));
+}
+
 function getVisibilityBgColor(value: number): string {
-	if (value > 75) return "bg-emerald-50 dark:bg-emerald-950/30";
-	if (value > 45) return "bg-amber-50 dark:bg-amber-950/30";
-	return "bg-rose-50 dark:bg-rose-950/30";
+	return visibilityTone(value).bg;
 }
 
 function getVisibilityTextColor(value: number): string {
-	if (value > 75) return "text-emerald-700 dark:text-emerald-400";
-	if (value > 45) return "text-amber-700 dark:text-amber-400";
-	return "text-rose-700 dark:text-rose-400";
+	return visibilityTone(value).text;
 }
 
 function getVisibilityBorderColor(value: number): string {
-	if (value > 75) return "border-emerald-200 dark:border-emerald-800";
-	if (value > 45) return "border-amber-200 dark:border-amber-800";
-	return "border-rose-200 dark:border-rose-800";
+	return visibilityTone(value).border;
 }
 
 /** Most recent non-null value in a daily series — matches the right end of the trend line. */

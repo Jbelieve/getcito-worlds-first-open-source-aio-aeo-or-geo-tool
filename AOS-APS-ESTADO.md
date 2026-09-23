@@ -65,6 +65,42 @@ Colas del worker: `aos-audit`, `aps-prompt-library`, `aps-query`, `aps-parse`, `
 - **Gate de publicación**: cerrado por defecto (`agent_brand_entities.is_published`). Nada se sirve
   hasta que se publique explícitamente.
 
+### El color: cómo se dice "bien / a medias / falta"
+
+Jorge lo marcó: "muchos verdes, rojos, amarillos… choca con el design system de Believe". Tenía razón y
+la causa era concreta: **el mapeo banda→color estaba copiado en cuatro archivos** (`aos-visual`,
+`aps-visual`, `agent-score-cards`, `agent-preference`), así que cada pantalla derivó por su cuenta, y
+las cuatro usaban el semáforo (verde/ámbar/naranja/rojo), que son **cuatro hues que no existen en la
+marca**. El brandbook es explícito: *"Never invent new hex values. Always derive from the 6 tokens"*.
+
+Lo que rige ahora, en un solo módulo: **`apps/web/src/components/status-tone.tsx`**.
+
+| Canal | Qué significa | Cómo |
+|---|---|---|
+| **Azul** | cuánto hay | Rampa ordinal: `full` azul pleno → `high` 72% → `mid` 45% → `low` 22% → `none` **sin azul**. El color ordena, no juzga. |
+| **Tinta** | qué tan grave | Peso, no tono. Lo que bloquea va en tinta plena; el resto en tinta mute. Sobrevive a daltonismo. |
+| **Cian** | qué hacer ahora | La única señal. Dos apariciones por composición: el **próximo paso** (AOS) y el **subrayado del número** (APS). |
+
+Dos reglas que hay que respetar al tocar esto:
+
+1. **Un número nunca se pinta por lo que vale.** El número es un dato y va en tinta de marca
+   (`text-believe-900`, que es el color de KPI del brandbook); el chip al lado dice si está bien o mal.
+   El mismo componente sirve para un 34 y para un 94.
+2. **Un estado nunca depende solo del color.** Cada estado lleva su palabra y su glifo (`✓` azul, `✕` en
+   tinta, `—` mute), y la marca es llena o hueca según el nivel.
+
+El peor estado no es el más ruidoso: es el **vacío** (gris). Lo que llama la atención es lo que hay que
+hacer, no el diagnóstico. Eso es "calma sobre euforia" aplicado a un tablero.
+
+Los tokens viven en `styles.css` (`--believe-700`, `--believe-900`, `--signal`, mapeados en `@theme`), y
+`status-tone.test.ts` falla si alguien vuelve a escribir un color de la familia del semáforo o un hex
+que no sea uno de los seis de marca. Los cortes de banda sí son reglas de negocio y viven donde se usan
+(AOS: 80/60/35; visibilidad heredada de Getcito: 75/45).
+
+Queda pendiente, si Jorge quiere, la **segunda pasada** sobre las pantallas heredadas de Getcito
+(citations, prompts, admin): 67 archivos siguen con el semáforo. No se tocaron porque son de Getcito y
+el cambio es más grande y más riesgoso que el de AOS/APS.
+
 ---
 
 ## 3. La auditoría AOS tiene que dar EL MISMO número que Maasy

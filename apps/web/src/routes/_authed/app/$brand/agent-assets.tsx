@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@work
 import { useBrand } from "@/hooks/use-brands";
 import { listAgentEntitiesFn } from "@/server/agent-maasy";
 import { generateAgentAssetsFn, getAgentAssetsFn, setAgentEntityPublishedFn } from "@/server/agent-assets";
+import { BLOCKING_TEXT } from "@/components/status-tone";
 
 export const Route = createFileRoute("/_authed/app/$brand/agent-assets")({
 component: AgentAssetsPage,
@@ -76,7 +77,7 @@ URL.revokeObjectURL(url);
 }
 
 if (isLoading) return <div className="text-sm text-muted-foreground">Cargando brand…</div>;
-if (brand === undefined) return <div className="text-sm text-red-600">Brand no encontrado.</div>;
+if (brand === undefined) return <div className={`text-sm ${BLOCKING_TEXT}`}>Brand no encontrado.</div>;
 
 return (
 <div className="space-y-6 max-w-5xl">
@@ -106,7 +107,7 @@ onChange={(event) => setEntityId(event.target.value)}
 {generate.isPending ? "Generando…" : "Generar assets"}
 </Button>
 </div>
-{error && <p className="text-sm text-red-600">{error}</p>}
+{error && <p className={`text-sm ${BLOCKING_TEXT}`}>{error}</p>}
 </CardContent>
 </Card>
 
