@@ -1,0 +1,19 @@
+apps/web/src/components/agent-score-cards.tsx
+  s_d70e4d37c42cfe::t_5688d6d65dc863 1-224
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ca155286eadd171e28a99fb45069ec28388e99bf",
+  "prompts": {},
+  "sessions": {
+    "s_d70e4d37c42cfe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1bfd85b7-47f3-4d6a-8f6a-666848028d2a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
