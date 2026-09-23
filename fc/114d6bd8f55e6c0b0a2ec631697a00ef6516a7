@@ -1,0 +1,14 @@
+packages/aos-aps/src/aos/signature.test.ts
+  h_c5ca005a78c880 4,6,10-11,17-24,47,60,73,88,97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fc114d6bd8f55e6c0b0a2ec631697a00ef6516a7",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
