@@ -35,6 +35,15 @@ BeAOS aporta lo que Getcito ya tiene: prompts, visibilidad, citas, competidores,
 - Notebook `BELIEVE`, ruta `INFRAESTRUCTURA`.
 - Extraer notas AOS/APS en Fase 0.
 
+**Estado 2026-09-23:** el contenido está escrito y listo para esa nota, pero **todavía no se cargó en
+SiYuan**. El texto es `MANUAL-AOS-APS.md` (manual de usuario, 314 líneas) más la parte de estado, runbook
+y gotchas que vive en `AOS-APS-ESTADO.md`.
+
+Por qué no se cargó: desde esta máquina **no se llega a SiYuan**. El kernel no está corriendo (el puerto
+6806 no responde) y `~/Library/Application Support/SiYuan` está vacío, así que tampoco hay workspace
+local del que sacar el id del cuaderno. Para empujarlo hace falta: SiYuan abierto, el token de API y el
+id del cuaderno `BELIEVE` (endpoint `/api/filetree/createDocWithMd`).
+
 ### Maasy MCP
 
 - Base: `https://esptwxlgdbblvnmdpoao.supabase.co`.
