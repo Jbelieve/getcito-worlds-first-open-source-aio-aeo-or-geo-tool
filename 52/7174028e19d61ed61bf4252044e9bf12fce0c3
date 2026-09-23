@@ -1,0 +1,18 @@
+.env.beaos.example
+  h_c5ca005a78c880 41-44,47-48
+packages/aos-aps/src/aps/gateway.test.ts
+  h_c5ca005a78c880 7,92-115
+packages/aos-aps/src/aps/gateway.ts
+  h_c5ca005a78c880 79-85,89-90,154,238-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "527174028e19d61ed61bf4252044e9bf12fce0c3",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
