@@ -48,8 +48,66 @@ Devuelve SOLO un objeto JSON con exactamente estos campos:
 
 Reglas: una marca que no apareció no puede estar recomendada. Si no hay ranking explícito, position es null. No agregues texto fuera del JSON.`;
 
+function base(baseUrl: string): string {
+	return baseUrl.replace(/\/+$/, "");
+}
+
 function endpoint(baseUrl: string): string {
-	return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+	return `${base(baseUrl)}/chat/completions`;
+}
+
+/**
+ * What the gateway reports about the key: the real spend in its budget window and the ceiling.
+ * LiteLLM answers this without an inference call, so asking is free.
+ */
+export interface GatewayBudget {
+	spend: number;
+	maxBudget: number | null;
+	budgetDuration: string | null;
+	budgetResetAt: string | null;
+	/** Bands the key can call, e.g. believe-fast / believe-smart / believe-deep. */
+	models: string[];
+}
+
+/**
+ * Cost of a single call, as the gateway already computed it. Reading it beats pricing a model by
+ * hand: this is the billed number, margins and discounts included.
+ */
+export function gatewaySpendFromHeaders(headers: Headers): number | null {
+	const raw = headers.get("x-litellm-response-cost");
+	if (raw === null || raw.length === 0) return null;
+	const usd = Number.parseFloat(raw);
+	return Number.isFinite(usd) && usd >= 0 ? usd : null;
+}
+
+export async function readGatewayBudget(
+	config: GatewayJudgeConfig,
+	fetchImpl: typeof fetch = fetch,
+): Promise<GatewayBudget | null> {
+	let payload: unknown;
+	try {
+		const response = await fetchImpl(`${base(config.url)}/key/info`, {
+			method: "GET",
+			headers: { authorization: `Bearer ${config.key}` },
+		});
+		if (response.ok === false) return null;
+		payload = await response.json();
+	} catch {
+		return null;
+	}
+
+	const info = (payload as { info?: Record<string, unknown> })?.info;
+	if (info === undefined) return null;
+	const number = (value: unknown): number | null =>
+		typeof value === "number" && Number.isFinite(value) ? value : null;
+	const text = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
+	return {
+		spend: number(info.spend) ?? 0,
+		maxBudget: number(info.max_budget),
+		budgetDuration: text(info.budget_duration),
+		budgetResetAt: text(info.budget_reset_at),
+		models: Array.isArray(info.models) ? info.models.filter((entry): entry is string => typeof entry === "string") : [],
+	};
 }
 
 /** The model may wrap the JSON in prose or fences; take the first object it produced. */
@@ -91,7 +149,14 @@ export function judgeConfigFromEnv(env: Record<string, string | undefined> = pro
 	};
 }
 
-export function gatewayJudge(config: GatewayJudgeConfig, fetchImpl: typeof fetch = fetch): ApsJudge {
+/** Reports what each call actually cost, so a run can carry its real spend beside its estimate. */
+export type SpendReporter = (usd: number) => void;
+
+export function gatewayJudge(
+	config: GatewayJudgeConfig,
+	fetchImpl: typeof fetch = fetch,
+	onSpend?: SpendReporter,
+): ApsJudge {
 	return {
 		alias: config.model,
 		version: config.version,
@@ -114,6 +179,9 @@ export function gatewayJudge(config: GatewayJudgeConfig, fetchImpl: typeof fetch
 					}),
 				});
 				if (result.ok === false) return null;
+				// The billed cost of this exact call, when the gateway reports it.
+				const spend = gatewaySpendFromHeaders(result.headers);
+				if (spend !== null && onSpend !== undefined) onSpend(spend);
 				payload = await result.json();
 			} catch {
 				return null;

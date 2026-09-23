@@ -27,6 +27,7 @@ import {
 	judgeConfigFromEnv,
 	libraryConfigFromEnv,
 	prepareApsRun,
+	readGatewayBudget,
 } from "@workspace/aos-aps/aps";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { getBoss } from "@/lib/boss-client";
@@ -68,6 +69,26 @@ export const saveApsLibraryFn = createServerFn({ method: "POST" })
 			supersede: data.supersede ?? false,
 		});
 		return { ok: true };
+	});
+
+/**
+ * The gateway already knows the real spend and the ceiling of the key BeAOS uses, so the month guard
+ * reads them instead of asking the operator for a number. The ceiling is shared with whatever else
+ * uses that key today, which is exactly why the remaining headroom is the right thing to compare.
+ */
+export const getGatewayBudgetFn = createServerFn({ method: "POST" })
+	.handler(async () => {
+		const session = await requireAuthSession();
+		if (session.user.id.length === 0) throw new Error("Sesion invalida");
+		const config = judgeConfigFromEnv();
+		if (config === null) return { configured: false as const, budget: null, remainingUsd: null };
+		const budget = await readGatewayBudget(config);
+		if (budget === null) return { configured: true as const, budget: null, remainingUsd: null };
+		return {
+			configured: true as const,
+			budget,
+			remainingUsd: budget.maxBudget === null ? null : Math.max(0, budget.maxBudget - budget.spend),
+		};
 	});
 
 /** Everything a run needs, read once and handed to the pure preparation step. */
@@ -130,6 +151,10 @@ export const estimateApsRunFn = createServerFn({ method: "POST" })
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
 		const context = await loadRunContext(data);
+		// `spentThisMonthUsd` defaults to what the gateway reports, not to a guess or a manual input.
+		const gatewayConfig = judgeConfigFromEnv();
+		const gatewayBudget = gatewayConfig === null ? null : await readGatewayBudget(gatewayConfig);
+		const spentThisMonthUsd = data.spentThisMonthUsd ?? gatewayBudget?.spend ?? null;
 		const prepared = prepareApsRun({
 			entity: context.entity,
 			library: context.library,
@@ -140,7 +165,7 @@ export const estimateApsRunFn = createServerFn({ method: "POST" })
 			judge: context.judge,
 			prices: apsPricesFromEnv(),
 			budgetConfig: apsBudgetConfigFromEnv(),
-			spentThisMonthUsd: data.spentThisMonthUsd ?? null,
+			spentThisMonthUsd,
 		});
 		return {
 			status: prepared.status,

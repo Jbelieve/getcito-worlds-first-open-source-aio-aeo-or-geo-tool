@@ -71,7 +71,10 @@ export async function apsParseJob(
 		.from(agentApsObservations)
 		.where(and(eq(agentApsObservations.runId, runId), isNull(agentApsObservations.analyzedAt)));
 
-	const judge = deps.judge ?? gatewayJudge(config as NonNullable<ReturnType<typeof judgeConfigFromEnv>>);
+	// Every judge call reports what it actually cost, so the run carries its real spend.
+	const judgeCosts: number[] = [];
+	const judge =
+		deps.judge ?? gatewayJudge(config as NonNullable<ReturnType<typeof judgeConfigFromEnv>>, fetch, (usd) => judgeCosts.push(usd));
 	const report = await judgeObservations(
 		pending.map((row) => ({
 			observationId: row.id,
@@ -115,6 +118,7 @@ export async function apsParseJob(
 			.where(eq(agentApsObservations.id, entry.observationId));
 	}
 
+	const judgeUsd = judgeCosts.reduce((sum, usd) => sum + usd, 0);
 	await db
 		.update(agentApsRuns)
 		.set({
@@ -122,10 +126,14 @@ export async function apsParseJob(
 			judgeModelAlias: judge.alias,
 			judgeModelVersion: judge.version,
 			judgePipelineVersion: judge.pipelineVersion,
+			// The billed cost of the judge, beside the estimate the operator approved.
+			estimation: { judgeCalls: judgeCosts.length, actualJudgeUsd: Math.round(judgeUsd * 1e6) / 1e6 },
 		})
 		.where(eq(agentApsRuns.id, runId));
 
-	console.log(`[aps-parse] run ${runId}: ${report.judged.length} juzgadas, ${report.unjudged.length} sin veredicto`);
+	console.log(
+		`[aps-parse] run ${runId}: ${report.judged.length} juzgadas, ${report.unjudged.length} sin veredicto, juez USD ${judgeUsd.toFixed(6)}`,
+	);
 	await boss.send("aps-score", { runId });
 	return { ok: true, judged: report.judged.length, unjudged: report.unjudged.length };
 }
