@@ -1,0 +1,38 @@
+.env.beaos.example
+  h_c5ca005a78c880 38-43
+apps/web/src/lib/boss-client.ts
+  h_c5ca005a78c880 56-70
+apps/worker/src/handlers.ts
+  h_c5ca005a78c880 10-13,82-111
+apps/worker/src/index.ts
+  h_c5ca005a78c880 68-94
+apps/worker/src/jobs/aps-parse.ts
+  h_c5ca005a78c880 1-145
+apps/worker/src/jobs/aps-prompt-library.ts
+  h_c5ca005a78c880 1-117
+apps/worker/src/jobs/aps-query.ts
+  h_c5ca005a78c880 1-132
+apps/worker/src/jobs/aps-score.ts
+  h_c5ca005a78c880 1-112
+packages/aos-aps/src/aps/gateway.test.ts
+  h_c5ca005a78c880 1-99
+packages/aos-aps/src/aps/gateway.ts
+  h_c5ca005a78c880 1-100
+packages/aos-aps/src/aps/index.ts
+  h_c5ca005a78c880 9,14-15,17-19
+packages/aos-aps/src/aps/targets.test.ts
+  h_c5ca005a78c880 1-53
+packages/aos-aps/src/aps/targets.ts
+  h_c5ca005a78c880 1-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "57148124c447025c9e81ff407d9bd6bacaa30171",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
