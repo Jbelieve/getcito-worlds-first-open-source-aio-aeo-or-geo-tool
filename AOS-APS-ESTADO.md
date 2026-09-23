@@ -333,4 +333,6 @@ byte-exacto · `#5` API de entrega · `#6` superficie pública · `#7` núcleo d
 run (biblioteca/plan/robustez) · `#9` captura y juez · `#10` cadena del worker · `#11` disparador
 on-demand · `#12` panel Agent Preference · `#13` key de gateway · `#14` costo y presupuesto reales ·
 `#15` tokens del juez/generador + fix del reconcile de colas · `#16` paridad del AOS con Maasy ·
-`#17` timeout por llamada + corridas parciales.
+`#17` timeout por llamada + corridas parciales · `#18` documentación de estado y runbook ·
+`#19` AOS y APS en el dashboard + renombre · `#20` APS visual con la Montecarlo real ·
+`#21` AOS con la estructura de la extensión · `#22` una sola paleta, en los tintes de Believe.
