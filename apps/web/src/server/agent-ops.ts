@@ -4,6 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@workspace/lib/db/db";
 import { agentAosAudits } from "@workspace/aos-aps/db/schema";
 import type { RequirementResult, StandardsResult } from "@workspace/aos-aps/aos";
+import type { ApsBreakdown } from "@workspace/aos-aps/preference";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { getBoss } from "@/lib/boss-client";
 
@@ -45,6 +46,9 @@ businessType: row.businessType,
 standards: row.standards as StandardsResult | null,
 probes: row.probes as Record<string, boolean> | null,
 requirements: row.requirements as RequirementResult[] | null,
+apsScore: row.apsScore,
+apsBreakdown: row.apsBreakdown as ApsBreakdown | null,
+scoringVersion: row.scoringVersion,
 error: row.error,
 createdAt: row.createdAt.toISOString(),
 }));

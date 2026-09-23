@@ -19,6 +19,15 @@ if (score >= 35) return "text-orange-600";
 return "text-red-600";
 }
 
+function ApsMetric({ label, value }: { label: string; value: number }) {
+return (
+<div className="rounded-md border px-2 py-1">
+<div className="text-muted-foreground">{label}</div>
+<div className="font-mono text-sm">{value.toFixed(2)}</div>
+</div>
+);
+}
+
 function AgentOpsPage() {
 const { brand, isLoading } = useBrand();
 const [url, setUrl] = useState("");
@@ -65,7 +74,7 @@ return (
 <div>
 <h1 className="text-3xl font-bold">Agent Ops</h1>
 <p className="text-muted-foreground">
-Mide el AOS del sitio: descubrimiento, identidad, capacidades y ejecución.
+Mide el AOS (operabilidad) y el APS (preferencia) del sitio: descubrimiento, identidad, capacidades, evidencia y firma.
 </p>
 </div>
 
@@ -107,6 +116,58 @@ Mide el AOS del sitio: descubrimiento, identidad, capacidades y ejecución.
 </li>
 ))}
 </ul>
+)}
+</CardContent>
+</Card>
+)}
+
+{latest && (
+<Card>
+<CardHeader>
+<CardTitle>Agent Preference Score</CardTitle>
+<CardDescription>
+APS del perfil servido en /.well-known/brand.json: claims, boundaries, proofs y firma Ed25519.
+</CardDescription>
+</CardHeader>
+<CardContent className="space-y-3">
+{latest.apsBreakdown && latest.apsScore !== null ? (
+<>
+<div className="flex items-end gap-3">
+<span className={`text-5xl font-bold ${scoreColor(latest.apsScore)}`}>{latest.apsScore}</span>
+<span className="pb-2 text-sm font-medium text-muted-foreground">
+APS · {latest.scoringVersion ?? latest.apsBreakdown.scoring_version}
+</span>
+</div>
+<div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+<ApsMetric label="Cobertura de proofs" value={latest.apsBreakdown.proof_coverage} />
+<ApsMetric label="Cobertura de boundaries" value={latest.apsBreakdown.boundary_coverage} />
+<ApsMetric label="Fuerza de evidencia" value={latest.apsBreakdown.evidence_strength} />
+<ApsMetric label="Smoke penalty" value={latest.apsBreakdown.smoke_penalty} />
+</div>
+<p className="text-xs text-muted-foreground">
+{latest.apsBreakdown.claims} claims · {latest.apsBreakdown.proofs} proofs · {latest.apsBreakdown.unproven_claims} sin proof ·{" "}
+{latest.apsBreakdown.claims_without_boundary} sin boundary real
+{latest.apsBreakdown.signed_provenance_applied ? " · firma verificada (signed_provenance 0.8)" : ""}
+</p>
+{latest.apsBreakdown.findings.length > 0 && (
+<ul className="space-y-1 text-xs">
+{latest.apsBreakdown.findings.slice(0, 6).map((finding, index) => (
+<li key={`${finding.code}-${finding.ref ?? index}`} className="flex gap-2">
+<span className={finding.level === "error" ? "text-red-600" : "text-amber-600"}>
+{finding.level === "error" ? "✕" : "!"}
+</span>
+<code className="font-mono">{finding.code}</code>
+<span className="text-muted-foreground">{finding.message}</span>
+</li>
+))}
+</ul>
+)}
+</>
+) : (
+<p className="text-sm text-muted-foreground">
+Sin APS: el sitio no sirve un brand.json con claims[] y proofs[]. Un perfil sin claims no se puntúa
+como perfecto, se reporta como no medido.
+</p>
 )}
 </CardContent>
 </Card>

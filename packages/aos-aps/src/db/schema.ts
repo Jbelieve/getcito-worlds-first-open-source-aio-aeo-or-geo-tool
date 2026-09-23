@@ -34,7 +34,12 @@ businessType: text("business_type"),
 standards: json("standards"),
 probes: json("probes"),
 requirements: json("requirements"),
-error: text("error"),
+	/** Spec APS from the served Claims & Proofs layer. Null when no usable brand.json was served. */
+	apsScore: integer("aps_score"),
+	apsBreakdown: json("aps_breakdown"),
+	/** Scoring algorithm version, so a formula change never mixes incomparable history. */
+	scoringVersion: text("scoring_version"),
+	error: text("error"),
 createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

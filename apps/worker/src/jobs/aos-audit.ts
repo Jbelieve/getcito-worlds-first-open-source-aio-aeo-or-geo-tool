@@ -25,6 +25,9 @@ businessType: result.businessType,
 standards: result.standards,
 probes: result.probes,
 requirements: result.standards.requirements,
+apsScore: result.aps?.aps ?? null,
+apsBreakdown: result.aps,
+scoringVersion: result.aps?.scoring_version ?? null,
 });
 return { ok: true };
 } catch (error) {
