@@ -1,0 +1,16 @@
+packages/aos-aps/src/aps/robustness.test.ts
+  h_c5ca005a78c880 33-34,42-57
+packages/aos-aps/src/aps/robustness.ts
+  h_c5ca005a78c880 21-39,42-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7d1e275303659fb72a8b47d4d04bc2d886fe173f",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
