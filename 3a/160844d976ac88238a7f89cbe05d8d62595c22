@@ -1,0 +1,25 @@
+packages/aos-aps/src/db/schema.ts
+  s_83eb0c85ef1ba9::t_2e1dcf4c25806f 37-42
+packages/lib/src/db/migrations/0017_medical_xorn.sql
+  s_83eb0c85ef1ba9::t_3826f6eb9a5b94 1-3
+packages/lib/src/db/migrations/meta/0017_snapshot.json
+  s_83eb0c85ef1ba9::t_4a88e11cb7c68d 1-2318
+packages/lib/src/db/migrations/meta/_journal.json
+  s_83eb0c85ef1ba9::t_0da5e222232700 123-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3a160844d976ac88238a7f89cbe05d8d62595c22",
+  "prompts": {},
+  "sessions": {
+    "s_83eb0c85ef1ba9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6096dbd5-552c-41d6-a4f3-06e4bf967c90",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
