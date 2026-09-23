@@ -1,0 +1,36 @@
+apps/web/src/routes/_authed/app/$brand/agent-assets.tsx
+  h_c5ca005a78c880 8,52-67,113-139
+apps/web/src/server/agent-assets.ts
+  h_c5ca005a78c880 75-99
+apps/web/src/server/agent-maasy.ts
+  h_c5ca005a78c880 32-37
+packages/aos-aps/package.json
+  h_c5ca005a78c880 14
+packages/aos-aps/src/db/schema.ts
+  h_c5ca005a78c880 17-23
+packages/aos-aps/src/index.ts
+  h_c5ca005a78c880 7
+packages/aos-aps/src/server/bundle.test.ts
+  h_c5ca005a78c880 1-133
+packages/aos-aps/src/server/bundle.ts
+  h_c5ca005a78c880 1-117
+packages/aos-aps/src/server/index.ts
+  h_c5ca005a78c880 1
+packages/lib/src/db/migrations/0018_useful_prism.sql
+  h_c5ca005a78c880 1-2
+packages/lib/src/db/migrations/meta/0018_snapshot.json
+  h_c5ca005a78c880 1-2331
+packages/lib/src/db/migrations/meta/_journal.json
+  h_c5ca005a78c880 130-136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c917099b69fe9b1d7d51a76e3bd37b4dfc34d1ff",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
