@@ -1,0 +1,18 @@
+packages/aos-aps/src/preference/index.ts
+  h_c5ca005a78c880 5
+packages/aos-aps/src/preference/measurement.test.ts
+  h_c5ca005a78c880 1-256
+packages/aos-aps/src/preference/measurement.ts
+  h_c5ca005a78c880 1-263
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bd13c0308c4d8b531011a21a909dbc38f928362a",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
