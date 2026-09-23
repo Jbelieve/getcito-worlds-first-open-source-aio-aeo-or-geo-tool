@@ -8,4 +8,6 @@
 export * from "./library";
 export * from "./runPlan";
 export * from "./robustness";
+export * from "./capture";
+export * from "./judge";
 export * from "../preference/measurement";
