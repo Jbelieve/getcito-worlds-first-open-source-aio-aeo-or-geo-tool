@@ -161,6 +161,19 @@ docker compose -p beaos -f docker-compose.yml -f docker-compose.beaos.yml build
 docker compose -p beaos -f docker-compose.yml -f docker-compose.beaos.yml up -d --no-build
 ```
 
+Tres cosas que ya fallaron una vez y conviene tener presentes:
+
+- **Construir sin targets.** Si se construye solo `web worker`, la imagen de `db-migrate` queda vieja y
+  **las migraciones nuevas no se aplican**, aunque el archivo esté en el repo: la app arranca y falla
+  al escribir las columnas nuevas.
+- Si `git pull` dice "already up to date" con código viejo, el clon está en modo single-branch:
+  `git fetch origin master:refs/remotes/origin/master && git merge --ff-only origin/master`.
+- Cambiar `.env` no alcanza: hay que **recrear** los contenedores. Y si el worker crashea queda en
+  crash-loop y **los jobs de fondo se detienen** (se encolan, no se pierden): mirar `logs worker` y el
+  `RestartCount`.
+
+Estado de la integración AOS/APS, decisiones, runbook y pendientes: `AOS-APS-ESTADO.md`.
+
 Backups recomendados:
 
 - `pg_dump` diario de la base.
