@@ -4,6 +4,7 @@ import {
 	extractJsonObject,
 	gatewayJudge,
 	generateLibraryWithGateway,
+	judgeConfigFromEnv,
 } from "./gateway";
 
 const CONFIG = { url: "https://gateway.test/v1", key: "gw-key", model: "believe-deep", version: "deepseek-flash-4.1" };
@@ -86,6 +87,30 @@ describe("gatewayJudge", () => {
 	it("returns null when the content is not an object", async () => {
 		const judge = gatewayJudge(CONFIG, (async () => completion("no pude analizar")) as unknown as typeof fetch);
 		expect(await judge.analyze({ brandName: "F", promptText: "p", response: "r" })).toBeNull();
+	});
+
+	it("falls back to the temporary key when the dedicated one is absent or empty", () => {
+		const withBeaos = judgeConfigFromEnv({ LLM_GATEWAY_URL: "https://gw/v1", LLM_GATEWAY_KEY_BEAOS: "nueva" });
+		expect(withBeaos?.key).toBe("nueva");
+
+		// A rendered .env commonly carries `LLM_GATEWAY_KEY_BEAOS=` until the dedicated key exists.
+		const empty = judgeConfigFromEnv({
+			LLM_GATEWAY_URL: "https://gw/v1",
+			LLM_GATEWAY_KEY_BEAOS: "",
+			LLM_GATEWAY_KEY_BEADS: "temporal",
+		});
+		expect(empty?.key).toBe("temporal");
+
+		const onlyTemporary = judgeConfigFromEnv({ LLM_GATEWAY_URL: "https://gw/v1", LLM_GATEWAY_KEY_BEADS: "temporal" });
+		expect(onlyTemporary?.key).toBe("temporal");
+		expect(onlyTemporary?.model).toBe("believe-deep");
+		expect(onlyTemporary?.version).toBe("unpinned");
+	});
+
+	it("needs both the url and a key", () => {
+		expect(judgeConfigFromEnv({ LLM_GATEWAY_URL: "https://gw/v1" })).toBeNull();
+		expect(judgeConfigFromEnv({ LLM_GATEWAY_KEY_BEADS: "temporal" })).toBeNull();
+		expect(judgeConfigFromEnv({ LLM_GATEWAY_URL: "  ", LLM_GATEWAY_KEY_BEADS: "temporal" })).toBeNull();
 	});
 
 	it("normalizes a trailing slash in the configured url", async () => {
