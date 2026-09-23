@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { useBrand } from "@/hooks/use-brands";
+import { BLOCKING_TEXT } from "@/components/status-tone";
 import { getAgentDnaSnapshotsFn, linkMaasyProjectFn, listAgentEntitiesFn, listMaasyBrandsFn, syncAgentDnaFn } from "@/server/agent-maasy";
 
 export const Route = createFileRoute("/_authed/app/$brand/agent-entities")({
@@ -75,7 +76,7 @@ setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar
 }
 
 if (isLoading) return <div className="text-sm text-muted-foreground">Cargando brand…</div>;
-if (brand === undefined) return <div className="text-sm text-red-600">Brand no encontrado.</div>;
+if (brand === undefined) return <div className={`text-sm ${BLOCKING_TEXT}`}>Brand no encontrado.</div>;
 
 return (
 <div className="space-y-6 max-w-5xl">
@@ -125,7 +126,7 @@ Vincula proyectos de Maasy a esta marca para traer su Brand DNA por MCP.
 </CardHeader>
 <CardContent className="space-y-3">
 <Button variant="outline" onClick={() => void loadMaasy()}>Cargar marcas Maasy</Button>
-{error && <p className="text-sm text-red-600">{error}</p>}
+{error && <p className={`text-sm ${BLOCKING_TEXT}`}>{error}</p>}
 {maasyBrands.map((maasyBrand) => (
 <div key={maasyBrand.id} className="flex items-center justify-between border-b py-2 text-sm last:border-b-0">
 <span>{maasyBrand.name}</span>

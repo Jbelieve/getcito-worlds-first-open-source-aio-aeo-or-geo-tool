@@ -24,7 +24,6 @@ import { useDashboardSummary } from "@/hooks/use-dashboard-summary";
 import { useShareOfVoice } from "@/hooks/use-share-of-voice";
 import { TrendChart } from "@/components/trend-chart";
 import { AgentScoreCards } from "@/components/agent-score-cards";
-import { type StatusTone, levelFromScore, toneOf } from "@/components/status-tone";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Button } from "@workspace/ui/components/button";
 import { Skeleton } from "@workspace/ui/components/skeleton";
@@ -32,26 +31,25 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/component
 import type { ClientConfig } from "@workspace/config/types";
 import { setPersonProperties } from "@/lib/posthog";
 
-/**
- * Los cortes de visibilidad heredados de Getcito. La regla vive acá; el color sale de la misma rampa
- * azul que usan AOS y APS, para que el tablero no hable dos idiomas visuales.
- */
-const VISIBILITY_CUTS = { full: 75, high: 45 };
-
-function visibilityTone(value: number): StatusTone {
-	return toneOf(levelFromScore(value, VISIBILITY_CUTS));
-}
-
+// Estas líneas son de Getcito, no nuestras: se quedan tal como vienen del stream del fork (semáforo
+// incluido) para que los merges del upstream no pisen nada. La paleta de Believe arranca en
+// status-tone.tsx y aplica solo a las superficies de AOS/APS. Ver AOS-APS-ESTADO.md §2.
 function getVisibilityBgColor(value: number): string {
-	return visibilityTone(value).bg;
+	if (value > 75) return "bg-emerald-50 dark:bg-emerald-950/30";
+	if (value > 45) return "bg-amber-50 dark:bg-amber-950/30";
+	return "bg-rose-50 dark:bg-rose-950/30";
 }
 
 function getVisibilityTextColor(value: number): string {
-	return visibilityTone(value).text;
+	if (value > 75) return "text-emerald-700 dark:text-emerald-400";
+	if (value > 45) return "text-amber-700 dark:text-amber-400";
+	return "text-rose-700 dark:text-rose-400";
 }
 
 function getVisibilityBorderColor(value: number): string {
-	return visibilityTone(value).border;
+	if (value > 75) return "border-emerald-200 dark:border-emerald-800";
+	if (value > 45) return "border-amber-200 dark:border-amber-800";
+	return "border-rose-200 dark:border-rose-800";
 }
 
 /** Most recent non-null value in a daily series — matches the right end of the trend line. */
