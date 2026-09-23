@@ -1,0 +1,47 @@
+packages/lib/src/onboarding/analyze.test.ts
+  s_d70e4d37c42cfe::t_b5c9e87d4e308b 16,132-211
+apps/web/src/server/onboarding.ts
+  s_d70e4d37c42cfe::t_70c76cf3ce598b 22,112-113,134,157
+packages/lib/src/providers/locale.test.ts
+  s_d70e4d37c42cfe::t_a06d380fa9257a 2,46-75
+packages/lib/src/onboarding/llm-locale.test.ts
+  s_d70e4d37c42cfe::t_89535b64c114b5 1-79
+packages/lib/src/providers/registry/azure-foundry-api.ts
+  s_d70e4d37c42cfe::t_e6c19ca042fa29 164-165,173,182-183
+packages/lib/src/onboarding/llm.ts
+  s_d70e4d37c42cfe::t_88a5dff88fe05b 26,119-125,127-131,138-146,157-160,167,174-181
+packages/lib/src/providers/registry/openai-api.ts
+  s_d70e4d37c42cfe::t_66884226fd2cde 87-88,91-93,96-108
+packages/lib/src/providers/registry/anthropic-api.ts
+  s_d70e4d37c42cfe::t_b9f8a31770bae5 217-218,221-223,226-238
+packages/lib/src/providers/types.ts
+  s_d70e4d37c42cfe::t_91a7fc959bd6bc 35-42
+packages/lib/src/providers/registry/mistral-api.ts
+  s_d70e4d37c42cfe::t_89762d71806c47 126-127,131,137,152,157-158
+apps/web/src/lib/analyze-brand-job.ts
+  s_d70e4d37c42cfe::t_251a8d86fc8e98 15,17,44-70,117-119
+apps/web/src/server/opportunities.ts
+  s_d70e4d37c42cfe::t_15475f63c51e4f 23,226-228,250-256,413-420,472-475,478-480,520-528
+packages/lib/src/providers/registry/azure-foundry-api.test.ts
+  s_d70e4d37c42cfe::t_5ec1da9eabc6fd 2,7,48-101
+apps/worker/src/jobs/analyze-brand.ts
+  s_d70e4d37c42cfe::t_7a5a65b16e8bf0 11-13,34-35
+packages/lib/src/providers/locale.ts
+  s_d70e4d37c42cfe::t_4a592d6771c9ec 52-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e15b22170c5007326241b513be94ebb3b701a420",
+  "prompts": {},
+  "sessions": {
+    "s_d70e4d37c42cfe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1bfd85b7-47f3-4d6a-8f6a-666848028d2a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
