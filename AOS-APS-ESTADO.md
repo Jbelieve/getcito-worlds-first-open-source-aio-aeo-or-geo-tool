@@ -253,6 +253,37 @@ Notas de operación:
 - El worker es `restart: unless-stopped`: si crashea, se ve como crash-loop y **los jobs de fondo se
   detienen** (se encolan, no se pierden). Mirar `$DC logs worker` y el `RestartCount`.
 
+### Llegar a la base de producción desde tu máquina
+
+El `5433` del servidor **no es nuestro**: lo ocupa `trigger-postgres-1` (otro proyecto). Conectarse ahí
+da `password authentication failed` y parece un problema de credenciales cuando en realidad es otra
+base. La buena es el contenedor `beaos-postgres`, que **no publica puerto**: se llega por su IP de
+bridge.
+
+```bash
+IP=$(ssh contabo-believe 'docker inspect beaos-postgres --format "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}"')
+ssh -N -L 15433:$IP:5432 contabo-believe &          # túnel
+# la URL real sale del .env del server (no la escribas en el repo):
+DBURL=$(ssh contabo-believe 'grep -m1 "^DATABASE_URL=" /root/BeAos/.env | sed "s/^DATABASE_URL=//"' | tr -d '"')
+LOCAL=$(node -e 'const u=new URL(process.argv[1]);u.hostname="127.0.0.1";u.port="15433";process.stdout.write(u.toString())' "$DBURL")
+psql "$LOCAL" -c "select id, name from brands;"
+```
+
+Datos que hacen falta y no son obvios:
+
+- **El brandId es literalmente `default`.** Este deploy corre de una sola marca (`DEPLOYMENT_MODE=local`),
+  no es un uuid.
+- **Las llaves del `.env` local son placeholders** (`your_ap...`): sirven para que pase la validación de
+  entorno, no para llamar a nadie. Las de verdad están solo en el server.
+- **`tsx` no puede cargar los módulos de servidor de web.** `@workspace/lib/db/schema` hace
+  `export * from "./schema-auth"` y `schema-auth` importa de vuelta de `schema` — un ciclo de re-export
+  que el transform de Vite (o sea, la app) resuelve pero el loader ESM nativo no:
+  `SyntaxError: The requested module ... does not provide an export named 'member'`. Para correr un
+  script que importe código de `apps/web/src/server`, **envolverlo como test y correrlo con vitest**
+  (usa el transform de Vite): `./node_modules/.bin/vitest run --project=unit src/tmp-xxx.test.ts`.
+- Para generar contenido con IA desde tu máquina necesitás `OPENAI_API_KEY` y `ONBOARDING_LLM_TARGET`
+  del server (hoy `chatgpt:openai-api:gpt-5.5`), pasados por entorno.
+
 ### Correr una medición APS
 
 Desde el panel (`Agent Preference`): generar biblioteca → revisar → guardar (lockea 90 días) → estimar
@@ -316,12 +347,14 @@ rotarlo cuando se pueda.
 
 | # | Pendiente | Detalle |
 |---|---|---|
-| 1 | **Saldo de Anthropic** | `400 — "Your credit balance is too low to access the Anthropic API"`. Claude dio 0/6 en la última medición. |
-| 2 | **Perplexity se cuelga** | 0/6, timeout a los 90s. BrightData tardó 151s en `google-ai-mode`, así que parece config de zona/endpoint de Perplexity. |
+| 1 | ~~**Saldo de Anthropic**~~ | **RESUELTO (2026-09-23)**: `claude` volvió a correr (`claude-sonnet-4-6`) en el barrido en español, sin errores de saldo. |
+| 2 | **Perplexity** | Mejoró pero sigue casi mudo: 1 run de 32 en el barrido en español (antes 0/6, timeout a los 90s). Revisar zona/endpoint. |
 | 3 | **`/AGENTS.md` en mayúscula** | Hoy se sirve `/agents.md` (200) y `/AGENTS.md` (404). Es el único requisito AOS que falla: con el alias, el sitio da 100. |
 | 4 | **Precios de la capa de medición** | `APS_PRICES` hoy tiene provisionales (`chatgpt=0.05`, `claude=0.05`, `perplexity=0.05`, `google-ai-mode=0.05`, `believe-deep=0.0013`). Los reales salen de la factura de OpenAI/Anthropic/BrightData. |
 | 5 | **`APS_MAX_CALLS_PER_RUN`** | Subir de 450 para permitir 50 prompts × 4 modelos × 3 reps (600). |
 | 6 | **Rotación de la llave de firma** | Ver §6. |
+| 7 | **Reputación en IA (ver §8)** | ScamAdviser marca el dominio con "caution recommended" y no hay reseñas independientes: es lo que los asistentes citan al recomendar la marca. |
+| 8 | **Alias del fundador** | El sitio dice "Jorge Beltrán Liévano" y el brandbook "George Beltrán": cargar los dos como alias de entidad. |
 
 ### Técnicos (siguiente trabajo)
 
@@ -374,16 +407,38 @@ El APS nuestro ya nace en español: `LIBRARY_SYSTEM_PROMPT` dice literalmente *"
 
 La cadencia sale de `brands.delay_override_hours ?? DEFAULT_DELAY_HOURS ?? 24` y `schedule-maintenance` corre cada 5 minutos. Poner `delay_override_hours = 0` hace que el próximo tick (≤5 min) encole todos los prompts — **y hay que devolverlo a su valor original enseguida**, porque con 0 vuelve a encolar cada 5 minutos. La alternativa es la acción de admin (`apps/web/src/server/admin.ts`), que pide sesión.
 
-### Secuencia acordada
+### Secuencia acordada — hecha el 2026-09-23
 
-1. Perfil de marca en español — **hecho** (2026-09-23).
-2. Competencia LATAM: investigación en curso (ver §7).
-3. Cargar prompts en español **incluyendo los rivales LATAM** en las comparaciones.
-4. Barrer una sola vez (no dos): prompts ES + locale ya puesto → respuestas en español.
-5. Regenerar el reporte de oportunidades en español.
-6. PR al upstream del arreglo del idioma; traerlo cuando mergee y borrar el parche temporal si hizo falta.
+1. Perfil de marca en español — **hecho** (`short_description`, `products_and_services`, `keywords`). Además de correcto, empuja al generador actual hacia el español aunque el bug siga vivo.
+2. Competencia LATAM — **hecho**: investigación en `competidores-believe-latam.md`, y cargados los 10 del núcleo (total **21** competidores).
+3. Prompts en español — **hecho**: 32 (29 sin marca + 3 con marca, incluidos 2 de desambiguación). Los 10 en inglés se **apagaron, no se borraron** (`enabled=false`): quedan como historial pero no corren.
+4. Barrido único — **hecho y verificado**: prompts ES + locale ES → respuestas ES. `claude` volvió (saldo de Anthropic resuelto) y `perplexity` arrancó; los 4 modelos corren.
+5. Reporte de oportunidades en español — **hecho** (ver abajo).
+6. PR al upstream — **abierto**: `ai-search-guru/getcito` **#58**, 20 archivos, una sola commit sobre `upstream/master`, con changeset.
 
-Los pasos 3 y 4 se hacen **juntos y después** de la investigación a propósito: si se cargan prompts antes, las comparaciones quedan contra la lista vieja de competidores (8 consultoras globales) y hay que barrer dos veces.
+### 🔴 Lo que el barrido en español destapó (reputación)
+
+El prompt de desambiguación (`believe consultora de marketing o disquera`) hizo su trabajo: el asistente distingue bien la consultora de la disquera francesa, **y de paso encontró esto**. Texto literal de ChatGPT, guardado en la base:
+
+> *"**ScamAdviser** marca **believe-global.com** con "caution recommended" y menciona señales como dueño oculto en WHOIS, poco tráfico y dominio relativamente reciente; eso no prueba estafa, pero sí sugiere revisar bien antes de contratar."*
+>
+> *"**no encontré evidencia suficiente para decir "es estafa", pero tampoco suficientes opiniones independientes para recomendarla sin reservas**."*
+
+Y el asistente cierra recomendando al comprador: pedir razón social y datos fiscales, contrato con entregables, **casos con contacto verificable**, y no pagar todo por adelantado.
+
+Tres cosas accionables, en orden de impacto:
+
+1. **ScamAdviser está definiendo la marca ante los asistentes.** Un WHOIS con dueño oculto + sin reseñas externas es la peor combinación para AEO. Reclamar/revisar la ficha y abrir el WHOIS es más barato que cualquier campaña.
+2. **Cero reseñas independientes.** Los casos del sitio son auto-publicados. Lo que un comprador con IA busca es exactamente lo que no existe: tercera parte verificable (review platforms, prensa, casos con cliente y contacto).
+3. **Dominio parecido**: `believe.global` ("TheXchange") ensucia la entidad. Conviene una página propia de desambiguación.
+
+Nota: el sitio y LinkedIn listan al fundador como **Jorge Beltrán Liévano** (el brandbook dice "George Beltrán"). Para detección de entidad, usar los dos como alias.
+
+### El reporte de oportunidades en español (y su fecha de vencimiento)
+
+Generado con el código del PR #58 y persistido en `brand_opportunities` (fila del 2026-09-23 06:20, `gpt-5.5`, 11 oportunidades). Sale de los **datos del barrido nuevo**: cita porcentajes por prompt y hasta marca el riesgo de confusión con Believe Music.
+
+⚠️ **Vence**: el deploy todavía tiene el bug, así que si el reporte pasa los 6 días del `REFRESH_AFTER_DAYS` **se va a regenerar en inglés**. Para que quede en español hay que mergear y deployar el arreglo del upstream (o regenerarlo a mano otra vez). La fila vieja en inglés queda como historial; la página sirve siempre la más nueva.
 
 ---
 
