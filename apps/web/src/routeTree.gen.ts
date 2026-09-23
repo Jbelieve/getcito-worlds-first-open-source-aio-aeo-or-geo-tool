@@ -24,6 +24,7 @@ import { Route as AuthedReportsIndexRouteImport } from './routes/_authed/reports
 import { Route as AuthedAppIndexRouteImport } from './routes/_authed/app/index'
 import { Route as AuthedAdminIndexRouteImport } from './routes/_authed/admin/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as AgentEntityIdSplatRouteImport } from './routes/agent/$entityId/$'
 import { Route as AuthedAppNewRouteImport } from './routes/_authed/app/new'
 import { Route as AuthedAppBrandRouteImport } from './routes/_authed/app/$brand'
 import { Route as AuthedAdminWorkflowsRouteImport } from './routes/_authed/admin/workflows'
@@ -137,6 +138,11 @@ const AuthedAdminIndexRoute = AuthedAdminIndexRouteImport.update({
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentEntityIdSplatRoute = AgentEntityIdSplatRouteImport.update({
+  id: '/agent/$entityId/$',
+  path: '/agent/$entityId/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedAppNewRoute = AuthedAppNewRouteImport.update({
@@ -374,6 +380,7 @@ export interface FileRoutesByFullPath {
   '/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/app/$brand': typeof AuthedAppBrandRouteWithChildren
   '/app/new': typeof AuthedAppNewRoute
+  '/agent/$entityId/$': typeof AgentEntityIdSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin/': typeof AuthedAdminIndexRoute
   '/app/': typeof AuthedAppIndexRoute
@@ -426,6 +433,7 @@ export interface FileRoutesByTo {
   '/admin/usage': typeof AuthedAdminUsageRoute
   '/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/app/new': typeof AuthedAppNewRoute
+  '/agent/$entityId/$': typeof AgentEntityIdSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin': typeof AuthedAdminIndexRoute
   '/app': typeof AuthedAppIndexRoute
@@ -484,6 +492,7 @@ export interface FileRoutesById {
   '/_authed/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/_authed/app/$brand': typeof AuthedAppBrandRouteWithChildren
   '/_authed/app/new': typeof AuthedAppNewRoute
+  '/agent/$entityId/$': typeof AgentEntityIdSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_authed/admin/': typeof AuthedAdminIndexRoute
   '/_authed/app/': typeof AuthedAppIndexRoute
@@ -542,6 +551,7 @@ export interface FileRouteTypes {
     | '/admin/workflows'
     | '/app/$brand'
     | '/app/new'
+    | '/agent/$entityId/$'
     | '/api/auth/$'
     | '/admin/'
     | '/app/'
@@ -594,6 +604,7 @@ export interface FileRouteTypes {
     | '/admin/usage'
     | '/admin/workflows'
     | '/app/new'
+    | '/agent/$entityId/$'
     | '/api/auth/$'
     | '/admin'
     | '/app'
@@ -651,6 +662,7 @@ export interface FileRouteTypes {
     | '/_authed/admin/workflows'
     | '/_authed/app/$brand'
     | '/_authed/app/new'
+    | '/agent/$entityId/$'
     | '/api/auth/$'
     | '/_authed/admin/'
     | '/_authed/app/'
@@ -700,6 +712,7 @@ export interface RootRouteChildren {
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
+  AgentEntityIdSplatRoute: typeof AgentEntityIdSplatRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiManifestIndexRoute: typeof ApiManifestIndexRoute
   ApiOgIndexRoute: typeof ApiOgIndexRoute
@@ -824,6 +837,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agent/$entityId/$': {
+      id: '/agent/$entityId/$'
+      path: '/agent/$entityId/$'
+      fullPath: '/agent/$entityId/$'
+      preLoaderRoute: typeof AgentEntityIdSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authed/app/new': {
@@ -1252,6 +1272,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,
   AuthRegisterRoute: AuthRegisterRoute,
+  AgentEntityIdSplatRoute: AgentEntityIdSplatRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiManifestIndexRoute: ApiManifestIndexRoute,
   ApiOgIndexRoute: ApiOgIndexRoute,
