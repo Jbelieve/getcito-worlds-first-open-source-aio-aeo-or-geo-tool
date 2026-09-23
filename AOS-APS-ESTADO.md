@@ -204,6 +204,22 @@ y `readGatewayBudget` (`/key/info`, sin llamada de inferencia). Los modelos de *
 (OpenAI/Anthropic/BrightData) **no pasan por el gateway**, así que ahí el precio sale de la factura
 (`APS_PRICES`). Un target sin precio **bloquea** el plan.
 
+### Perplexity: el dataset de BrightData no completa snapshots (evidencia)
+
+Corrida de prueba `afabc82e` (4 modelos, 6 prompts, 3 repeticiones) **terminó bien a los ~37 minutos**,
+sin trabarse. Pero perplexity dio **0 respuestas de 18 intentos**. Consultando la API de BrightData:
+
+- Los últimos 8 snapshots del dataset `gd_m7dhdot1vw9a7gc1n` están **todos `running` o `canceled`**.
+  **Ninguno llegó a `ready`.**
+- El dataset de **google-ai-mode** (`gd_mcswdt6z2elth3zqr2`), **mismo proveedor y mismo mecanismo**,
+  tiene **104 llamadas con 100% de éxito** (promedio 48s).
+- Los pocos éxitos de perplexity tardan 19–241s; los fallos agotan el presupuesto de polling (520s).
+
+**Conclusión:** no es nuestro código ni BrightData entero: **ese dataset no termina los snapshots**. No se
+arregla desde acá. Salidas posibles: (a) escalar a BrightData con esta evidencia, (b) cambiar perplexity
+a otro producto de BrightData (scrape sincrónico en vez de snapshot asíncrono), (c) dejarlo como
+*mejor esfuerzo* sabiendo que cada corrida va a quedar parcial por su culpa.
+
 ### Estado de la última medición real
 
 Run `439d882d` sobre `believe-global.com`, 6 prompts × 3 modelos × **3 repeticiones** (2026-09-23 07:02):
@@ -228,9 +244,22 @@ señal.
 **casi nunca llega** en una pregunta de compra que no nombra la marca. El cuello de botella no es la
 infraestructura, es la **presencia en las fuentes que los asistentes citan**.
 
+**Corrida de prueba `afabc82e`** (4 modelos, después de arreglar los techos y los carriles):
+
+| Modelo | APS | Obs | Antes (obs) |
+|---|---|---|---|
+| google-ai-mode | 40 | **18 de 18** | 12 de 18 |
+| chatgpt | 39 | 17 de 18 | 15 de 18 |
+| claude | 34 | 16 de 18 | 11 de 18 |
+| perplexity | sin score | **0 de 18** | — |
+
+Dos cosas que valen más que los números: **google-ai-mode recuperó 6 observaciones** que el techo de 90s
+estaba tirando en silencio, y **los tres modelos siguen coincidiendo** (misma banda, P10–P90 solapados),
+o sea que la medición es reproducible entre corridas.
+
 **Historial con el mismo instrumento:** `518eeea9` dio chatgpt 27 / google 24 con **1 repetición**
 (P10 = P50 = P90, una banda vacía de sentido porque no había varianza que medir). La comparación entre
-las dos corridas **no es válida** por eso: misma biblioteca, distinta cantidad de repeticiones.
+esa corrida y las de 3 repeticiones **no es válida**: misma biblioteca, distinta cantidad de repeticiones.
 
 ---
 
@@ -363,7 +392,7 @@ rotarlo cuando se pueda.
 | # | Pendiente | Detalle |
 |---|---|---|
 | 1 | 🔴 **SALDO AGOTADO EN LAS DOS CUENTAS** | La corrida `439d882d` falló 5 llamadas por saldo: Anthropic (`credit balance is too low`, 4 llamadas de claude) y OpenAI (`no credits remaining`, 1 de chatgpt). Se agotó **durante** la corrida, después de ~50 llamadas exitosas. **La próxima corrida va a fallar más.** Cargar ambas antes de medir. |
-| 2 | 🔴 **Perplexity / BrightData: sacarlo del set** | Medido en APS: **0 de 5 exitosas, 522s por intento** (`BrightData snapshot sd_mudqvrll84i9tfae timed out`). Bloqueó una corrida entera por lotes. **Ya se dejó fuera del set de medición**; volver a incluirlo solo cuando BrightData lo arregle. |
+| 2 | 🔴 **Perplexity / BrightData: el dataset no completa snapshots** | **No es nuestro y no se arregla acá.** Los últimos 8 snapshots del dataset están `running`/`canceled`, ninguno `ready`, mientras el dataset de google-ai-mode (mismo proveedor, mismo mecanismo) da 104/104. Jorge pidió mantenerlo porque es la única vía a perplexity: **queda en el set, asumiendo que cada corrida saldrá parcial**. Escalar a BrightData con la evidencia de §4, o pasar a un scrape sincrónico. |
 | 3 | **`/AGENTS.md` en mayúscula** | Hoy se sirve `/agents.md` (200) y `/AGENTS.md` (404). Es el único requisito AOS que falla: con el alias, el sitio da 100. |
 | 4 | **Precios de la capa de medición** | `APS_PRICES` hoy tiene provisionales (`chatgpt=0.05`, `claude=0.05`, `perplexity=0.05`, `google-ai-mode=0.05`, `believe-deep=0.0013`). Los reales salen de la factura de OpenAI/Anthropic/BrightData. |
 | 5 | **`APS_MAX_CALLS_PER_RUN`** | Subir de 450 para permitir 50 prompts × 4 modelos × 3 reps (600). |
