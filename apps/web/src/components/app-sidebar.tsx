@@ -69,7 +69,7 @@ export function AppSidebar({
 				icon: IconDashboard,
 			},
 			{
-				title: "Agent Ops",
+				title: "AOS",
 				url: "/agent-ops",
 				icon: IconRobot,
 			},
@@ -84,7 +84,7 @@ export function AppSidebar({
 				icon: IconFileDescription,
 			},
 			{
-				title: "Agent Preference",
+				title: "APS",
 				url: "/agent-preference",
 				icon: IconGauge,
 			},
