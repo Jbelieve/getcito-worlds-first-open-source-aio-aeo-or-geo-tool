@@ -257,6 +257,9 @@ export const getApsRunsFn = createServerFn({ method: "POST" })
 					recommendationProbability: score.recommendationProbability,
 					observations: score.observations,
 					dimensions: score.dimensions as Record<string, number | null> | null,
+					subMetrics: score.subMetrics as Record<string, number> | null,
+					distribution: (score.distribution as number[] | null) ?? null,
+					partial: score.partial,
 				})),
 		}));
 	});

@@ -36,7 +36,15 @@ export interface AgentOverview {
 		aps: number;
 		band: string;
 		createdAt: string;
-		models: Array<{ model: string; aps: number; band: string; observations: number; recommendationProbability: number | null }>;
+		models: Array<{
+			model: string;
+			aps: number;
+			band: string;
+			observations: number;
+			recommendationProbability: number | null;
+			p10: number | null;
+			p90: number | null;
+		}>;
 		partial: boolean;
 		partialReason: string | null;
 		planned: number;
@@ -79,6 +87,8 @@ export const getAgentOverviewFn = createServerFn({ method: "POST" })
 			band: score.band,
 			observations: score.observations,
 			recommendationProbability: score.recommendationProbability,
+			p10: score.p10,
+			p90: score.p90,
 		}));
 		// Same rollup rule as the pipeline: the mean of already-normalized per-model scores.
 		const aps =

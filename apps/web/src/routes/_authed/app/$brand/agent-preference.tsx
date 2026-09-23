@@ -5,6 +5,7 @@ import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { useBrand } from "@/hooks/use-brands";
 import { listAgentEntitiesFn } from "@/server/agent-maasy";
+import { ApsRunBlock } from "@/components/aps-visual";
 import {
 estimateApsRunFn,
 generateApsLibraryFn,
@@ -298,39 +299,8 @@ AOS usado como capacidad de acción: {estimateData.capacidadAccion ?? "sin audit
 <CardDescription>Una fila por modelo: el APS nunca mezcla respuestas de modelos distintos.</CardDescription>
 </CardHeader>
 <CardContent className="space-y-3 text-sm">
-{(runs.data ?? []).map((run) => (
-<div key={run.id} className="space-y-2 border-b py-3 last:border-b-0">
-<div className="flex flex-wrap items-center justify-between gap-2">
-<span className="text-muted-foreground">
-{new Date(run.createdAt).toLocaleString()} · {statusLabel(run.status)} · {run.completedCalls}/{run.plannedCalls} llamadas
-</span>
-<span className="font-mono text-xs">
-v{run.promptLibraryVersion} · {run.judgeModelAlias}@{run.judgeModelVersion} · {run.measurementVersion}
-</span>
-</div>
-{run.repetitionsReduced && (
-<p className="text-xs text-amber-600">Medición parcial: se redujeron las repeticiones para entrar en el presupuesto.</p>
-)}
-{run.partial && run.partialReason && (
-<p className="text-xs text-amber-600">Medición parcial: {run.partialReason} El score es de la muestra, no del total planificado.</p>
-)}
-{run.error && <p className="text-xs text-red-600">{run.error}</p>}
-{run.scores.length > 0 && (
-<ul className="space-y-1 text-xs">
-{run.scores.map((score) => (
-<li key={score.model} className="flex flex-wrap items-center gap-2">
-<code className="font-mono">{score.model}</code>
-<span className={`font-semibold ${bandColor(score.band)}`}>{score.aps}</span>
-<span className={bandColor(score.band)}>{bandLabel(score.band)}</span>
-<span className="text-muted-foreground">
-P10 {score.p10 ?? "—"} · P50 {score.p50 ?? "—"} · P90 {score.p90 ?? "—"} · P(recomendación){" "}
-{score.recommendationProbability ?? "—"}% · {score.observations} respuestas
-</span>
-</li>
-))}
-</ul>
-)}
-</div>
+{(runs.data ?? []).map((run, runIndex) => (
+<ApsRunBlock key={run.id} run={run} expanded={runIndex === 0} statusLabel={statusLabel(run.status)} />
 ))}
 {(runs.data ?? []).length === 0 && (
 <p className="text-muted-foreground">Todavía no hay corridas. Genera la biblioteca y estima la primera.</p>
