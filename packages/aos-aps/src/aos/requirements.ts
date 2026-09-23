@@ -1,12 +1,13 @@
 /**
  * AOS/APS requirements rubric.
  *
- * Ids and strengths mirror aos-aps-standard/spec.json v0.1.0 so a BeAOS report can be read
- * against the published standard.
+ * The SCORED list is a one-to-one port of MAASY's `_shared/aos-standards-check.ts` — ids, strengths,
+ * signals and weights included — because BeAOS and the Maasy audit must report the SAME number for
+ * the same site. Maasy deliberately scores a live-checkable subset of spec.json v0.1.0; adding the
+ * rest here moved the denominator and produced a different score for the same site.
  *
- * Local extension: `AOS-API-01` has no id in spec.json; spec/scoring.md lists "Public API /
- * OpenAPI / OAuth / SDK / webhooks" as a required surface for product/API businesses without
- * assigning a requirement id. It is kept here (product_api only) and marked as an extension.
+ * The remaining spec.json requirements are checked as `EXTENDED_REQUIREMENTS` and reported as
+ * diagnostics only. They never change `aos_standards` or `aps_standards`.
  */
 
 export type BusinessType = "brand" | "product_api";
@@ -21,10 +22,9 @@ export interface RequirementDef {
 	title: string;
 	applies: BusinessType[];
 	signal: string;
-	/** True when the id is a BeAOS extension and not part of the published standard. */
-	extension?: boolean;
 }
 
+/** Scored subset. Identical to the Maasy checker, element for element. */
 export const REQUIREMENTS: RequirementDef[] = [
 	{
 		id: "AOS-DISC-01",
@@ -33,14 +33,6 @@ export const REQUIREMENTS: RequirementDef[] = [
 		title: "llms.txt",
 		applies: ["brand", "product_api"],
 		signal: "llms_txt",
-	},
-	{
-		id: "AOS-DISC-02",
-		axis: "AOS",
-		strength: "MAY",
-		title: "llms-full.txt",
-		applies: ["brand", "product_api"],
-		signal: "llms_full_txt",
 	},
 	{
 		id: "AOS-DISC-03",
@@ -67,22 +59,6 @@ export const REQUIREMENTS: RequirementDef[] = [
 		signal: "jsonld",
 	},
 	{
-		id: "AOS-CONT-02",
-		axis: "AOS",
-		strength: "SHOULD",
-		title: "Proof objects as structured data",
-		applies: ["brand", "product_api"],
-		signal: "proof_objects",
-	},
-	{
-		id: "AOS-CONT-03",
-		axis: "AOS",
-		strength: "MAY",
-		title: "Markdown content negotiation",
-		applies: ["brand", "product_api"],
-		signal: "markdown_negotiation",
-	},
-	{
 		id: "AOS-IDEN-01",
 		axis: "AOS",
 		strength: "MUST",
@@ -107,21 +83,12 @@ export const REQUIREMENTS: RequirementDef[] = [
 		signal: "mcp_server_card",
 	},
 	{
-		id: "AOS-CAPA-02",
-		axis: "AOS",
-		strength: "SHOULD",
-		title: "NLWeb /ask endpoint",
-		applies: ["brand", "product_api"],
-		signal: "nlweb_ask",
-	},
-	{
 		id: "AOS-API-01",
 		axis: "AOS",
 		strength: "MUST",
 		title: "Public API / OpenAPI",
 		applies: ["product_api"],
 		signal: "openapi",
-		extension: true,
 	},
 	{
 		id: "APS-CLAIM-01",
@@ -129,7 +96,62 @@ export const REQUIREMENTS: RequirementDef[] = [
 		strength: "MUST",
 		title: "brand.json Claims & Proofs",
 		applies: ["brand", "product_api"],
-		signal: "brand_json_spec",
+		signal: "brand_json",
+	},
+	{
+		id: "APS-PROV-02",
+		axis: "APS",
+		strength: "SHOULD",
+		title: "Public key (keys.json)",
+		applies: ["brand", "product_api"],
+		signal: "keys_json",
+	},
+	{
+		id: "APS-PROV-01",
+		axis: "APS",
+		strength: "SHOULD",
+		title: "Ed25519 signature verifies",
+		applies: ["brand", "product_api"],
+		signal: "signature_valid",
+	},
+];
+
+/**
+ * The rest of spec.json v0.1.0, checked for the report but excluded from the score. A fail here is
+ * a real gap against the published standard; it is simply not part of the number Maasy also produces.
+ */
+export const EXTENDED_REQUIREMENTS: RequirementDef[] = [
+	{
+		id: "AOS-DISC-02",
+		axis: "AOS",
+		strength: "MAY",
+		title: "llms-full.txt",
+		applies: ["brand", "product_api"],
+		signal: "llms_full_txt",
+	},
+	{
+		id: "AOS-CONT-02",
+		axis: "AOS",
+		strength: "SHOULD",
+		title: "Proof objects as structured data",
+		applies: ["brand", "product_api"],
+		signal: "proof_objects",
+	},
+	{
+		id: "AOS-CONT-03",
+		axis: "AOS",
+		strength: "MAY",
+		title: "Markdown content negotiation",
+		applies: ["brand", "product_api"],
+		signal: "markdown_negotiation",
+	},
+	{
+		id: "AOS-CAPA-02",
+		axis: "AOS",
+		strength: "SHOULD",
+		title: "NLWeb /ask endpoint",
+		applies: ["brand", "product_api"],
+		signal: "nlweb_ask",
 	},
 	{
 		id: "APS-CLAIM-02",
@@ -156,22 +178,6 @@ export const REQUIREMENTS: RequirementDef[] = [
 		signal: "derived_confidence",
 	},
 	{
-		id: "APS-PROV-01",
-		axis: "APS",
-		strength: "SHOULD",
-		title: "Ed25519 signature",
-		applies: ["brand", "product_api"],
-		signal: "signature_valid",
-	},
-	{
-		id: "APS-PROV-02",
-		axis: "APS",
-		strength: "SHOULD",
-		title: "Public key (keys.json)",
-		applies: ["brand", "product_api"],
-		signal: "keys_json",
-	},
-	{
 		id: "APS-PROV-03",
 		axis: "APS",
 		strength: "MAY",
@@ -181,15 +187,20 @@ export const REQUIREMENTS: RequirementDef[] = [
 	},
 ];
 
-/**
- * Strength-weighted pass ratio per axis. The published scoring.md describes surface weights
- * (0.30 discovery / 0.30 identity / 0.25 capability / 0.15 action); this rubric weights by
- * MUST/SHOULD/MAY instead. Reconciling both is a spec decision, not a silent tweak.
- */
 const STRENGTH_WEIGHT: Record<Strength, number> = { MUST: 3, SHOULD: 2, MAY: 1 };
 
 export interface Probes {
 	[signal: string]: boolean;
+}
+
+/** Strong signal only: a brand must not be graded as an API just because it has a website. */
+export function classifyBusinessType(signals: {
+	hasOpenApi?: boolean;
+	hasPublicApi?: boolean;
+	industryIsApiProduct?: boolean;
+}): BusinessType {
+	if (signals.hasOpenApi || signals.hasPublicApi || signals.industryIsApiProduct) return "product_api";
+	return "brand";
 }
 
 export interface RequirementResult {
@@ -198,7 +209,8 @@ export interface RequirementResult {
 	strength: Strength;
 	title: string;
 	status: Status;
-	extension?: boolean;
+	/** True for the extended checks: reported, never scored. */
+	diagnostic?: boolean;
 }
 
 export interface StandardsResult {
@@ -209,15 +221,6 @@ export interface StandardsResult {
 	signature_verified: boolean;
 }
 
-export function classifyBusinessType(signals: {
-	hasOpenApi?: boolean;
-	hasPublicApi?: boolean;
-	industryIsApiProduct?: boolean;
-}): BusinessType {
-	if (signals.hasOpenApi || signals.hasPublicApi || signals.industryIsApiProduct) return "product_api";
-	return "brand";
-}
-
 function axisScore(results: RequirementResult[], axis: Axis): number {
 	const applicable = results.filter((r) => r.axis === axis && r.status !== "n_a");
 	if (applicable.length === 0) return 0;
@@ -226,14 +229,24 @@ function axisScore(results: RequirementResult[], axis: Axis): number {
 	return Math.round((got / max) * 100);
 }
 
-export function evaluateStandards(probes: Probes, businessType: BusinessType): StandardsResult {
-	const requirements: RequirementResult[] = REQUIREMENTS.map((def) => {
+function evaluate(
+	defs: RequirementDef[],
+	probes: Probes,
+	businessType: BusinessType,
+	diagnostic = false,
+): RequirementResult[] {
+	return defs.map((def) => {
 		const applies = def.applies.includes(businessType);
 		const status: Status = applies === false ? "n_a" : probes[def.signal] ? "pass" : "fail";
 		const result: RequirementResult = { id: def.id, axis: def.axis, strength: def.strength, title: def.title, status };
-		if (def.extension === true) result.extension = true;
+		if (diagnostic) result.diagnostic = true;
 		return result;
 	});
+}
+
+/** The scored evaluation: the same output the Maasy audit produces for the same probes. */
+export function evaluateStandards(probes: Probes, businessType: BusinessType): StandardsResult {
+	const requirements = evaluate(REQUIREMENTS, probes, businessType);
 	return {
 		business_type: businessType,
 		requirements,
@@ -241,4 +254,9 @@ export function evaluateStandards(probes: Probes, businessType: BusinessType): S
 		aps_standards: axisScore(requirements, "APS"),
 		signature_verified: Boolean(probes.signature_valid),
 	};
+}
+
+/** Diagnostic-only evaluation of the rest of the standard. Never feeds a score. */
+export function evaluateExtended(probes: Probes, businessType: BusinessType): RequirementResult[] {
+	return evaluate(EXTENDED_REQUIREMENTS, probes, businessType, true);
 }
