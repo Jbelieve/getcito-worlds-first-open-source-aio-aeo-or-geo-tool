@@ -61,6 +61,24 @@ export function extractJsonObject(content: string): unknown {
 	}
 }
 
+/**
+ * The judge runs inside the gateway, so its identity comes from the environment. `version` must be
+ * pinned: without it the persisted series cannot tell a model update apart from a real change in the
+ * data.
+ */
+export function judgeConfigFromEnv(env: Record<string, string | undefined> = process.env): GatewayJudgeConfig | null {
+	const url = env.LLM_GATEWAY_URL?.trim();
+	const key = (env.LLM_GATEWAY_KEY_BEAOS ?? env.LLM_GATEWAY_KEY_BEADS)?.trim();
+	if (url === undefined || url.length === 0 || key === undefined || key.length === 0) return null;
+	const model = env.APS_JUDGE_MODEL?.trim() ?? "believe-deep";
+	return {
+		url,
+		key,
+		model: model.length > 0 ? model : "believe-deep",
+		version: env.APS_JUDGE_VERSION?.trim() ?? "unpinned",
+	};
+}
+
 export function gatewayJudge(config: GatewayJudgeConfig, fetchImpl: typeof fetch = fetch): ApsJudge {
 	return {
 		alias: config.model,
