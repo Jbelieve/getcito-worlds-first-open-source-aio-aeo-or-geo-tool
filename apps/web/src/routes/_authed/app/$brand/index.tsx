@@ -23,6 +23,7 @@ import { useBrand } from "@/hooks/use-brands";
 import { useDashboardSummary } from "@/hooks/use-dashboard-summary";
 import { useShareOfVoice } from "@/hooks/use-share-of-voice";
 import { TrendChart } from "@/components/trend-chart";
+import { AgentScoreCards } from "@/components/agent-score-cards";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Button } from "@workspace/ui/components/button";
 import { Skeleton } from "@workspace/ui/components/skeleton";
@@ -349,6 +350,9 @@ function DashboardPage() {
 	return (
 		<div className="flex flex-1 flex-col">
 			<div className="m-auto flex w-full max-w-[1600px] flex-col gap-3 p-4">
+				{/* AOS and APS first: the two numbers this product exists to move. */}
+				<AgentScoreCards brandId={brand?.id} />
+
 
 				{/* Section 1: AI Visibility */}
 				<section className="space-y-2">
