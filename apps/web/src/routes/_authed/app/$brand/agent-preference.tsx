@@ -20,6 +20,12 @@ export const Route = createFileRoute("/_authed/app/$brand/agent-preference")({
 component: AgentPreferencePage,
 });
 
+const KINDS: Array<{ key: string; label: string; target: number; hint: string }> = [
+{ key: "comparison", label: "Comparación", target: 50, hint: "“X vs Y”, “cuál me conviene”" },
+{ key: "use_case", label: "Caso de uso", target: 30, hint: "situaciones concretas de compra" },
+{ key: "category", label: "Categoría", target: 20, hint: "qué existe en la categoría" },
+];
+
 const BANDS: Record<string, { label: string; className: string }> = {
 agent_native: { label: "Agent-Native", className: "text-emerald-600" },
 agent_ready: { label: "Agent-Ready", className: "text-emerald-600" },
@@ -189,9 +195,11 @@ onChange={(event) => setEntityId(event.target.value)}
 
 <Card>
 <CardHeader>
-<CardTitle>Biblioteca de prompts</CardTitle>
+<CardTitle>1 · Biblioteca de prompts</CardTitle>
 <CardDescription>
-El instrumento de medición. Se bloquea 90 días: mientras dura el lock la serie es comparable.
+Son las preguntas que un comprador real le hace a un asistente de IA <span className="font-medium text-foreground">sin nombrar tu marca</span>
+{" "}— por ejemplo “¿qué schorle artesanal me recomendás?”. De ahí sale si te prefieren de verdad: si el prompt nombrara tu
+marca, la respuesta estaría contaminada y no mediría nada.
 </CardDescription>
 </CardHeader>
 <CardContent className="space-y-3 text-sm">
@@ -212,30 +220,38 @@ Bloqueada hasta {active.unlocksAt.slice(0, 10)} ·{" "}
 
 <div className="flex flex-wrap gap-2 pt-1">
 <Button size="sm" variant="outline" onClick={() => generate.mutate()} disabled={generate.isPending}>
-{generate.isPending ? "Generando…" : "Generar 50 prompts unaided"}
+{generate.isPending ? "Generando…" : "Generar 50 prompts de compra"}
 </Button>
 {candidates.length > 0 && (
 <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
-{save.isPending ? "Guardando…" : `Guardar y bloquear (${candidates.length})`}
+{save.isPending ? "Guardando…" : `Guardar y bloquear 90 días (${candidates.length})`}
 </Button>
 )}
 </div>
 
 {candidates.length > 0 && (
-<div className="space-y-2 rounded-md border p-3">
-<div className="flex gap-3 text-xs text-muted-foreground">
-<span>{candidates.length} candidatos</span>
-<span>{rejectedCount} descartados por el generador</span>
-<span>La validación unaided corre al guardar</span>
-</div>
-<ul className="max-h-64 space-y-1 overflow-y-auto text-xs">
-{candidates.slice(0, 60).map((prompt) => (
-<li key={prompt.text} className="flex gap-2">
-<code className="font-mono text-muted-foreground">{prompt.kind}</code>
-<span>{prompt.text}</span>
-</li>
+<div className="space-y-3 rounded-md border p-3">
+<p className="text-xs text-muted-foreground">
+Revisalos antes de guardar: al guardar se <span className="font-medium text-foreground">bloquean 90 días</span> y se
+convierten en el instrumento con el que vas a comparar todas las mediciones. {rejectedCount > 0 && `${rejectedCount} candidatos se descartaron por formato.`}
+</p>
+{KINDS.map((kind) => {
+const items = candidates.filter((prompt) => prompt.kind === kind.key);
+if (items.length === 0) return null;
+const share = Math.round((items.length / candidates.length) * 100);
+return (
+<div key={kind.key} className="space-y-1">
+<p className="text-xs font-medium">
+{kind.label} <span className="font-normal text-muted-foreground">· {items.length} de {candidates.length} ({share}%, objetivo {kind.target}%) — {kind.hint}</span>
+</p>
+<ul className="max-h-40 space-y-0.5 overflow-y-auto pl-3 text-xs">
+{items.slice(0, 20).map((prompt) => (
+<li key={prompt.text} className="text-muted-foreground">· {prompt.text}</li>
 ))}
 </ul>
+</div>
+);
+})}
 </div>
 )}
 </CardContent>
@@ -243,9 +259,10 @@ Bloqueada hasta {active.unlocksAt.slice(0, 10)} ·{" "}
 
 <Card>
 <CardHeader>
-<CardTitle>Corrida on-demand</CardTitle>
+<CardTitle>2 · Corrida</CardTitle>
 <CardDescription>
-Primero la estimación; nada se ejecuta ni se gasta hasta que confirmes.
+Manda esos prompts a los modelos reales y mide si te nombran, te recomiendan y con qué fuentes. Primero la estimación:
+nada se ejecuta ni se gasta hasta que confirmes.
 </CardDescription>
 </CardHeader>
 <CardContent className="space-y-3 text-sm">
@@ -295,8 +312,11 @@ AOS usado como capacidad de acción: {estimateData.capacidadAccion ?? "sin audit
 
 <Card>
 <CardHeader>
-<CardTitle>Corridas</CardTitle>
-<CardDescription>Una fila por modelo: el APS nunca mezcla respuestas de modelos distintos.</CardDescription>
+<CardTitle>3 · Resultados</CardTitle>
+<CardDescription>
+Un bloque por modelo: el APS nunca mezcla respuestas de modelos distintos, así que cada uno tiene su score, su banda y su
+distribución.
+</CardDescription>
 </CardHeader>
 <CardContent className="space-y-3 text-sm">
 {(runs.data ?? []).map((run, runIndex) => (
