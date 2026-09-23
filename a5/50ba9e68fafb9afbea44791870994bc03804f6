@@ -1,0 +1,14 @@
+AOS-APS-ESTADO.md
+  h_c5ca005a78c880 266-280
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a550ba9e68fafb9afbea44791870994bc03804f6",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
