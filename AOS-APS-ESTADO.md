@@ -206,16 +206,31 @@ y `readGatewayBudget` (`/key/info`, sin llamada de inferencia). Los modelos de *
 
 ### Estado de la última medición real
 
-Run `518eeea9` sobre `believe-global.com`, 6 prompts × 4 modelos × 1 repetición:
+Run `439d882d` sobre `believe-global.com`, 6 prompts × 3 modelos × **3 repeticiones** (2026-09-23 07:02):
 
-| Modelo | APS | Banda | Respuestas |
-|---|---|---|---|
-| chatgpt | 27 | Agent-Opaque | 6 |
-| google-ai-mode | 24 | Agent-Blind | 4 |
+| Modelo | APS | Banda | Obs | P10 | P50 | P90 | P(recomendación) |
+|---|---|---|---|---|---|---|---|
+| chatgpt | **40** | Agent-Opaque | 15 | 38 | 39 | 43 | 31% |
+| google-ai-mode | **36** | Agent-Opaque | 12 | 34 | 35 | 38 | 25% |
+| **claude** | **34** | Agent-Opaque | 11 | 30 | 34 | 36 | 22% |
 
-Corrida **parcial** (10 de 24). **P10 = P50 = P90 porque hubo 1 repetición**: la banda de varianza solo
-informa con ≥2. Lectura: el sitio es **muy operable** (AOS 89) pero los modelos **casi no lo prefieren**
-en prompts de compra unaided (APS 24-27).
+Corrida **parcial (38 de 54)** — no por el plan, sino porque **se agotaron las dos cuentas**:
+
+- **Anthropic**: `Your credit balance is too low to access the Anthropic API` → 4 llamadas de claude.
+- **OpenAI**: `You have no credits remaining` → 1 llamada de chatgpt.
+
+Las **3 repeticiones** hacen que **P10 ≠ P50 ≠ P90**: la banda de varianza ahora sí informa. Y las tres
+bandas se solapan, o sea que los tres modelos coinciden en el veredicto y la diferencia entre ellos no es
+señal.
+
+**Lectura del negocio:** el sitio es **muy operable** (AOS 89) pero los modelos **no lo prefieren**
+(APS 34-40, los tres en `Agent-Opaque`). Traducido: un agente puede operar el sitio **si llega**, pero
+**casi nunca llega** en una pregunta de compra que no nombra la marca. El cuello de botella no es la
+infraestructura, es la **presencia en las fuentes que los asistentes citan**.
+
+**Historial con el mismo instrumento:** `518eeea9` dio chatgpt 27 / google 24 con **1 repetición**
+(P10 = P50 = P90, una banda vacía de sentido porque no había varianza que medir). La comparación entre
+las dos corridas **no es válida** por eso: misma biblioteca, distinta cantidad de repeticiones.
 
 ---
 
@@ -347,14 +362,17 @@ rotarlo cuando se pueda.
 
 | # | Pendiente | Detalle |
 |---|---|---|
-| 1 | ~~**Saldo de Anthropic**~~ | **RESUELTO (2026-09-23)**: `claude` volvió a correr (`claude-sonnet-4-6`) en el barrido en español, sin errores de saldo. |
-| 2 | **Perplexity** | Mejoró pero sigue casi mudo: 1 run de 32 en el barrido en español (antes 0/6, timeout a los 90s). Revisar zona/endpoint. |
+| 1 | 🔴 **SALDO AGOTADO EN LAS DOS CUENTAS** | La corrida `439d882d` falló 5 llamadas por saldo: Anthropic (`credit balance is too low`, 4 llamadas de claude) y OpenAI (`no credits remaining`, 1 de chatgpt). Se agotó **durante** la corrida, después de ~50 llamadas exitosas. **La próxima corrida va a fallar más.** Cargar ambas antes de medir. |
+| 2 | 🔴 **Perplexity / BrightData: sacarlo del set** | Medido en APS: **0 de 5 exitosas, 522s por intento** (`BrightData snapshot sd_mudqvrll84i9tfae timed out`). Bloqueó una corrida entera por lotes. **Ya se dejó fuera del set de medición**; volver a incluirlo solo cuando BrightData lo arregle. |
 | 3 | **`/AGENTS.md` en mayúscula** | Hoy se sirve `/agents.md` (200) y `/AGENTS.md` (404). Es el único requisito AOS que falla: con el alias, el sitio da 100. |
 | 4 | **Precios de la capa de medición** | `APS_PRICES` hoy tiene provisionales (`chatgpt=0.05`, `claude=0.05`, `perplexity=0.05`, `google-ai-mode=0.05`, `believe-deep=0.0013`). Los reales salen de la factura de OpenAI/Anthropic/BrightData. |
 | 5 | **`APS_MAX_CALLS_PER_RUN`** | Subir de 450 para permitir 50 prompts × 4 modelos × 3 reps (600). |
 | 6 | **Rotación de la llave de firma** | Ver §6. |
 | 7 | **Reputación en IA (ver §8)** | ScamAdviser marca el dominio con "caution recommended" y no hay reseñas independientes: es lo que los asistentes citan al recomendar la marca. |
 | 8 | **Alias del fundador** | El sitio dice "Jorge Beltrán Liévano" y el brandbook "George Beltrán": cargar los dos como alias de entidad. |
+| 9 | **`schedule-maintenance` encola de más** | Solo saltea prompts con job `active` o `retry` y **ignora los `created`**. Con la cadencia en 0 encoló una **segunda ola de 32 jobs duplicados** que iban a rebarrer todo (con perplexity adentro) durante horas. Se cancelaron a mano. Arreglar el chequeo. |
+| 10 | **El plan de APS no muestra qué modelos va a usar** | La UI le pasa su propia lista de modelos y `loadRunContext` cae a `SCRAPE_TARGETS`; si la lista viene corta la corrida sale con menos modelos **sin avisar** (pasó: una corrida con 2 modelos de 4). El estimador debería listarlos antes de confirmar. |
+| 11 | **El timeout por llamada no acota a BrightData** | `DEFAULT_CALL_TIMEOUT_MS` es 90s, pero perplexity registró **522s** por intento. El timeout no está rigiendo en ese camino. Verificar dónde se pierde. |
 
 ### Técnicos (siguiente trabajo)
 
