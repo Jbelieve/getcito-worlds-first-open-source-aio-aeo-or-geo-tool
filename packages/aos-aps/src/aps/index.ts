@@ -13,6 +13,7 @@ export * from "./capture";
 export * from "./judge";
 export * from "./targets";
 export * from "./gateway";
+export * from "./startRun";
 export * from "../preference/measurement";
 
 /** The spec APS version is part of a run's identity too: the series records both. */

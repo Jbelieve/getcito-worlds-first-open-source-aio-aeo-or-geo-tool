@@ -15,6 +15,7 @@ import {
 	auditRobustness,
 	correctedGrounded,
 	gatewayJudge,
+	judgeConfigFromEnv,
 	judgeObservations,
 } from "@workspace/aos-aps/aps";
 
@@ -27,21 +28,6 @@ export interface ApsParseResult {
 	judged?: number;
 	unjudged?: number;
 	reason?: string;
-}
-
-/** The judge runs inside the gateway, so its identity comes from the environment. */
-export function judgeConfigFromEnv(env: Record<string, string | undefined> = process.env) {
-	const url = env.LLM_GATEWAY_URL?.trim();
-	const key = (env.LLM_GATEWAY_KEY_BEAOS ?? env.LLM_GATEWAY_KEY_BEADS)?.trim();
-	if (url === undefined || url.length === 0 || key === undefined || key.length === 0) return null;
-	const model = env.APS_JUDGE_MODEL?.trim() ?? "believe-deep";
-	return {
-		url,
-		key,
-		model: model.length > 0 ? model : "believe-deep",
-		// Recorded per run: without a pinned version the series cannot tell a model update apart.
-		version: env.APS_JUDGE_VERSION?.trim() ?? "unpinned",
-	};
 }
 
 /** Injection seam: a verification run passes a fake judge instead of calling the gateway. */

@@ -65,6 +65,27 @@ export interface ProviderPrice {
 	usdPerCall: number;
 }
 
+/**
+ * Prices in `APS_PRICES`, as `target=usd` pairs: "chatgpt=0.02,believe-deep=0.0005".
+ *
+ * They come from configuration rather than a guess, and a target left out stays out, so the
+ * estimator reports it as unpriced and the run blocks. That is the intended behaviour until a real
+ * run has been measured and priced.
+ */
+export function apsPricesFromEnv(env: Record<string, string | undefined> = process.env): ProviderPrice[] {
+	const raw = env.APS_PRICES?.trim();
+	if (raw === undefined || raw.length === 0) return [];
+	const prices: ProviderPrice[] = [];
+	for (const entry of raw.split(",")) {
+		const [target, value] = entry.split("=");
+		const name = target?.trim() ?? "";
+		const usd = Number.parseFloat(value?.trim() ?? "");
+		if (name.length === 0 || Number.isFinite(usd) === false || usd < 0) continue;
+		prices.push({ target: name, usdPerCall: usd });
+	}
+	return prices;
+}
+
 export interface ApsRunRequest {
 	/** Size of the locked prompt library. */
 	prompts: number;
