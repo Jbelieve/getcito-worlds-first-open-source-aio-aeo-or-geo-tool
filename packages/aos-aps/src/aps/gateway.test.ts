@@ -44,6 +44,43 @@ describe("extractJsonObject", () => {
 });
 
 describe("gatewayJudge", () => {
+	it("gives the judge room for its reasoning, not just the answer", async () => {
+		let body: Record<string, unknown> = {};
+		const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+			body = JSON.parse(String(init?.body));
+			return completion(JSON.stringify(VERDICT));
+		}) as unknown as typeof fetch;
+		await gatewayJudge(CONFIG, fetchImpl).analyze({ brandName: "F", promptText: "p", response: "r" });
+		// Measured: 700 tokens went entirely to reasoning and returned empty content.
+		expect(body.max_tokens).toBe(3000);
+	});
+
+	it("treats a truncated answer as no verdict instead of salvaging it", async () => {
+		const truncated = (async () =>
+			new Response(
+				JSON.stringify({ choices: [{ finish_reason: "length", message: { content: '{"appeared": true,' } }] }),
+				{
+					status: 200,
+					headers: { "content-type": "application/json" },
+				},
+			)) as unknown as typeof fetch;
+		expect(
+			await gatewayJudge(CONFIG, truncated).analyze({ brandName: "F", promptText: "p", response: "r" }),
+		).toBeNull();
+	});
+
+	it("reads the judge token budget from the environment", () => {
+		expect(judgeConfigFromEnv({ LLM_GATEWAY_URL: "https://gw/v1", LLM_GATEWAY_KEY_BEADS: "k" })?.maxTokens).toBe(3000);
+		expect(
+			judgeConfigFromEnv({ LLM_GATEWAY_URL: "https://gw/v1", LLM_GATEWAY_KEY_BEADS: "k", APS_JUDGE_MAX_TOKENS: "4000" })
+				?.maxTokens,
+		).toBe(4000);
+		expect(
+			judgeConfigFromEnv({ LLM_GATEWAY_URL: "https://gw/v1", LLM_GATEWAY_KEY_BEADS: "k", APS_JUDGE_MAX_TOKENS: "abc" })
+				?.maxTokens,
+		).toBe(3000);
+	});
+
 	it("posts the judge prompt to the gateway and returns the parsed verdict", async () => {
 		const captured: { url?: string; init?: RequestInit } = {};
 		const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -163,6 +200,17 @@ describe("generateLibraryWithGateway", () => {
 		expect(result?.rejected).toEqual([]);
 		expect(captured.body).toContain("50% comparison, 30% use_case, 20% category");
 		expect(captured.body).toContain("schorle artesanal");
+	});
+
+	it("gives generation room for the reasoning plus fifty prompts", async () => {
+		let body: Record<string, unknown> = {};
+		const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+			body = JSON.parse(String(init?.body));
+			return libraryResponse([{ text: "x", kind: "category", funnel_stage: "awareness" }]);
+		}) as unknown as typeof fetch;
+		await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, fetchImpl);
+		// Measured: 50 prompts spent ~3.7k reasoning + ~6.3k writing; 4000 truncated it.
+		expect(body.max_tokens).toBe(8000);
 	});
 
 	it("accepts a camelCase funnel stage and drops invalid candidates", async () => {
