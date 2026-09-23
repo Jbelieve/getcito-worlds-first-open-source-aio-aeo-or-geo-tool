@@ -1,0 +1,14 @@
+packages/aos-aps/src/assets/generate.ts
+  h_c5ca005a78c880 2-14,17-19,23-27,31,35-69,73-113,117-136,139-192,195-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a9d71c63ca4238dbf088ff176964af3f7fe6d022",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
