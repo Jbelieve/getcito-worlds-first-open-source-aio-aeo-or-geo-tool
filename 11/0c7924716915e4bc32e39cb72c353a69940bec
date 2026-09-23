@@ -1,0 +1,22 @@
+apps/web/src/routes/_authed/app/$brand/agent-preference.tsx
+  h_c5ca005a78c880 11,77-82,251-262
+apps/web/src/server/agent-aps.ts
+  h_c5ca005a78c880 30,74-93,154-157,168
+apps/worker/src/jobs/aps-parse.ts
+  h_c5ca005a78c880 74-77,121,129-130,134-136
+packages/aos-aps/src/aps/gateway.test.ts
+  h_c5ca005a78c880 6,9,198-269
+packages/aos-aps/src/aps/gateway.ts
+  h_c5ca005a78c880 51-54,56-110,152-159,182-184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "110c7924716915e4bc32e39cb72c353a69940bec",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
