@@ -26,7 +26,16 @@ function entity(overrides: Partial<BundleSource> = {}): BundleSource {
 	return { id: "entity-1", name: "Felix", websiteUrl: "https://felix.com", isPublished: true, ...overrides };
 }
 
-const SIGNING = { keyId: "believe-2026-primary", keysUri: "https://believe-global.com/.well-known/keys.json" };
+const KEYS_JSON = `${JSON.stringify({ keys: [{ key_id: "believe-2026-primary", kid: "71952e93b97ac2b8" }] }, null, 2)}\n`;
+const SIGNATURE_JSON = `${JSON.stringify({ alg: "Ed25519", kid: "71952e93b97ac2b8", value: "firma", public_key_url: "https://believe-global.com/.well-known/keys.json" }, null, 2)}\n`;
+
+function signedRows(): AssetRow[] {
+	return [
+		row(),
+		row({ path: "/.well-known/keys.json", content: KEYS_JSON }),
+		row({ path: "/.well-known/brand.json.sig", content: SIGNATURE_JSON }),
+	];
+}
 
 describe("latestByPath", () => {
 	it("keeps the newest row per path and orders them stably", () => {
@@ -61,7 +70,7 @@ describe("buildBundle", () => {
 	});
 
 	it("carries the exact bytes, their sha256 and their byte length", () => {
-		const bundle = buildBundle(entity(), [row({ content: "Marca con acentos: café\n" })], SIGNING);
+		const bundle = buildBundle(entity(), [row({ content: "Marca con acentos: café\n" })]);
 		const asset = bundle?.assets[0];
 		expect(asset?.content).toBe("Marca con acentos: café\n");
 		expect(asset?.sha256).toBe(sha256Hex("Marca con acentos: café\n"));
@@ -69,38 +78,42 @@ describe("buildBundle", () => {
 		expect(asset?.bytes).toBeGreaterThan("Marca con acentos: café\n".length);
 	});
 
-	it("carries the umbrella identity a consumer must publish", () => {
-		const bundle = buildBundle(entity(), [row()], SIGNING);
+	it("reads the signing identity from the artifacts, not from configuration", () => {
+		const bundle = buildBundle(entity(), signedRows());
+		expect(bundle?.signed).toBe(true);
 		expect(bundle?.keyId).toBe("believe-2026-primary");
+		expect(bundle?.kid).toBe("71952e93b97ac2b8");
 		expect(bundle?.keysUri).toBe("https://believe-global.com/.well-known/keys.json");
 		expect(bundle?.entityId).toBe("entity-1");
 		expect(bundle?.websiteUrl).toBe("https://felix.com");
 	});
 
-	it("reports no key identity when the bundle was signed without one", () => {
-		const bundle = buildBundle(entity(), [row()], null);
+	it("reports no identity for an unsigned bundle", () => {
+		const bundle = buildBundle(entity(), [row()]);
+		expect(bundle?.signed).toBe(false);
 		expect(bundle?.keyId).toBeNull();
+		expect(bundle?.kid).toBeNull();
 		expect(bundle?.keysUri).toBeUndefined();
 	});
 
 	it("identifies the version of the whole bundle", () => {
-		const one = buildBundle(entity(), [row()], SIGNING);
-		const same = buildBundle(entity(), [row()], SIGNING);
+		const one = buildBundle(entity(), signedRows());
+		const same = buildBundle(entity(), signedRows());
 		expect(one?.bundleSha256).toBe(same?.bundleSha256);
 
-		const changed = buildBundle(entity(), [row({ content: `${BRAND_JSON} ` })], SIGNING);
+		const changed = buildBundle(entity(), [row({ content: `${BRAND_JSON} ` })]);
 		expect(changed?.bundleSha256).not.toBe(one?.bundleSha256);
 	});
 
 	it("changes the bundle hash when a path is added or removed", () => {
-		const base = buildBundle(entity(), [row(), row({ path: "/llms.txt", content: "# Felix" })], SIGNING);
+		const base = buildBundle(entity(), [row(), row({ path: "/llms.txt", content: "# Felix" })]);
 		expect(bundleHash(base?.assets ?? [])).toBe(base?.bundleSha256);
 		expect(bundleHash([])).toBe(sha256Hex(""));
 	});
 });
 
 function bundleOf(rows: AssetRow[]): NonNullable<ReturnType<typeof buildBundle>> {
-	const bundle = buildBundle(entity(), rows, SIGNING);
+	const bundle = buildBundle(entity(), rows);
 	if (bundle === null) throw new Error("expected a bundle");
 	return bundle;
 }
