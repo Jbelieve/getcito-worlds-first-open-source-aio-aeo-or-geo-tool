@@ -1,0 +1,14 @@
+MANUAL-AOS-APS.md
+  h_c5ca005a78c880 1-314
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "45902daea20164584d8173fb3a78241653caf898",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
