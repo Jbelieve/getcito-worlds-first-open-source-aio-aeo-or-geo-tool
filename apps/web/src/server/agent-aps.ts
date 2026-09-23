@@ -9,6 +9,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@workspace/lib/db/db";
+import { brands } from "@workspace/lib/db/schema";
 import {
 	agentAosAudits,
 	agentApsPromptLibraries,
@@ -21,7 +22,10 @@ import {
 	GATEWAY_JUDGE_PIPELINE_VERSION,
 	apsBudgetConfigFromEnv,
 	apsPricesFromEnv,
+	canRegenerateLibrary,
+	generateLibraryWithGateway,
 	judgeConfigFromEnv,
+	libraryConfigFromEnv,
 	prepareApsRun,
 } from "@workspace/aos-aps/aps";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
@@ -228,4 +232,82 @@ export const getApsRunsFn = createServerFn({ method: "POST" })
 					dimensions: score.dimensions as Record<string, number | null> | null,
 				})),
 		}));
+	});
+
+/** Active library of an entity, with its lock window: the UI needs to show why it cannot change. */
+export const getApsLibraryFn = createServerFn({ method: "POST" })
+	.validator(z.object({ brandId: z.string().min(1), entityId: z.string().uuid() }))
+	.handler(async ({ data }) => {
+		const session = await requireAuthSession();
+		await requireOrgAccess(session.user.id, data.brandId);
+		const [library] = await db
+			.select()
+			.from(agentApsPromptLibraries)
+			.where(and(eq(agentApsPromptLibraries.entityId, data.entityId), eq(agentApsPromptLibraries.status, "active")))
+			.orderBy(desc(agentApsPromptLibraries.version))
+			.limit(1);
+		if (library === undefined) return { library: null, counts: {}, canRegenerate: null };
+
+		const prompts = await db
+			.select({ kind: agentApsPrompts.kind, enabled: agentApsPrompts.enabled })
+			.from(agentApsPrompts)
+			.where(eq(agentApsPrompts.libraryId, library.id));
+		const counts: Record<string, number> = {};
+		for (const prompt of prompts) {
+			if (prompt.enabled === false) continue;
+			counts[prompt.kind] = (counts[prompt.kind] ?? 0) + 1;
+		}
+		const verdict = canRegenerateLibrary({ unlocksAt: library.unlocksAt.toISOString() });
+		return {
+			library: {
+				id: library.id,
+				version: library.version,
+				lockedAt: library.lockedAt.toISOString(),
+				unlocksAt: library.unlocksAt.toISOString(),
+				promptCount: prompts.filter((prompt) => prompt.enabled).length,
+			},
+			counts,
+			canRegenerate: verdict,
+		};
+	});
+
+/**
+ * Generates a candidate library on demand. It writes nothing: the operator reviews the candidates
+ * and then calls saveApsLibraryFn, which is what validates and locks them.
+ */
+export const generateApsLibraryFn = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			brandId: z.string().min(1),
+			total: z.number().int().min(10).max(60).optional(),
+			industry: z.string().min(1).optional(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const session = await requireAuthSession();
+		await requireOrgAccess(session.user.id, data.brandId);
+		const config = libraryConfigFromEnv();
+		if (config === null) {
+			return { ok: false as const, reason: "Falta LLM_GATEWAY_URL o la key del gateway para generar la biblioteca." };
+		}
+		const [brand] = await db.select().from(brands).where(eq(brands.id, data.brandId)).limit(1);
+		if (brand === undefined) throw new Error("Brand not found");
+
+		const brief = [brand.shortDescription, (brand.productsAndServices ?? []).join(", "), (brand.keywords ?? []).join(", ")]
+			.filter((part) => typeof part === "string" && part.length > 0)
+			.join(" | ");
+
+		const generated = await generateLibraryWithGateway(
+			{
+				brandName: brand.name,
+				industry: data.industry ?? null,
+				brief: brief.length > 0 ? brief : null,
+				total: data.total,
+			},
+			config,
+		);
+		if (generated === null) {
+			return { ok: false as const, reason: "El gateway no devolvio una biblioteca usable." };
+		}
+		return { ok: true as const, prompts: generated.prompts, rejected: generated.rejected, model: config.model };
 	});

@@ -50,6 +50,7 @@ import { Route as AuthedAppBrandShareOfVoiceRouteImport } from './routes/_authed
 import { Route as AuthedAppBrandQueryFanOutRouteImport } from './routes/_authed/app/$brand/query-fan-out'
 import { Route as AuthedAppBrandOpportunitiesRouteImport } from './routes/_authed/app/$brand/opportunities'
 import { Route as AuthedAppBrandCitationsRouteImport } from './routes/_authed/app/$brand/citations'
+import { Route as AuthedAppBrandAgentPreferenceRouteImport } from './routes/_authed/app/$brand/agent-preference'
 import { Route as AuthedAppBrandAgentOpsRouteImport } from './routes/_authed/app/$brand/agent-ops'
 import { Route as AuthedAppBrandAgentEntitiesRouteImport } from './routes/_authed/app/$brand/agent-entities'
 import { Route as AuthedAppBrandAgentAssetsRouteImport } from './routes/_authed/app/$brand/agent-assets'
@@ -277,6 +278,12 @@ const AuthedAppBrandCitationsRoute = AuthedAppBrandCitationsRouteImport.update({
   path: '/citations',
   getParentRoute: () => AuthedAppBrandRoute,
 } as any)
+const AuthedAppBrandAgentPreferenceRoute =
+  AuthedAppBrandAgentPreferenceRouteImport.update({
+    id: '/agent-preference',
+    path: '/agent-preference',
+    getParentRoute: () => AuthedAppBrandRoute,
+  } as any)
 const AuthedAppBrandAgentOpsRoute = AuthedAppBrandAgentOpsRouteImport.update({
   id: '/agent-ops',
   path: '/agent-ops',
@@ -392,6 +399,7 @@ export interface FileRoutesByFullPath {
   '/app/$brand/agent-assets': typeof AuthedAppBrandAgentAssetsRoute
   '/app/$brand/agent-entities': typeof AuthedAppBrandAgentEntitiesRoute
   '/app/$brand/agent-ops': typeof AuthedAppBrandAgentOpsRoute
+  '/app/$brand/agent-preference': typeof AuthedAppBrandAgentPreferenceRoute
   '/app/$brand/citations': typeof AuthedAppBrandCitationsRoute
   '/app/$brand/opportunities': typeof AuthedAppBrandOpportunitiesRoute
   '/app/$brand/query-fan-out': typeof AuthedAppBrandQueryFanOutRoute
@@ -445,6 +453,7 @@ export interface FileRoutesByTo {
   '/app/$brand/agent-assets': typeof AuthedAppBrandAgentAssetsRoute
   '/app/$brand/agent-entities': typeof AuthedAppBrandAgentEntitiesRoute
   '/app/$brand/agent-ops': typeof AuthedAppBrandAgentOpsRoute
+  '/app/$brand/agent-preference': typeof AuthedAppBrandAgentPreferenceRoute
   '/app/$brand/citations': typeof AuthedAppBrandCitationsRoute
   '/app/$brand/opportunities': typeof AuthedAppBrandOpportunitiesRoute
   '/app/$brand/query-fan-out': typeof AuthedAppBrandQueryFanOutRoute
@@ -504,6 +513,7 @@ export interface FileRoutesById {
   '/_authed/app/$brand/agent-assets': typeof AuthedAppBrandAgentAssetsRoute
   '/_authed/app/$brand/agent-entities': typeof AuthedAppBrandAgentEntitiesRoute
   '/_authed/app/$brand/agent-ops': typeof AuthedAppBrandAgentOpsRoute
+  '/_authed/app/$brand/agent-preference': typeof AuthedAppBrandAgentPreferenceRoute
   '/_authed/app/$brand/citations': typeof AuthedAppBrandCitationsRoute
   '/_authed/app/$brand/opportunities': typeof AuthedAppBrandOpportunitiesRoute
   '/_authed/app/$brand/query-fan-out': typeof AuthedAppBrandQueryFanOutRoute
@@ -563,6 +573,7 @@ export interface FileRouteTypes {
     | '/app/$brand/agent-assets'
     | '/app/$brand/agent-entities'
     | '/app/$brand/agent-ops'
+    | '/app/$brand/agent-preference'
     | '/app/$brand/citations'
     | '/app/$brand/opportunities'
     | '/app/$brand/query-fan-out'
@@ -616,6 +627,7 @@ export interface FileRouteTypes {
     | '/app/$brand/agent-assets'
     | '/app/$brand/agent-entities'
     | '/app/$brand/agent-ops'
+    | '/app/$brand/agent-preference'
     | '/app/$brand/citations'
     | '/app/$brand/opportunities'
     | '/app/$brand/query-fan-out'
@@ -674,6 +686,7 @@ export interface FileRouteTypes {
     | '/_authed/app/$brand/agent-assets'
     | '/_authed/app/$brand/agent-entities'
     | '/_authed/app/$brand/agent-ops'
+    | '/_authed/app/$brand/agent-preference'
     | '/_authed/app/$brand/citations'
     | '/_authed/app/$brand/opportunities'
     | '/_authed/app/$brand/query-fan-out'
@@ -1021,6 +1034,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAppBrandCitationsRouteImport
       parentRoute: typeof AuthedAppBrandRoute
     }
+    '/_authed/app/$brand/agent-preference': {
+      id: '/_authed/app/$brand/agent-preference'
+      path: '/agent-preference'
+      fullPath: '/app/$brand/agent-preference'
+      preLoaderRoute: typeof AuthedAppBrandAgentPreferenceRouteImport
+      parentRoute: typeof AuthedAppBrandRoute
+    }
     '/_authed/app/$brand/agent-ops': {
       id: '/_authed/app/$brand/agent-ops'
       path: '/agent-ops'
@@ -1154,6 +1174,7 @@ interface AuthedAppBrandRouteChildren {
   AuthedAppBrandAgentAssetsRoute: typeof AuthedAppBrandAgentAssetsRoute
   AuthedAppBrandAgentEntitiesRoute: typeof AuthedAppBrandAgentEntitiesRoute
   AuthedAppBrandAgentOpsRoute: typeof AuthedAppBrandAgentOpsRoute
+  AuthedAppBrandAgentPreferenceRoute: typeof AuthedAppBrandAgentPreferenceRoute
   AuthedAppBrandCitationsRoute: typeof AuthedAppBrandCitationsRoute
   AuthedAppBrandOpportunitiesRoute: typeof AuthedAppBrandOpportunitiesRoute
   AuthedAppBrandQueryFanOutRoute: typeof AuthedAppBrandQueryFanOutRoute
@@ -1175,6 +1196,7 @@ const AuthedAppBrandRouteChildren: AuthedAppBrandRouteChildren = {
   AuthedAppBrandAgentAssetsRoute: AuthedAppBrandAgentAssetsRoute,
   AuthedAppBrandAgentEntitiesRoute: AuthedAppBrandAgentEntitiesRoute,
   AuthedAppBrandAgentOpsRoute: AuthedAppBrandAgentOpsRoute,
+  AuthedAppBrandAgentPreferenceRoute: AuthedAppBrandAgentPreferenceRoute,
   AuthedAppBrandCitationsRoute: AuthedAppBrandCitationsRoute,
   AuthedAppBrandOpportunitiesRoute: AuthedAppBrandOpportunitiesRoute,
   AuthedAppBrandQueryFanOutRoute: AuthedAppBrandQueryFanOutRoute,
