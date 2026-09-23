@@ -336,7 +336,58 @@ rotarlo cuando se pueda.
 
 ---
 
-## 8. Cómo trabajar en esto (protocolo anti-sesión-muerta)
+## 8. El idioma: por qué el barrido salió en inglés
+
+Jorge: *"en oportunidades las recomendaciones salen en inglés… obvio corrió todo el primer barrido pre AOS y APS de Getcito en inglés"*. Verificado contra los datos reales de producción, y son **dos causas distintas**:
+
+### 1. El barrido corrió antes de que existiera el idioma (no es un bug)
+
+| Hora (UTC del 2026-09-22) | Qué pasó |
+|---|---|
+| 18:30:17 | Se generaron los 10 prompts |
+| 18:30:25 → 18:33:10 | Corrió el barrido: 10 prompts × 2 modelos = 20 runs |
+| **20:44:36** | Se configuró `target_language=Spanish`, `target_market=Mexico` |
+
+O sea: **el barrido corrió 2h14m antes de que el idioma estuviera configurado.** Los dos providers que corrieron **sí** honran el idioma (`openai-api` por system message vía `localeSystemPrompt`; `brightdata` agregando `Please provide your response in X` + el parámetro `hl`). Con el locale puesto, un barrido nuevo responde en español **sin tocar código**.
+
+### 2. El generador ignora el idioma (éste sí es el bug)
+
+`brands.target_language` / `target_market` existen y se reenvían en una corrida de visibilidad (`process-prompt.ts`), pero **el contenido que Getcito genera con IA las ignora por completo**:
+
+| Archivo | Qué hace mal |
+|---|---|
+| `packages/lib/src/onboarding/llm.ts` | `runStructuredResearchPrompt` y `runStructuredCompletionPrompt` no aceptan ni reenvían `ProviderOptions` → el locale nunca llega al provider. |
+| `packages/lib/src/onboarding/analyze.ts` | Las instrucciones están hardcodeadas en inglés (`Analyze the brand "..."`). |
+| `apps/web/src/server/opportunities.ts` | Mismo camino ciego + instrucción en inglés → **las recomendaciones en inglés**. |
+
+**Un solo punto ciego explica los dos síntomas.** Y afecta también al perfil de la marca: `short_description`, `products_and_services` y `keywords` de Believe estaban en inglés (se corrigieron a mano el 2026-09-23).
+
+### Lo que NO está afectado
+
+El APS nuestro ya nace en español: `LIBRARY_SYSTEM_PROMPT` dice literalmente *"Cada prompt es una consulta de compra genuina, en espanol"*, y `aps-query.ts` reenvía `targetMarket`/`targetLanguage`. Esa mitad no necesita nada.
+
+### Decisión (Jorge, 2026-09-23)
+
+**Datos en español ahora + el arreglo como PR al upstream.** No se parchea el fork: los archivos del bug son del stream y son ~8 (`llm.ts`, `analyze.ts`, los call sites del wizard/worker/admin y `opportunities.ts`), o sea un conflicto grande en cada merge. El arreglo se manda a `ai-search-guru/getcito` y cuando lo mergeen lo traemos.
+
+### Cómo forzar un barrido nuevo sin browser
+
+La cadencia sale de `brands.delay_override_hours ?? DEFAULT_DELAY_HOURS ?? 24` y `schedule-maintenance` corre cada 5 minutos. Poner `delay_override_hours = 0` hace que el próximo tick (≤5 min) encole todos los prompts — **y hay que devolverlo a su valor original enseguida**, porque con 0 vuelve a encolar cada 5 minutos. La alternativa es la acción de admin (`apps/web/src/server/admin.ts`), que pide sesión.
+
+### Secuencia acordada
+
+1. Perfil de marca en español — **hecho** (2026-09-23).
+2. Competencia LATAM: investigación en curso (ver §7).
+3. Cargar prompts en español **incluyendo los rivales LATAM** en las comparaciones.
+4. Barrer una sola vez (no dos): prompts ES + locale ya puesto → respuestas en español.
+5. Regenerar el reporte de oportunidades en español.
+6. PR al upstream del arreglo del idioma; traerlo cuando mergee y borrar el parche temporal si hizo falta.
+
+Los pasos 3 y 4 se hacen **juntos y después** de la investigación a propósito: si se cargan prompts antes, las comparaciones quedan contra la lista vieja de competidores (8 consultoras globales) y hay que barrer dos veces.
+
+---
+
+## 9. Cómo trabajar en esto (protocolo anti-sesión-muerta)
 
 Lo que falló en una sesión anterior fue **contexto**: la sesión se congeló y se perdió el hilo. Lo que
 funciona:
