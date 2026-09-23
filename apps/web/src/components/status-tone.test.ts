@@ -2,6 +2,7 @@
  * El guardián de la paleta. Si alguien vuelve a pintar un estado de verde, ámbar o rojo, estos tests
  * fallan — que es el punto: el semáforo se colaba porque el color se decidía en cada pantalla.
  */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
 	AOS_BANDS,
@@ -134,5 +135,51 @@ describe("status-tone", () => {
 		}
 		expect(Object.keys(STAGE_LEVEL).sort()).toEqual(["a medias", "bloqueado", "listo", "sin datos"]);
 		for (const level of Object.values(STAGE_LEVEL)) expect(LEVELS).toContain(level);
+	});
+});
+
+/**
+ * La frontera del fork, ejecutable.
+ *
+ * BeAOS es un fork de Getcito y el upstream sigue vivo: hoy estamos 0 commits atrás y 85 adelante. Las
+ * pantallas que vienen del stream se dejan **tal como vienen**, semáforo incluido, para que los merges
+ * del upstream no pisen nada. Lo decidió Jorge: *"lo del stream del fork sí toca dejarlos con verdes y
+ * rojos para no afectar actualizaciones del stream"*.
+ *
+ * La paleta de Believe aplica solo a las superficies que son nuestras. Estos dos tests sostienen esa
+ * línea en las dos direcciones: si pintamos algo nuestro de verde, y si repintamos algo que no es
+ * nuestro.
+ */
+describe("la frontera del fork", () => {
+	/** Las superficies de AOS/APS: nuestras, y por lo tanto de la paleta de Believe. */
+	const OUR_SURFACES = [
+		"./status-tone.tsx",
+		"./aos-visual.tsx",
+		"./aps-visual.tsx",
+		"./agent-score-cards.tsx",
+		"../routes/_authed/app/$brand/agent-ops.tsx",
+		"../routes/_authed/app/$brand/agent-preference.tsx",
+		"../routes/_authed/app/$brand/agent-assets.tsx",
+		"../routes/_authed/app/$brand/agent-entities.tsx",
+	];
+
+	/** El tablero heredado de Getcito. No es nuestro y no se toca. */
+	const STREAMED_DASHBOARD = "../routes/_authed/app/$brand/index.tsx";
+
+	const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), "utf8");
+
+	it("nuestras superficies no tienen semáforo", () => {
+		for (const relative of OUR_SURFACES) {
+			for (const [index, line] of read(relative).split("\n").entries()) {
+				expect(FOREIGN_HUES.test(line), `${relative}:${index + 1} → ${line.trim()}`).toBe(false);
+			}
+		}
+	});
+
+	it("las pantallas que vienen del stream siguen intactas", () => {
+		// La visibilidad del tablero es código de Getcito y se deja con su semáforo a propósito. Si esto
+		// falla: o lo cambió el upstream (está bien — actualizá este test) o lo pintamos nosotros (no
+		// está bien — esa es exactamente la línea que no hay que cruzar).
+		expect(FOREIGN_HUES.test(read(STREAMED_DASHBOARD))).toBe(true);
 	});
 });

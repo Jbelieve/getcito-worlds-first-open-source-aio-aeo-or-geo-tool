@@ -94,12 +94,39 @@ hacer, no el diagnóstico. Eso es "calma sobre euforia" aplicado a un tablero.
 
 Los tokens viven en `styles.css` (`--believe-700`, `--believe-900`, `--signal`, mapeados en `@theme`), y
 `status-tone.test.ts` falla si alguien vuelve a escribir un color de la familia del semáforo o un hex
-que no sea uno de los seis de marca. Los cortes de banda sí son reglas de negocio y viven donde se usan
-(AOS: 80/60/35; visibilidad heredada de Getcito: 75/45).
+que no sea uno de los seis de marca. Los cortes de banda son reglas de negocio y viven donde se usan:
+AOS usa 80/60/35.
 
-Queda pendiente, si Jorge quiere, la **segunda pasada** sobre las pantallas heredadas de Getcito
-(citations, prompts, admin): 67 archivos siguen con el semáforo. No se tocaron porque son de Getcito y
-el cambio es más grande y más riesgoso que el de AOS/APS.
+### La frontera del fork: dónde SÍ se toca el color y dónde NO
+
+BeAOS es un fork de Getcito y **el upstream sigue vivo** (`git remote -v` → `upstream` =
+`ai-search-guru/getcito-…`). Hoy: **0 commits atrás, 85 adelante**. Jorge fue explícito:
+
+> *"lo del stream del fork sí toca dejarlos con verdes y rojos para no afectar actualizaciones del stream"*
+
+Así que la regla es mecánica y no admite criterio propio:
+
+- **Las pantallas que vienen del stream se dejan tal como vienen, semáforo incluido.** No se
+  "unifican", no se "mejoran", no se re-pintan. Cada línea que tocamos ahí es un conflicto futuro en
+  cada merge del upstream. Son 67 archivos (citations, prompts, admin, y la visibilidad del tablero).
+- **La paleta de Believe aplica solo a las superficies nuestras**, las de AOS/APS: `status-tone.tsx`,
+  `aos-visual.tsx`, `aps-visual.tsx`, `agent-score-cards.tsx` y las cuatro rutas `agent-*.tsx`.
+- **En los archivos mixtos, aditivo y nada más.** El tablero (`$brand/index.tsx`) es de Getcito: le
+  agregamos `<AgentScoreCards />` y su import, y **cero cambios** a su código (los tres helpers
+  `getVisibility*Color` se revirtieron a la versión del upstream, byte a byte). Si hay que tocar un
+  archivo del stream para colgar algo nuestro, se agrega; no se reescribe lo que ya estaba.
+
+`status-tone.test.ts` sostiene la frontera en las dos direcciones: falla si una superficie nuestra
+aparece con semáforo, y falla si el tablero heredado deja de tenerlo (o lo cambió el upstream —entonces
+se actualiza el test— o lo pintamos nosotros, que es justo lo que no hay que hacer).
+
+Para ver dónde estamos parados antes de mergear el upstream:
+
+```bash
+git fetch upstream master
+git rev-list --count master..upstream/master   # atrás
+git rev-list --count upstream/master..master   # adelante
+```
 
 ---
 
