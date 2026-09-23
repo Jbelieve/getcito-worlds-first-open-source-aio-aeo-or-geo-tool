@@ -1,0 +1,22 @@
+packages/aos-aps/src/aps/capture.test.ts
+  h_c5ca005a78c880 1-87
+packages/aos-aps/src/aps/capture.ts
+  h_c5ca005a78c880 1-93
+packages/aos-aps/src/aps/index.ts
+  h_c5ca005a78c880 11-12
+packages/aos-aps/src/aps/judge.test.ts
+  h_c5ca005a78c880 1-156
+packages/aos-aps/src/aps/judge.ts
+  h_c5ca005a78c880 1-169
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1578480b087a874654b8f49ce2c7bbefb94d2a7e",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
