@@ -8,6 +8,7 @@ import { listAgentEntitiesFn } from "@/server/agent-maasy";
 import {
 estimateApsRunFn,
 generateApsLibraryFn,
+getGatewayBudgetFn,
 getApsLibraryFn,
 getApsRunsFn,
 saveApsLibraryFn,
@@ -71,6 +72,12 @@ const library = useQuery({
 queryKey: ["aps-library", brandId, entityId],
 queryFn: () => getApsLibraryFn({ data: { brandId: brandId ?? "", entityId } }),
 enabled: Boolean(brandId && entityId),
+});
+
+const gateway = useQuery({
+queryKey: ["aps-gateway-budget"],
+queryFn: () => getGatewayBudgetFn(),
+staleTime: 60_000,
 });
 
 const runs = useQuery({
@@ -241,6 +248,18 @@ Primero la estimación; nada se ejecuta ni se gasta hasta que confirmes.
 </CardDescription>
 </CardHeader>
 <CardContent className="space-y-3 text-sm">
+{gateway.data?.budget && (
+<p className="text-xs text-muted-foreground">
+Gateway ({gateway.data.budget.models.join(", ") || "sin bandas"}): gastado USD{" "}
+{gateway.data.budget.spend.toFixed(2)}
+{gateway.data.budget.maxBudget === null ? "" : ` de ${gateway.data.budget.maxBudget}`}
+{gateway.data.remainingUsd === null ? "" : ` · quedan USD ${gateway.data.remainingUsd.toFixed(2)}`}
+{gateway.data.budget.budgetResetAt === null ? "" : ` · reinicia ${gateway.data.budget.budgetResetAt.slice(0, 10)}`}
+</p>
+)}
+{gateway.data?.configured === false && (
+<p className="text-xs text-amber-600">Gateway sin configurar: la generacion y el juez no van a funcionar.</p>
+)}
 <div className="flex flex-wrap gap-2">
 <Button size="sm" variant="outline" onClick={() => estimate.mutate()} disabled={estimate.isPending || entityId.length === 0}>
 {estimate.isPending ? "Estimando…" : "Estimar corrida"}

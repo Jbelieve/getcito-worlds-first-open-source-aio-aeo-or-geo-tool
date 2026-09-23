@@ -3,8 +3,10 @@ import {
 	GATEWAY_JUDGE_PIPELINE_VERSION,
 	extractJsonObject,
 	gatewayJudge,
+	gatewaySpendFromHeaders,
 	generateLibraryWithGateway,
 	judgeConfigFromEnv,
+	readGatewayBudget,
 } from "./gateway";
 
 const CONFIG = { url: "https://gateway.test/v1", key: "gw-key", model: "believe-deep", version: "deepseek-flash-4.1" };
@@ -191,5 +193,77 @@ describe("generateLibraryWithGateway", () => {
 
 		const failing = (async () => new Response("boom", { status: 500 })) as unknown as typeof fetch;
 		expect(await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, failing)).toBeNull();
+	});
+});
+
+describe("gateway cost and budget", () => {
+	it("reads the billed cost the gateway reports per call", () => {
+		const headers = new Headers({
+			"x-litellm-response-cost": "1.65e-05",
+			"x-litellm-key-spend": "3.388545045000002",
+			"x-litellm-key-max-budget": "50.0",
+		});
+		expect(gatewaySpendFromHeaders(headers)).toBeCloseTo(0.0000165, 10);
+		expect(gatewaySpendFromHeaders(new Headers())).toBeNull();
+		expect(gatewaySpendFromHeaders(new Headers({ "x-litellm-response-cost": "no-es-numero" }))).toBeNull();
+	});
+
+	it("reports the real spend of each judge call", async () => {
+		const costs: number[] = [];
+		const fetchImpl = (async () =>
+			new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(VERDICT) } }] }), {
+				status: 200,
+				headers: { "content-type": "application/json", "x-litellm-response-cost": "0.00002" },
+			})) as unknown as typeof fetch;
+
+		const judge = gatewayJudge(CONFIG, fetchImpl, (usd) => costs.push(usd));
+		await judge.analyze({ brandName: "F", promptText: "p", response: "r" });
+		await judge.analyze({ brandName: "F", promptText: "p", response: "r" });
+		expect(costs).toEqual([0.00002, 0.00002]);
+	});
+
+	it("reads the key budget without an inference call", async () => {
+		let url = "";
+		const fetchImpl = (async (target: string | URL | Request) => {
+			url = String(target);
+			return new Response(
+				JSON.stringify({
+					key: "abc",
+					info: {
+						spend: 3.388545045000002,
+						max_budget: 50,
+						budget_duration: "30d",
+						budget_reset_at: "2026-10-01T00:00:00Z",
+						models: ["believe-fast", "believe-smart", "believe-deep"],
+					},
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			);
+		}) as unknown as typeof fetch;
+
+		const budget = await readGatewayBudget(CONFIG, fetchImpl);
+		expect(url).toBe("https://gateway.test/v1/key/info");
+		expect(budget).toEqual({
+			spend: 3.388545045000002,
+			maxBudget: 50,
+			budgetDuration: "30d",
+			budgetResetAt: "2026-10-01T00:00:00Z",
+			models: ["believe-fast", "believe-smart", "believe-deep"],
+		});
+	});
+
+	it("returns null instead of inventing a budget", async () => {
+		const failing = (async () => new Response("nope", { status: 401 })) as unknown as typeof fetch;
+		expect(await readGatewayBudget(CONFIG, failing)).toBeNull();
+		const throwing = (async () => {
+			throw new Error("ECONNREFUSED");
+		}) as unknown as typeof fetch;
+		expect(await readGatewayBudget(CONFIG, throwing)).toBeNull();
+		const noInfo = (async () =>
+			new Response(JSON.stringify({ key: "abc" }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			})) as unknown as typeof fetch;
+		expect(await readGatewayBudget(CONFIG, noInfo)).toBeNull();
 	});
 });
