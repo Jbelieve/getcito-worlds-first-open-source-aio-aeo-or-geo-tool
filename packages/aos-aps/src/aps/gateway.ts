@@ -28,8 +28,21 @@ export interface GatewayJudgeConfig {
 	model: string;
 	/** Concrete model version behind the alias, recorded per run. */
 	version: string;
+	/**
+	 * Room for the answer PLUS the model's reasoning, because the reasoning is billed and counted
+	 * against this limit. Measured against the live gateway: a judge call spent ~940 reasoning
+	 * tokens before writing ~136 characters of JSON, so 700 returned nothing at all.
+	 */
 	maxTokens?: number;
 }
+
+/** Measured default: enough for the reasoning plus the verdict, with headroom. */
+export const JUDGE_MAX_TOKENS = 3000;
+/**
+ * Measured default for a full library: 50 prompts spent ~3.7k tokens reasoning and ~6.3k writing,
+ * so 4000 truncated the JSON and the whole generation was thrown away.
+ */
+export const LIBRARY_MAX_TOKENS = 8000;
 
 /** Distinguishes this JSON-mode judge from MAASY's tool-call judge in the persisted series. */
 export const GATEWAY_JUDGE_PIPELINE_VERSION = "gateway-json-v1";
@@ -141,11 +154,13 @@ export function judgeConfigFromEnv(env: Record<string, string | undefined> = pro
 	const url = firstSet(env.LLM_GATEWAY_URL);
 	const key = firstSet(env.LLM_GATEWAY_KEY_BEAOS, env.LLM_GATEWAY_KEY_BEADS);
 	if (url === undefined || key === undefined) return null;
+	const maxTokens = Number.parseInt(firstSet(env.APS_JUDGE_MAX_TOKENS) ?? "", 10);
 	return {
 		url,
 		key,
 		model: firstSet(env.APS_JUDGE_MODEL) ?? "believe-deep",
 		version: firstSet(env.APS_JUDGE_VERSION) ?? "unpinned",
+		maxTokens: Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : JUDGE_MAX_TOKENS,
 	};
 }
 
@@ -170,7 +185,7 @@ export function gatewayJudge(
 					body: JSON.stringify({
 						model: config.model,
 						temperature: 0,
-						max_tokens: config.maxTokens ?? 700,
+						max_tokens: config.maxTokens ?? JUDGE_MAX_TOKENS,
 						response_format: { type: "json_object" },
 						messages: [
 							{ role: "system", content: SYSTEM_PROMPT },
@@ -187,8 +202,11 @@ export function gatewayJudge(
 				return null;
 			}
 
-			const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> })?.choices?.[0]?.message
-				?.content;
+			const choice = (payload as { choices?: Array<{ message?: { content?: unknown }; finish_reason?: unknown }> })
+				?.choices?.[0];
+			// Truncated output is not a verdict: the model ran out of room mid-answer.
+			if (choice?.finish_reason === "length") return null;
+			const content = choice?.message?.content;
 			if (typeof content !== "string") return null;
 			const parsed = extractJsonObject(content);
 			// Shape checking is normalizeVerdict's job; returning the object as-is keeps one validator.
@@ -278,7 +296,7 @@ export async function generateLibraryWithGateway(
 			body: JSON.stringify({
 				model: config.model,
 				temperature: 0.7,
-				max_tokens: config.maxTokens ?? 4000,
+				max_tokens: config.maxTokens ?? LIBRARY_MAX_TOKENS,
 				response_format: { type: "json_object" },
 				messages: [
 					{ role: "system", content: LIBRARY_SYSTEM_PROMPT },
