@@ -1,0 +1,28 @@
+.env.beaos.example
+  h_c5ca005a78c880 44-46
+apps/web/src/server/agent-aps.ts
+  h_c5ca005a78c880 1-231
+apps/worker/src/jobs/aps-parse.ts
+  h_c5ca005a78c880 18
+packages/aos-aps/src/aps/gateway.ts
+  h_c5ca005a78c880 64-81
+packages/aos-aps/src/aps/index.ts
+  h_c5ca005a78c880 16
+packages/aos-aps/src/aps/startRun.test.ts
+  h_c5ca005a78c880 1-116
+packages/aos-aps/src/aps/startRun.ts
+  h_c5ca005a78c880 1-136
+packages/aos-aps/src/worker/budget.ts
+  h_c5ca005a78c880 68-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c39f4152feed01c00484db2a82219a0b9c35c30a",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
