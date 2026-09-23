@@ -27,7 +27,7 @@ export function createLocalDeployment(env: Record<string, string | undefined> = 
 			url: getEnv("APP_URL", DEFAULT_APP_URL, env),
 			parentName: env.APP_PARENT_NAME,
 			parentUrl: env.APP_PARENT_URL,
-			chartColors: DEFAULT_CHART_COLORS,
+			chartColors: env.VITE_CHART_COLORS ? env.VITE_CHART_COLORS.split(",").map((color) => color.trim()).filter(Boolean) : DEFAULT_CHART_COLORS,
 		},
 	};
 }

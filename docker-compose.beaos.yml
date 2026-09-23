@@ -1,0 +1,44 @@
+services:
+  postgres:
+    container_name: beaos-postgres
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:15433:5432"
+    volumes: !override
+      - postgres_data:/var/lib/postgresql
+
+  adminer:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:18081:8080"
+
+  web:
+    pull_policy: missing
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:13301:3000"
+    networks:
+      - default
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      - traefik.http.routers.beaos.rule=Host(`beaos.believe-global.com`)
+      - traefik.http.routers.beaos.entrypoints=https
+      - traefik.http.routers.beaos.tls=true
+      - traefik.http.routers.beaos.tls.certresolver=letsencrypt
+      - traefik.http.routers.beaos.service=beaos
+      - traefik.http.services.beaos.loadbalancer.server.port=3000
+      - traefik.http.routers.beaos-http.rule=Host(`beaos.believe-global.com`)
+      - traefik.http.routers.beaos-http.entrypoints=http
+      - traefik.http.routers.beaos-http.middlewares=beaos-redirect
+      - traefik.http.middlewares.beaos-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.beaos-redirect.redirectscheme.permanent=true
+
+  worker:
+    pull_policy: missing
+    restart: unless-stopped
+
+networks:
+  coolify:
+    external: true

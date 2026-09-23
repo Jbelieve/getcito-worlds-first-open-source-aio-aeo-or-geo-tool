@@ -92,6 +92,12 @@ RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 # Copy Nitro output - this is the entire server bundle
 COPY --from=builder --chown=getcito:nodejs /app/apps/web/.output ./.output
 
+# @takumi-rs/wasm is loaded by a dynamic import at runtime, so Nitro leaves the
+# bare specifier in the server bundle. Copy the package for OG image rendering
+# instead of shipping all node_modules.
+COPY --from=builder --chown=getcito:nodejs /app/node_modules/.pnpm/@takumi-rs+wasm@*/node_modules/@takumi-rs/wasm ./node_modules/@takumi-rs/wasm
+COPY --from=builder --chown=getcito:nodejs /app/node_modules/.pnpm/@takumi-rs+helpers@*/node_modules/@takumi-rs/helpers ./node_modules/@takumi-rs/helpers
+
 USER getcito
 
 EXPOSE 3000

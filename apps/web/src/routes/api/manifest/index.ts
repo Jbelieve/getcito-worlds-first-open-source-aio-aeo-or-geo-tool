@@ -39,40 +39,16 @@ function buildManifest(): object {
 			},
 		];
 	} else {
-		// getcito-only assets — never reference these from the whitelabel branch.
 		icons = [
 			{
-				src: "/icons/getcito-icon-512.png",
+				src: "/icons/beaos-icon.svg",
 				sizes: "any",
 				type: "image/svg+xml",
 			},
 			{
-				src: "/icons/getcito-icon-maskable-512.png",
+				src: "/icons/beaos-icon.svg",
 				sizes: "any",
 				type: "image/svg+xml",
-				purpose: "maskable",
-			},
-			// PWA installers on Android/Chrome require concrete PNG sizes.
-			{
-				src: "/icons/getcito-icon-192.png",
-				sizes: "192x192",
-				type: "image/png",
-			},
-			{
-				src: "/icons/getcito-icon-512.png",
-				sizes: "512x512",
-				type: "image/png",
-			},
-			{
-				src: "/icons/getcito-icon-maskable-192.png",
-				sizes: "192x192",
-				type: "image/png",
-				purpose: "maskable",
-			},
-			{
-				src: "/icons/getcito-icon-maskable-512.png",
-				sizes: "512x512",
-				type: "image/png",
 				purpose: "maskable",
 			},
 		];

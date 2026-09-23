@@ -66,6 +66,13 @@ export async function provisionLocalOrg(input: { userId: string }): Promise<{ or
 		createdAt: new Date(),
 	});
 
+	// The only local user is the instance owner. Give it the global admin role
+	// used by /admin and the admin API without requiring a manual SQL step.
+	await db
+		.update(user)
+		.set({ role: "admin", hasReportGeneratorAccess: true })
+		.where(eq(user.id, input.userId));
+
 	return { orgId: LOCAL_ORG.id };
 }
 

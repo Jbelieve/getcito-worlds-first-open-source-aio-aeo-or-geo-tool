@@ -6,6 +6,7 @@ import { generateReportJob, type GenerateReportData } from "./jobs/generate-repo
 import { scheduleMaintenanceJob, type ScheduleMaintenanceData } from "./jobs/schedule-maintenance";
 import { syncAuth0MembershipsJob, type SyncAuth0MembershipsData } from "./jobs/sync-auth0-memberships";
 import { analyzeBrandJob, type AnalyzeBrandData } from "./jobs/analyze-brand";
+import { aosAuditJob, type AosAuditData } from "./jobs/aos-audit";
 
 /**
  * Wraps a pg-boss handler to report errors to Sentry before re-throwing.
@@ -66,6 +67,13 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
 		withSentry("schedule-maintenance", scheduleMaintenanceJob),
 	);
 	console.log("Registered handler: schedule-maintenance");
+
+	await boss.work<AosAuditData>(
+		"aos-audit",
+		{ localConcurrency: 3 },
+		withSentry("aos-audit", aosAuditJob),
+	);
+	console.log("Registered handler: aos-audit");
 
 	if (process.env.DEPLOYMENT_MODE === "whitelabel") {
 		await boss.work<SyncAuth0MembershipsData>(

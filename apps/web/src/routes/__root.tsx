@@ -8,9 +8,7 @@ import { DEFAULT_APP_ICON, Getcito_THEME_COLOR } from "@workspace/config/constan
 import type { DeploymentMode } from "@workspace/config/types";
 import type { MissingEnvVar } from "@workspace/config/env";
 import { getClientConfig, getEnvValidationStateFn, type PublicClientConfig } from "@/server/config";
-import { usesWordmarkFont } from "@/components/logo";
 import MissingEnvPage from "@/components/missing-env-page";
-import titanOneFont from "@fontsource/titan-one/files/titan-one-latin-400-normal.woff2?url";
 import queryDevtools from "@/integrations/tanstack-query/devtools";
 import { initPostHog } from "@/lib/posthog";
 import appCss from "../styles.css?url";
@@ -58,7 +56,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 		}
 
 		const hasCustomIcon = Boolean(branding?.icon && branding.icon !== DEFAULT_APP_ICON);
-		const appName = branding?.name || "Getcito";
+		const appName = branding?.name || "BeAOS";
 		const themeColor = hasCustomIcon ? "#000000" : Getcito_THEME_COLOR;
 		const appUrl = branding?.url ? branding.url.replace(/\/$/, "") : undefined;
 
@@ -103,25 +101,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 				{ name: "twitter:image", content: ogImage },
 			],
 			links: [
-				// The wordmark is the only thing using Titan One and it sits above the
-				// fold, so without a preload the logo paints in the fallback face and
-				// visibly swaps once the woff2 arrives. Discovering the font through
-				// the stylesheet is a request too late. Whitelabel deployments render
-				// an icon plus a system-font name, so there the font would be
-				// downloaded for nothing.
-				...(usesWordmarkFont(branding)
-					? [
-							{
-								rel: "preload",
-								as: "font",
-								type: "font/woff2",
-								href: titanOneFont,
-								// Inside a conditional spread the literal widens to `string`,
-								// which doesn't satisfy React's `CrossOrigin` union.
-								crossOrigin: "anonymous" as const,
-							},
-						]
-					: []),
 				{ rel: "stylesheet", href: appCss },
 				{ rel: "manifest", href: "/api/manifest" },
 				// Whitelabel uses its own icon URL for both favicon and iOS touch;
@@ -135,10 +114,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 							// Icons live under /icons/ (not the root) so browsers' default
 							// probes for /favicon.ico and /apple-touch-icon.png 404 on
 							// whitelabel deployments instead of picking up Getcito assets.
-							{ rel: "icon", type: "image/svg+xml", href: "/icons/getcito-icon.svg" },
-							{ rel: "icon", type: "image/png", sizes: "96x96", href: "/icons/getcito-icon-96.png" },
-							{ rel: "icon", type: "image/x-icon", href: "/icons/favicon.ico" },
-							{ rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
+							{ rel: "icon", type: "image/svg+xml", href: "/icons/beaos-icon.svg" },
+																					{ rel: "apple-touch-icon", href: "/icons/beaos-icon.svg" },
 						]),
 			],
 			scripts,

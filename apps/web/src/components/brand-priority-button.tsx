@@ -67,7 +67,7 @@ export function BrandPriorityButton({
 				) : (
 					<ArrowUp className="h-3 w-3" />
 				)}
-				<span className="ml-1">{done ? "Updated" : demote ? "Normal" : "Run first"}</span>
+				<span className="ml-1">{done ? "Actualizado" : demote ? "Normal" : "Ejecutar primero"}</span>
 			</Button>
 			{error && <span className="text-xs text-red-500">{error}</span>}
 		</div>

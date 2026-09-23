@@ -36,11 +36,11 @@ export function Logo({
 			<div {...props} className={cn("flex items-center gap-2", className)}>
 				<span
 					className={cn(
-						"font-titan-one text-3xl font-normal lowercase",
+						"font-display text-3xl font-medium tracking-tight",
 						textClassName,
 					)}
 				>
-					Getcito
+					BeAOS<span style={{ color: "var(--brand-signal, #00aaff)" }}>.</span>
 				</span>
 			</div>
 		);

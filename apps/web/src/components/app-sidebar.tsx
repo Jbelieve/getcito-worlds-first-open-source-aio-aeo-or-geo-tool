@@ -4,11 +4,13 @@ import {
 	IconChartBar,
 	IconCpu,
 	IconDashboard,
+	IconFileDescription,
 	IconGauge,
 	IconLink,
 	IconListDetails,
 	IconListNumbers,
 	IconReport,
+	IconRobot,
 	IconSitemap,
 	IconSpeakerphone,
 	IconTable,
@@ -65,6 +67,21 @@ export function AppSidebar({
 				title: "Overview",
 				url: "/",
 				icon: IconDashboard,
+			},
+			{
+				title: "Agent Ops",
+				url: "/agent-ops",
+				icon: IconRobot,
+			},
+			{
+				title: "Agent Entities",
+				url: "/agent-entities",
+				icon: IconLink,
+			},
+			{
+				title: "Agent Assets",
+				url: "/agent-assets",
+				icon: IconFileDescription,
 			},
 		];
 

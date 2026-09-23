@@ -46,7 +46,7 @@ export function ChartExportPreview({
 	const isWhitelabel = branding.isWhitelabel && branding.name !== DEFAULT_APP_NAME;
 	const domain = isWhitelabel
 		? branding.parentUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || ""
-		: "Getcito.com";
+		: "ai.believe-global.com";
 	const hasCustomIcon = branding.icon && branding.icon !== DEFAULT_APP_ICON;
 
 	return (
@@ -111,8 +111,8 @@ export function ChartExportPreview({
 					{isWhitelabel ? (
 						<span style={{ fontSize: 18 }} className="text-gray-500 font-semibold">{name}</span>
 					) : (
-						<span className="font-titan-one font-normal lowercase text-blue-600" style={{ fontSize: 24 }}>
-							Getcito
+						<span className="font-display font-medium text-[#0c3bb9]" style={{ fontSize: 24 }}>
+							BeAOS<span style={{ color: "#00aaff" }}>.</span>
 						</span>
 					)}
 				</div>

@@ -1,0 +1,83 @@
+import { boolean, integer, json, pgTable, text, timestamp, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { brands } from "@workspace/lib/db/schema";
+
+export const agentBrandEntities = pgTable("agent_brand_entities", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	brandId: text("brand_id")
+		.references(() => brands.id, { onDelete: "cascade" })
+		.notNull(),
+	parentEntityId: uuid("parent_entity_id").references((): AnyPgColumn => agentBrandEntities.id, {
+		onDelete: "cascade",
+	}),
+	entityType: text("entity_type").$type<"umbrella" | "product">().notNull(),
+	name: text("name").notNull(),
+	websiteUrl: text("website_url"),
+	maasyProjectId: text("maasy_project_id"),
+	isPrimary: boolean("is_primary").default(false).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true })
+		.defaultNow()
+		.$onUpdate(() => new Date())
+		.notNull(),
+});
+
+export const agentAosAudits = pgTable("agent_aos_audits", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	brandId: text("brand_id")
+		.references(() => brands.id, { onDelete: "cascade" })
+		.notNull(),
+	entityId: uuid("entity_id").references(() => agentBrandEntities.id, { onDelete: "cascade" }),
+	url: text("url").notNull(),
+	score: integer("score"),
+	band: text("band"),
+	businessType: text("business_type"),
+	standards: json("standards"),
+	probes: json("probes"),
+	requirements: json("requirements"),
+	/** Spec APS from the served Claims & Proofs layer. Null when no usable brand.json was served. */
+	apsScore: integer("aps_score"),
+	apsBreakdown: json("aps_breakdown"),
+	/** Scoring algorithm version, so a formula change never mixes incomparable history. */
+	scoringVersion: text("scoring_version"),
+	error: text("error"),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const agentBrandDnaSnapshots = pgTable("agent_brand_dna_snapshots", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	brandId: text("brand_id")
+		.references(() => brands.id, { onDelete: "cascade" })
+		.notNull(),
+	entityId: uuid("entity_id")
+		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+		.notNull(),
+	maasyProjectId: text("maasy_project_id").notNull(),
+	source: text("source").default("maasy-mcp").notNull(),
+	payload: json("payload").notNull(),
+	hash: text("hash").notNull(),
+	syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const agentAssets = pgTable("agent_assets", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	brandId: text("brand_id")
+		.references(() => brands.id, { onDelete: "cascade" })
+		.notNull(),
+	entityId: uuid("entity_id")
+		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+		.notNull(),
+	path: text("path").notNull(),
+	type: text("type").notNull(),
+	content: text("content").notNull(),
+	hash: text("hash").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type AgentBrandEntity = typeof agentBrandEntities.$inferSelect;
+export type NewAgentBrandEntity = typeof agentBrandEntities.$inferInsert;
+export type AgentAosAudit = typeof agentAosAudits.$inferSelect;
+export type NewAgentAosAudit = typeof agentAosAudits.$inferInsert;
+export type AgentBrandDnaSnapshot = typeof agentBrandDnaSnapshots.$inferSelect;
+export type NewAgentBrandDnaSnapshot = typeof agentBrandDnaSnapshots.$inferInsert;
+export type AgentAsset = typeof agentAssets.$inferSelect;
+export type NewAgentAsset = typeof agentAssets.$inferInsert;
