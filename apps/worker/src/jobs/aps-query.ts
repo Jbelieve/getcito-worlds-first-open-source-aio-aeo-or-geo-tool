@@ -16,9 +16,11 @@ import { agentApsObservations, agentApsPrompts, agentApsRuns } from "@workspace/
 import {
 	type MeasurementTargetConfig,
 	type ProviderInvoker,
+	callTimeoutsFromEnv,
 	captureRun,
 	fanOut,
 	queryTargetsFrom,
+	withCallTimeouts,
 } from "@workspace/aos-aps/aps";
 
 export interface ApsQueryData {
@@ -71,7 +73,10 @@ export async function apsQueryJob(
 	}
 
 	const configured = parseScrapeTargets(process.env.SCRAPE_TARGETS);
-	const selected = selectTargetsForBrand(configured, run.models);
+	// A scraper that polls an async snapshot needs minutes; a chat API needs seconds. One ceiling
+	// cannot fit both, so a model can declare its own (APS_CALL_TIMEOUTS).
+	const ceilings = callTimeoutsFromEnv();
+	const selected = withCallTimeouts(selectTargetsForBrand(configured, run.models), ceilings);
 	const invoke: ProviderInvoker =
 		deps.invoke ??
 		(async (config, prompt) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type MeasurementTargetConfig, measurableModels, queryTargetsFrom } from "./targets";
+import { type MeasurementTargetConfig, callTimeoutsFromEnv, measurableModels, queryTargetsFrom, withCallTimeouts } from "./targets";
 
 function config(overrides: Partial<MeasurementTargetConfig> = {}): MeasurementTargetConfig {
 	return { model: "chatgpt", provider: "openai-api", version: "gpt-5.5", webSearch: true, ...overrides };
@@ -49,5 +49,38 @@ describe("measurableModels", () => {
 				config({ model: "perplexity" }),
 			]),
 		).toEqual(["chatgpt", "claude", "perplexity"]);
+	});
+});
+
+describe("callTimeoutsFromEnv", () => {
+	it("lee los techos por modelo", () => {
+		expect(callTimeoutsFromEnv({ APS_CALL_TIMEOUTS: "perplexity=600000,google-ai-mode=330000" })).toEqual({
+			perplexity: 600_000,
+			"google-ai-mode": 330_000,
+		});
+	});
+
+	it("sin la variable no hay techos: cada modelo usa el de la corrida", () => {
+		expect(callTimeoutsFromEnv({})).toEqual({});
+		expect(callTimeoutsFromEnv({ APS_CALL_TIMEOUTS: "   " })).toEqual({});
+	});
+
+	it("ignora entradas rotas en vez de tumbar la corrida", () => {
+		expect(callTimeoutsFromEnv({ APS_CALL_TIMEOUTS: "perplexity=,=5000,roto=abc,solouno,chico=12" })).toEqual({});
+	});
+});
+
+describe("withCallTimeouts", () => {
+	it("aplica el techo solo al modelo que lo tiene", () => {
+		const configs = [{ model: "perplexity" }, { model: "chatgpt" }];
+		expect(withCallTimeouts(configs, { perplexity: 600_000 })).toEqual([
+			{ model: "perplexity", timeoutMs: 600_000 },
+			{ model: "chatgpt" },
+		]);
+	});
+
+	it("sin techos devuelve lo mismo, sin campos de mas", () => {
+		const configs = [{ model: "chatgpt" }];
+		expect(withCallTimeouts(configs, {})).toEqual([{ model: "chatgpt" }]);
 	});
 });

@@ -286,6 +286,18 @@ disabled={start.isPending || entityId.length === 0 || estimateData?.status !== "
 ? "sin total en dólares"
 : `≈ USD ${estimateData.estimate.totalUsd}`}
 </p>
+{/* Los nombres, no solo la cantidad: la lista sale de SCRAPE_TARGETS y puede venir mas corta
+    de lo que uno espera. Ver el modelo que falta antes de confirmar es la diferencia entre
+    una corrida completa y una que despues hay que rehacer. */}
+<p className="text-muted-foreground">
+Modelos: <span className="font-mono text-foreground">{estimateData.models.join(", ") || "ninguno"}</span>
+</p>
+{estimateData.estimate !== null && estimateData.estimate.missingPrices.length > 0 && (
+<p className={BLOCKING_TEXT}>
+Sin precio para <span className="font-mono">{estimateData.estimate.missingPrices.join(", ")}</span>: un modelo sin
+precio bloquea la corrida en vez de gastar a ciegas.
+</p>
+)}
 <p className="text-muted-foreground">
 AOS usado como capacidad de acción: {estimateData.capacidadAccion ?? "sin auditoría"} · biblioteca v
 {estimateData.libraryVersion ?? "—"}
