@@ -83,6 +83,11 @@ export function AppSidebar({
 				url: "/agent-assets",
 				icon: IconFileDescription,
 			},
+			{
+				title: "Agent Preference",
+				url: "/agent-preference",
+				icon: IconGauge,
+			},
 		];
 
 		// Only show Visibility and Citations if the brand is onboarded

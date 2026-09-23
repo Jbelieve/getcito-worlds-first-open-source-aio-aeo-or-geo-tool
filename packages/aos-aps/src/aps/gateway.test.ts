@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { GATEWAY_JUDGE_PIPELINE_VERSION, extractJsonObject, gatewayJudge } from "./gateway";
+import {
+	GATEWAY_JUDGE_PIPELINE_VERSION,
+	extractJsonObject,
+	gatewayJudge,
+	generateLibraryWithGateway,
+} from "./gateway";
 
 const CONFIG = { url: "https://gateway.test/v1", key: "gw-key", model: "believe-deep", version: "deepseek-flash-4.1" };
 
@@ -95,5 +100,71 @@ describe("gatewayJudge", () => {
 			response: "r",
 		});
 		expect(url).toBe("https://gateway.test/v1/chat/completions");
+	});
+});
+
+describe("generateLibraryWithGateway", () => {
+	const libraryConfig = {
+		url: "https://gateway.test/v1",
+		key: "gw-key",
+		model: "believe-smart",
+		version: "deepseek-flash-4.1",
+	};
+
+	function libraryResponse(prompts: unknown[]): Response {
+		return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ prompts }) } }] }), {
+			status: 200,
+			headers: { "content-type": "application/json" },
+		});
+	}
+
+	it("asks for the target mix without letting the brand into the prompts", async () => {
+		const captured: { body?: string } = {};
+		const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+			captured.body = String(init?.body);
+			return libraryResponse([{ text: "mejor opcion de la categoria", kind: "category", funnel_stage: "awareness" }]);
+		}) as unknown as typeof fetch;
+
+		const result = await generateLibraryWithGateway(
+			{ brandName: "Felix", industry: "bebidas", brief: "schorle artesanal" },
+			libraryConfig,
+			fetchImpl,
+		);
+		expect(result?.prompts).toEqual([
+			{ text: "mejor opcion de la categoria", kind: "category", funnelStage: "awareness" },
+		]);
+		expect(result?.rejected).toEqual([]);
+		expect(captured.body).toContain("50% comparison, 30% use_case, 20% category");
+		expect(captured.body).toContain("schorle artesanal");
+	});
+
+	it("accepts a camelCase funnel stage and drops invalid candidates", async () => {
+		const fetchImpl = (async () =>
+			libraryResponse([
+				{ text: "valido", kind: "comparison", funnelStage: "consideration" },
+				{ text: "tipo raro", kind: "otro", funnel_stage: "awareness" },
+				{ text: "embudo raro", kind: "category", funnel_stage: "otro" },
+				{ text: "   ", kind: "category", funnel_stage: "awareness" },
+			])) as unknown as typeof fetch;
+
+		const result = await generateLibraryWithGateway({ brandName: "Felix" }, libraryConfig, fetchImpl);
+		expect(result?.prompts).toHaveLength(1);
+		expect(result?.prompts[0]?.text).toBe("valido");
+		expect(result?.rejected).toHaveLength(3);
+	});
+
+	it("returns null instead of half a library", async () => {
+		const empty = (async () => libraryResponse([])) as unknown as typeof fetch;
+		expect(await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, empty)).toBeNull();
+
+		const broken = (async () =>
+			new Response(JSON.stringify({ choices: [{ message: { content: "no es json" } }] }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			})) as unknown as typeof fetch;
+		expect(await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, broken)).toBeNull();
+
+		const failing = (async () => new Response("boom", { status: 500 })) as unknown as typeof fetch;
+		expect(await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, failing)).toBeNull();
 	});
 });
