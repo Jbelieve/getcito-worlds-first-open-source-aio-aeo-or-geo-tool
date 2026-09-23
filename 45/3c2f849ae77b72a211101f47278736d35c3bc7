@@ -1,0 +1,40 @@
+packages/aos-aps/package.json
+  h_c5ca005a78c880 13
+packages/aos-aps/src/aps/index.ts
+  h_c5ca005a78c880 1-11
+packages/aos-aps/src/aps/library.test.ts
+  h_c5ca005a78c880 1-127
+packages/aos-aps/src/aps/library.ts
+  h_c5ca005a78c880 1-174
+packages/aos-aps/src/aps/robustness.test.ts
+  h_c5ca005a78c880 1-90
+packages/aos-aps/src/aps/robustness.ts
+  h_c5ca005a78c880 1-113
+packages/aos-aps/src/aps/runPlan.test.ts
+  h_c5ca005a78c880 1-142
+packages/aos-aps/src/aps/runPlan.ts
+  h_c5ca005a78c880 1-150
+packages/aos-aps/src/db/schema.ts
+  h_c5ca005a78c880 83-226
+packages/aos-aps/src/index.ts
+  h_c5ca005a78c880 6
+packages/aos-aps/src/preference/measurement.ts
+  h_c5ca005a78c880 22-27
+packages/lib/src/db/migrations/0019_pink_wind_dancer.sql
+  h_c5ca005a78c880 1-102
+packages/lib/src/db/migrations/meta/0019_snapshot.json
+  h_c5ca005a78c880 1-3009
+packages/lib/src/db/migrations/meta/_journal.json
+  h_c5ca005a78c880 137-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "453c2f849ae77b72a211101f47278736d35c3bc7",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
