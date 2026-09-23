@@ -111,6 +111,12 @@ Así que la regla es mecánica y no admite criterio propio:
   cada merge del upstream. Son 67 archivos (citations, prompts, admin, y la visibilidad del tablero).
 - **La paleta de Believe aplica solo a las superficies nuestras**, las de AOS/APS: `status-tone.tsx`,
   `aos-visual.tsx`, `aps-visual.tsx`, `agent-score-cards.tsx` y las cuatro rutas `agent-*.tsx`.
+- **Excepción: arreglos de bug que el upstream no acepta (todavía).** El 2026-09-23 se llevó a master el
+  arreglo del idioma del PR #58 (commit `895216a`, marcado `PARCHE LOCAL` en el mensaje) porque el
+  upstream está dormido y sin él el contenido generado vuelve a inglés cada 6 días. La diferencia con
+  *restylear* es concreta: esto es un bug con PR abierto y tests, no un cambio de gusto, y es **un commit
+  aislado** que se revierte con `git revert`. Regla: **arreglos sí, con marca y con PR arriba; estética
+  no, nunca.**
 - **En los archivos mixtos, aditivo y nada más.** El tablero (`$brand/index.tsx`) es de Getcito: le
   agregamos `<AgentScoreCards />` y su import, y **cero cambios** a su código (los tres helpers
   `getVisibility*Color` se revirtieron a la versión del upstream, byte a byte). Si hay que tocar un
@@ -399,6 +405,8 @@ rotarlo cuando se pueda.
 | 6 | **Rotación de la llave de firma** | Ver §6. |
 | 7 | **Reputación en IA (ver §8)** | ScamAdviser marca el dominio con "caution recommended" y no hay reseñas independientes: es lo que los asistentes citan al recomendar la marca. |
 | 8 | **Alias del fundador** | El sitio dice "Jorge Beltrán Liévano" y el brandbook "George Beltrán": cargar los dos como alias de entidad. |
+| 13 | **Borrar el parche del idioma** | `git revert 895216a` cuando mergee el PR #58 del upstream. Hasta entonces, el contenido generado sale en el idioma del brand. |
+| 14 | **Perplexity: escalar a BrightData** | Evidencia lista en §4 (8 snapshots en `running`/`canceled`, ninguno `ready`; google-ai-mode 104/104). Falta redactar el ticket. |
 | 9 | ~~`schedule-maintenance` encola de más~~ **RETIRADO: era falso** | **Me equivoqué.** La ola legítima del barrido fue **32 jobs creados a las 06:00:23, uno por prompt**, sin duplicados. Los 32 que cancelé eran **los reintentos que `process-prompt` se agenda a sí mismo con backoff** ante un modelo que falla. El chequeo de `schedule-maintenance` está **correcto**: cuando hay un job `created` lo *expedita*, no crea otro. Lo que sí queda mal es haberlos cancelado sin verificar. |
 | 10 | ~~El plan de APS no muestra qué modelos va a usar~~ | **ARREGLADO**: el estimador ahora lista **los nombres** (no solo la cantidad) antes de confirmar, avisa si falta el precio de alguno, y el historial de la corrida muestra los modelos que planificó. |
 | 11 | ~~El timeout por llamada no acota a BrightData~~ | **ARREGLADO, y era distinto de lo que dije.** El timeout **sí** regía (90s); lo que pasaba es que el *provider* seguía trabajando en segundo plano y registraba su propio fallo 520s después. El bug real era la **desincronización entre las dos capas**: BrightData hace polling de un snapshot hasta 520s y la captura lo abandonaba a los 90s, así que un snapshot sano **no podía ganar nunca**. Ahora cada modelo puede declarar su techo (`APS_CALL_TIMEOUTS`), y además la captura pasó de lotes fijos con barrera a un pool de carriles. |
