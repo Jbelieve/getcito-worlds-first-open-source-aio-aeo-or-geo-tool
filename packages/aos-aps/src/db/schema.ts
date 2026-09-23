@@ -80,6 +80,150 @@ export const agentAssets = pgTable("agent_assets", {
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * APS Fase 4 — the measuring instrument. Locked for 90 days: while a library is locked its prompts
+ * must not change, because the time series is only comparable over the same prompt.
+ */
+export const agentApsPromptLibraries = pgTable("agent_aps_prompt_libraries", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	brandId: text("brand_id")
+		.references(() => brands.id, { onDelete: "cascade" })
+		.notNull(),
+	entityId: uuid("entity_id")
+		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+		.notNull(),
+	version: integer("version").notNull(),
+	status: text("status").$type<"active" | "superseded">().default("active").notNull(),
+	lockedAt: timestamp("locked_at", { withTimezone: true }).defaultNow().notNull(),
+	unlocksAt: timestamp("unlocks_at", { withTimezone: true }).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const agentApsPrompts = pgTable("agent_aps_prompts", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	libraryId: uuid("library_id")
+		.references(() => agentApsPromptLibraries.id, { onDelete: "cascade" })
+		.notNull(),
+	/** Unaided: validated to not name the brand before it is persisted. */
+	text: text("text").notNull(),
+	kind: text("kind").$type<"comparison" | "use_case" | "category">().notNull(),
+	funnelStage: text("funnel_stage").$type<"awareness" | "consideration" | "decision">().notNull(),
+	enabled: boolean("enabled").default(true).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * One measurement run. Versions are fixed per run, never per observation: a judge or formula change
+ * starts a new comparable series instead of silently mixing history.
+ */
+export const agentApsRuns = pgTable("agent_aps_runs", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	brandId: text("brand_id")
+		.references(() => brands.id, { onDelete: "cascade" })
+		.notNull(),
+	entityId: uuid("entity_id")
+		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+		.notNull(),
+	libraryId: uuid("library_id")
+		.references(() => agentApsPromptLibraries.id, { onDelete: "cascade" })
+		.notNull(),
+	status: text("status")
+		.$type<"planned" | "capturing" | "parsing" | "scoring" | "done" | "failed" | "budget_exceeded">()
+		.default("planned")
+		.notNull(),
+	models: text("models").array().notNull(),
+	requestedRepetitions: integer("requested_repetitions").notNull(),
+	effectiveRepetitions: integer("effective_repetitions").notNull(),
+	/** A reduced run is a partial measurement and must be presented as such. */
+	repetitionsReduced: boolean("repetitions_reduced").default(false).notNull(),
+	plannedCalls: integer("planned_calls").notNull(),
+	completedCalls: integer("completed_calls").default(0).notNull(),
+	/** AOS score feeding the capacidad_accion dimension. */
+	capacidadAccion: integer("capacidad_accion"),
+	estimation: json("estimation"),
+	budgetReasons: json("budget_reasons"),
+	scoringVersion: text("scoring_version").notNull(),
+	measurementVersion: text("measurement_version").notNull(),
+	judgeModelAlias: text("judge_model_alias").notNull(),
+	judgeModelVersion: text("judge_model_version").notNull(),
+	judgePipelineVersion: text("judge_pipeline_version").notNull(),
+	promptLibraryVersion: integer("prompt_library_version").notNull(),
+	error: text("error"),
+	startedAt: timestamp("started_at", { withTimezone: true }),
+	finishedAt: timestamp("finished_at", { withTimezone: true }),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Fase 0 capture then Fase 1 analysis, kept in one row on purpose: the raw answer is stored once and
+ * re-analysed in place, so a formula change never pays for the queries again.
+ */
+export const agentApsObservations = pgTable("agent_aps_observations", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	runId: uuid("run_id")
+		.references(() => agentApsRuns.id, { onDelete: "cascade" })
+		.notNull(),
+	promptId: uuid("prompt_id")
+		.references(() => agentApsPrompts.id, { onDelete: "cascade" })
+		.notNull(),
+	model: text("model").notNull(),
+	runIndex: integer("run_index").notNull(),
+	promptText: text("prompt_text").notNull(),
+	fullResponse: text("full_response"),
+	appeared: boolean("appeared"),
+	recommended: boolean("recommended"),
+	position: integer("position"),
+	sentiment0to100: integer("sentiment_0_100"),
+	/** Judge claim. The robustness audit corrects it against the raw text. */
+	grounded: boolean("grounded"),
+	/** Independent check: does the raw text carry a citable source? */
+	sourceVerified: boolean("source_verified"),
+	injectionFlags: json("injection_flags"),
+	competitorsMentioned: json("competitors_mentioned"),
+	judgeModelAlias: text("judge_model_alias"),
+	judgeModelVersion: text("judge_model_version"),
+	analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** One row per model: a denominator never mixes models. */
+export const agentApsScores = pgTable("agent_aps_scores", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	runId: uuid("run_id")
+		.references(() => agentApsRuns.id, { onDelete: "cascade" })
+		.notNull(),
+	entityId: uuid("entity_id")
+		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+		.notNull(),
+	model: text("model").notNull(),
+	aps: integer("aps").notNull(),
+	band: text("band").notNull(),
+	subMetrics: json("sub_metrics").notNull(),
+	dimensions: json("dimensions").notNull(),
+	p10: integer("p10"),
+	p50: integer("p50"),
+	p90: integer("p90"),
+	recommendationProbability: integer("recommendation_probability"),
+	observations: integer("observations").notNull(),
+	scoringVersion: text("scoring_version").notNull(),
+	measurementVersion: text("measurement_version").notNull(),
+	judgeModelAlias: text("judge_model_alias").notNull(),
+	judgeModelVersion: text("judge_model_version").notNull(),
+	promptLibraryVersion: integer("prompt_library_version").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type AgentApsPromptLibrary = typeof agentApsPromptLibraries.$inferSelect;
+export type NewAgentApsPromptLibrary = typeof agentApsPromptLibraries.$inferInsert;
+export type AgentApsPrompt = typeof agentApsPrompts.$inferSelect;
+export type NewAgentApsPrompt = typeof agentApsPrompts.$inferInsert;
+export type AgentApsRun = typeof agentApsRuns.$inferSelect;
+export type NewAgentApsRun = typeof agentApsRuns.$inferInsert;
+export type AgentApsObservation = typeof agentApsObservations.$inferSelect;
+export type NewAgentApsObservation = typeof agentApsObservations.$inferInsert;
+export type AgentApsScore = typeof agentApsScores.$inferSelect;
+export type NewAgentApsScore = typeof agentApsScores.$inferInsert;
+
 export type AgentBrandEntity = typeof agentBrandEntities.$inferSelect;
 export type NewAgentBrandEntity = typeof agentBrandEntities.$inferInsert;
 export type AgentAosAudit = typeof agentAosAudits.$inferSelect;
