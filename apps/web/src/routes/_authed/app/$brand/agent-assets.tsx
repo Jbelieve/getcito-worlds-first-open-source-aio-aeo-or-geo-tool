@@ -5,7 +5,7 @@ import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { useBrand } from "@/hooks/use-brands";
 import { listAgentEntitiesFn } from "@/server/agent-maasy";
-import { generateAgentAssetsFn, getAgentAssetsFn } from "@/server/agent-assets";
+import { generateAgentAssetsFn, getAgentAssetsFn, setAgentEntityPublishedFn } from "@/server/agent-assets";
 
 export const Route = createFileRoute("/_authed/app/$brand/agent-assets")({
 component: AgentAssetsPage,
@@ -46,6 +46,22 @@ await assets.refetch();
 },
 onError: (mutationError) => {
 setError(mutationError instanceof Error ? mutationError.message : "No se pudieron generar los assets");
+},
+});
+
+const selected = (entities.data ?? []).find((entity) => entity.id === entityId);
+
+const togglePublished = useMutation({
+mutationFn: async () => {
+if (brandId === undefined || selected === undefined) throw new Error("Selecciona una entidad");
+return setAgentEntityPublishedFn({ data: { brandId, entityId, published: selected.isPublished === false } });
+},
+onSuccess: async () => {
+setError(null);
+await entities.refetch();
+},
+onError: (mutationError) => {
+setError(mutationError instanceof Error ? mutationError.message : "No se pudo cambiar la publicación");
 },
 });
 
@@ -91,6 +107,33 @@ onChange={(event) => setEntityId(event.target.value)}
 </Button>
 </div>
 {error && <p className="text-sm text-red-600">{error}</p>}
+</CardContent>
+</Card>
+
+<Card>
+<CardHeader>
+<CardTitle>Publicación</CardTitle>
+<CardDescription>
+Cerrado por defecto: nada se entrega a un agente hasta que lo publiques. Un perfil sin publicar
+no se sirve, y uno firmado con la llave equivocada tampoco debería publicarse.
+</CardDescription>
+</CardHeader>
+<CardContent className="flex items-center justify-between gap-3">
+<span className="text-sm">
+{selected === undefined
+? "Selecciona una entidad"
+: selected.isPublished
+? `Publicado${selected.publishedAt ? ` el ${selected.publishedAt.slice(0, 10)}` : ""}`
+: "Sin publicar"}
+</span>
+<Button
+size="sm"
+variant={selected?.isPublished ? "outline" : "default"}
+onClick={() => togglePublished.mutate()}
+disabled={selected === undefined || togglePublished.isPending}
+>
+{selected?.isPublished ? "Despublicar" : "Publicar"}
+</Button>
 </CardContent>
 </Card>
 

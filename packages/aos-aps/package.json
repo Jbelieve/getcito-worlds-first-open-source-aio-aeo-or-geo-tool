@@ -11,6 +11,7 @@
 		"./provenance": "./src/provenance/index.ts",
 		"./preference": "./src/preference/index.ts",
 		"./worker": "./src/worker/index.ts",
+		"./server": "./src/server/index.ts",
 		"./db/schema": "./src/db/schema.ts"
 	},
 	"scripts": {

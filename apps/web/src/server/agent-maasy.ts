@@ -29,7 +29,12 @@ const rows = await db
 .from(agentBrandEntities)
 .where(eq(agentBrandEntities.brandId, data.brandId))
 .orderBy(desc(agentBrandEntities.isPrimary), desc(agentBrandEntities.createdAt));
-return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }));
+return rows.map((row) => ({
+...row,
+createdAt: row.createdAt.toISOString(),
+updatedAt: row.updatedAt.toISOString(),
+publishedAt: row.publishedAt?.toISOString() ?? null,
+}));
 });
 
 export const linkMaasyProjectFn = createServerFn({ method: "POST" })

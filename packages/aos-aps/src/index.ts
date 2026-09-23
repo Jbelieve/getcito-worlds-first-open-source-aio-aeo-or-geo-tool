@@ -4,4 +4,5 @@ export * from "./assets";
 export * from "./provenance";
 export * from "./preference";
 export * from "./worker";
+export * from "./server";
 export * from "./db/schema";
