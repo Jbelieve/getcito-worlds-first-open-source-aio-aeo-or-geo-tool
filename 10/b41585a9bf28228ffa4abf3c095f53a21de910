@@ -1,0 +1,24 @@
+apps/web/src/routeTree.gen.ts
+  h_c5ca005a78c880 45,60,233-238,320-325,394,413,446,465,504,523,562,581,614,633,671,690,707,955-961,1060-1066,1224-1237,1259
+apps/web/src/routes/api/v1/agent-assets/$entityId.ts
+  h_c5ca005a78c880 1-32
+apps/web/src/routes/api/v1/agent-assets/$entityId/raw.ts
+  h_c5ca005a78c880 1-43
+apps/web/src/server/agent-bundle.ts
+  h_c5ca005a78c880 1-40
+packages/aos-aps/src/server/bundle.test.ts
+  h_c5ca005a78c880 29-38,73,81-83,85,91-93,95,100-101,104,109,116
+packages/aos-aps/src/server/bundle.ts
+  h_c5ca005a78c880 35-36,39-40,78-127,133,145,150-152,156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "10b41585a9bf28228ffa4abf3c095f53a21de910",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
