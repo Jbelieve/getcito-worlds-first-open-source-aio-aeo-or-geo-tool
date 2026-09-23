@@ -38,14 +38,38 @@ export interface CaptureReport {
 export interface CaptureOptions {
 	/** Parallel queries in flight. Kept low so a run does not hammer a provider. */
 	concurrency?: number;
+	/**
+	 * Ceiling for a single query. Without it one hung provider call stalls the whole batch and the
+	 * capture never finishes: measured in production, a stuck BrightData call froze a run for
+	 * fifteen minutes with three of the four models already answered.
+	 */
+	timeoutMs?: number;
 }
 
 const DEFAULT_CONCURRENCY = 4;
+export const DEFAULT_CALL_TIMEOUT_MS = 90_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error(`${label}: sin respuesta en ${ms}ms`)), ms);
+		promise.then(
+			(value) => {
+				clearTimeout(timer);
+				resolve(value);
+			},
+			(error) => {
+				clearTimeout(timer);
+				reject(error);
+			},
+		);
+	});
+}
 
 async function queryOne(
 	job: ApsQueryJob,
 	targets: Map<string, QueryTarget>,
 	failures: CaptureFailure[],
+	timeoutMs: number,
 ): Promise<string> {
 	const target = targets.get(job.model);
 	if (target === undefined) {
@@ -53,7 +77,7 @@ async function queryOne(
 		return "";
 	}
 	try {
-		const response = await target.query(job.promptText);
+		const response = await withTimeout(target.query(job.promptText), timeoutMs, job.model);
 		return typeof response === "string" ? response : "";
 	} catch (error) {
 		failures.push({ job, reason: error instanceof Error ? error.message : String(error) });
@@ -71,13 +95,14 @@ export async function captureRun(
 	options: CaptureOptions = {},
 ): Promise<CaptureReport> {
 	const concurrency = Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY);
+	const timeoutMs = Math.max(1000, options.timeoutMs ?? DEFAULT_CALL_TIMEOUT_MS);
 	const index = new Map(targets.map((target) => [target.target, target]));
 	const failures: CaptureFailure[] = [];
 	const responses: string[] = new Array(jobs.length).fill("");
 
 	for (let start = 0; start < jobs.length; start += concurrency) {
 		const batch = jobs.slice(start, start + concurrency);
-		const batchResponses = await Promise.all(batch.map((job) => queryOne(job, index, failures)));
+		const batchResponses = await Promise.all(batch.map((job) => queryOne(job, index, failures, timeoutMs)));
 		for (const [offset, response] of batchResponses.entries()) {
 			responses[start + offset] = response;
 		}
