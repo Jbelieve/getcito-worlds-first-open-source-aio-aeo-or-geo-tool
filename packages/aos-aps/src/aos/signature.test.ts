@@ -1,30 +1,25 @@
 import { createServer, type Server } from "node:http";
 import { generateKeyPairSync } from "node:crypto";
 import type { AddressInfo } from "node:net";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { generateAgentAssets } from "../assets";
+import type { SigningKey } from "../provenance";
 import { verifyBrandSignature, verifyBrandSignatureDetailed } from "./signature";
 
-const originalKey = process.env.BELIEVE_SIGNING_KEY_ED25519;
-
-beforeEach(() => {
-	const { privateKey } = generateKeyPairSync("ed25519");
-	process.env.BELIEVE_SIGNING_KEY_ED25519 = (privateKey.export({ format: "der", type: "pkcs8" }) as Buffer).toString(
-		"base64",
-	);
-});
-
-afterEach(() => {
-	if (originalKey === undefined) delete process.env.BELIEVE_SIGNING_KEY_ED25519;
-	else process.env.BELIEVE_SIGNING_KEY_ED25519 = originalKey;
-});
-
 /** A bundle as it would be published at the well-known paths. */
-function bundle(): Record<string, string> {
-	const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com" });
+function bundle(signing: SigningKey): Record<string, string> {
+	const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", signing });
 	const files: Record<string, string> = {};
 	for (const asset of assets) files[asset.path] = asset.content;
 	return files;
+}
+
+function newSigningKey(): SigningKey {
+	const { privateKey } = generateKeyPairSync("ed25519");
+	return {
+		keyId: "believe-2026-primary",
+		material: (privateKey.export({ format: "der", type: "pkcs8" }) as Buffer).toString("base64"),
+	};
 }
 
 async function serve(files: Record<string, string>): Promise<{ base: URL; close: () => Promise<void> }> {
@@ -49,7 +44,7 @@ async function serve(files: Record<string, string>): Promise<{ base: URL; close:
 
 describe("verifyBrandSignatureDetailed", () => {
 	it("verifies the detached signature an agent would fetch", async () => {
-		const { base, close } = await serve(bundle());
+		const { base, close } = await serve(bundle(newSigningKey()));
 		try {
 			const result = await verifyBrandSignatureDetailed(base, 2000);
 			expect(result.valid).toBe(true);
@@ -62,7 +57,7 @@ describe("verifyBrandSignatureDetailed", () => {
 	});
 
 	it("rejects bytes that were changed after signing", async () => {
-		const files = bundle();
+		const files = bundle(newSigningKey());
 		files["/.well-known/brand.json"] = `${files["/.well-known/brand.json"]} `;
 		const { base, close } = await serve(files);
 		try {
@@ -75,7 +70,7 @@ describe("verifyBrandSignatureDetailed", () => {
 	});
 
 	it("never falls back to a key whose kid does not match", async () => {
-		const files = bundle();
+		const files = bundle(newSigningKey());
 		const keys = JSON.parse(files["/.well-known/keys.json"]);
 		keys.keys[0].kid = "0000000000000000";
 		files["/.well-known/keys.json"] = JSON.stringify(keys);
@@ -90,7 +85,7 @@ describe("verifyBrandSignatureDetailed", () => {
 	});
 
 	it("reports missing provenance documents", async () => {
-		const files = bundle();
+		const files = bundle(newSigningKey());
 		delete files["/.well-known/brand.json.sig"];
 		const { base, close } = await serve(files);
 		try {
@@ -99,7 +94,7 @@ describe("verifyBrandSignatureDetailed", () => {
 			await close();
 		}
 
-		const withoutBrand = bundle();
+		const withoutBrand = bundle(newSigningKey());
 		delete withoutBrand["/.well-known/brand.json"];
 		withoutBrand["/x"] = "";
 		const second = await serve(withoutBrand);
