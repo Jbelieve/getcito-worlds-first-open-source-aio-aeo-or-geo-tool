@@ -311,6 +311,9 @@ v{run.promptLibraryVersion} · {run.judgeModelAlias}@{run.judgeModelVersion} · 
 {run.repetitionsReduced && (
 <p className="text-xs text-amber-600">Medición parcial: se redujeron las repeticiones para entrar en el presupuesto.</p>
 )}
+{run.partial && run.partialReason && (
+<p className="text-xs text-amber-600">Medición parcial: {run.partialReason} El score es de la muestra, no del total planificado.</p>
+)}
 {run.error && <p className="text-xs text-red-600">{run.error}</p>}
 {run.scores.length > 0 && (
 <ul className="space-y-1 text-xs">

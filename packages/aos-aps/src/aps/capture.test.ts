@@ -85,3 +85,22 @@ describe("captureRun", () => {
 		expect(report).toEqual({ answers: [], summary: { attempted: 0, observations: 0, empty: 0 }, failures: [] });
 	});
 });
+
+describe("captureRun timeouts", () => {
+	it("turns a hung provider into a failure instead of stalling the whole run", async () => {
+		const hung: QueryTarget = { target: "perplexity", query: () => new Promise(() => {}) };
+		const report = await captureRun(fanOut(["p1"], ["perplexity"], 1), [hung], { timeoutMs: 1000 });
+		expect(report.answers).toEqual([]);
+		expect(report.summary).toEqual({ attempted: 1, observations: 0, empty: 1 });
+		expect(report.failures[0]?.reason).toContain("sin respuesta en 1000ms");
+	});
+
+	it("keeps the answers that did arrive when another model hangs", async () => {
+		const ok = target("chatgpt", () => "respuesta buena");
+		const hung: QueryTarget = { target: "perplexity", query: () => new Promise(() => {}) };
+		const report = await captureRun(fanOut(["p1"], ["chatgpt", "perplexity"], 1), [ok, hung], { timeoutMs: 1000 });
+		expect(report.answers).toHaveLength(1);
+		expect(report.summary).toEqual({ attempted: 2, observations: 1, empty: 1 });
+		expect(report.failures).toHaveLength(1);
+	});
+});

@@ -235,6 +235,8 @@ export const getApsRunsFn = createServerFn({ method: "POST" })
 			plannedCalls: run.plannedCalls,
 			completedCalls: run.completedCalls,
 			repetitionsReduced: run.repetitionsReduced,
+			partial: run.partial,
+			partialReason: run.partialReason,
 			capacidadAccion: run.capacidadAccion,
 			judgeModelAlias: run.judgeModelAlias,
 			judgeModelVersion: run.judgeModelVersion,

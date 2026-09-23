@@ -50,12 +50,19 @@ export async function apsScoreJob(jobs: Job<ApsScoreData>[]): Promise<ApsScoreRe
 	const quarantined = analyzed.filter((row) => isQuarantined(row.injectionFlags));
 	const scoreable = analyzed.filter((row) => isQuarantined(row.injectionFlags) === false);
 
-	if (scoreable.length < run.plannedCalls) {
-		const reason = `Corrida incompleta: ${scoreable.length} de ${run.plannedCalls} respuestas puntuables. No se persiste un score parcial.`;
+	if (scoreable.length === 0) {
+		const reason = `Corrida sin respuestas puntuables: 0 de ${run.plannedCalls}.`;
 		await db.update(agentApsRuns).set({ status: "failed", error: reason, finishedAt: new Date() }).where(eq(agentApsRuns.id, runId));
 		console.error(`[aps-score] run ${runId}: ${reason}`);
 		return { ok: false, reason };
 	}
+
+	// Fewer answers than planned still scores: the calls were paid for, and refusing would throw
+	// them away. What it never does is pass for a complete measurement — the gap travels with it.
+	const partial = scoreable.length < run.plannedCalls;
+	const partialReason = partial
+		? `${scoreable.length} de ${run.plannedCalls} respuestas puntuables${quarantined.length > 0 ? ` (${quarantined.length} en cuarentena por inyección)` : ""}.`
+		: null;
 
 	const observations: ApsObservation[] = scoreable.map((row) => ({
 		model: row.model,
@@ -85,6 +92,7 @@ export async function apsScoreJob(jobs: Job<ApsScoreData>[]): Promise<ApsScoreRe
 			p90: score.p90,
 			recommendationProbability: score.recommendationProbability,
 			observations: score.observations,
+			partial,
 			scoringVersion: SCORING_VERSION,
 			measurementVersion: MEASUREMENT_VERSION,
 			judgeModelAlias: run.judgeModelAlias,
@@ -95,12 +103,12 @@ export async function apsScoreJob(jobs: Job<ApsScoreData>[]): Promise<ApsScoreRe
 
 	await db
 		.update(agentApsRuns)
-		.set({ status: "done", completedCalls: scoreable.length, finishedAt: new Date(), error: null })
+		.set({ status: "done", completedCalls: scoreable.length, finishedAt: new Date(), error: null, partial, partialReason })
 		.where(eq(agentApsRuns.id, runId));
 
 	const rollup = rollupAps(scores);
 	console.log(
-		`[aps-score] run ${runId}: ${scores.length} modelos, APS ${rollup?.aps ?? "n/a"} (${rollup?.band ?? "sin banda"}), ${quarantined.length} en cuarentena`,
+		`[aps-score] run ${runId}: ${scores.length} modelos, APS ${rollup?.aps ?? "n/a"} (${rollup?.band ?? "sin banda"})${partial ? ` — PARCIAL: ${partialReason}` : ""}`,
 	);
 
 	return { ok: true, models: scores.length, aps: rollup?.aps ?? null };

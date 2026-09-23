@@ -136,6 +136,12 @@ export const agentApsRuns = pgTable("agent_aps_runs", {
 	effectiveRepetitions: integer("effective_repetitions").notNull(),
 	/** A reduced run is a partial measurement and must be presented as such. */
 	repetitionsReduced: boolean("repetitions_reduced").default(false).notNull(),
+	/**
+	 * The run scored fewer answers than it planned. The score is still useful — the calls were paid
+	 * for — but it is never presented as a complete measurement.
+	 */
+	partial: boolean("partial").default(false).notNull(),
+	partialReason: text("partial_reason"),
 	plannedCalls: integer("planned_calls").notNull(),
 	completedCalls: integer("completed_calls").default(0).notNull(),
 	/** AOS score feeding the capacidad_accion dimension. */
@@ -205,6 +211,8 @@ export const agentApsScores = pgTable("agent_aps_scores", {
 	p90: integer("p90"),
 	recommendationProbability: integer("recommendation_probability"),
 	observations: integer("observations").notNull(),
+	/** This score came from a run that answered fewer prompts than it planned. */
+	partial: boolean("partial").default(false).notNull(),
 	scoringVersion: text("scoring_version").notNull(),
 	measurementVersion: text("measurement_version").notNull(),
 	judgeModelAlias: text("judge_model_alias").notNull(),
