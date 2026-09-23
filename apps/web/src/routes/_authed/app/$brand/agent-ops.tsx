@@ -113,6 +113,7 @@ Mide el AOS (operabilidad) y el APS (preferencia) del sitio: descubrimiento, ide
 <span>{requirement.status === "pass" ? "✅" : requirement.status === "n_a" ? "⬜" : "❌"}</span>
 <code className="font-mono text-xs">{requirement.id}</code>
 <span>{requirement.title}</span>
+{requirement.diagnostic ? <span className="text-xs text-muted-foreground">· diagnóstico</span> : null}
 </li>
 ))}
 </ul>
