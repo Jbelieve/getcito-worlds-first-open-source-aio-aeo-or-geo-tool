@@ -53,6 +53,21 @@ export async function getBoss(): Promise<PgBoss> {
 			retryBackoff: true,
 			expireInSeconds: 60 * 5,
 		});
+		// APS stages. The web only ever starts a run or a library; the worker chains the rest.
+		await boss.createQueue("aps-prompt-library", {
+			retryLimit: 1,
+			retryDelay: 30,
+			retryBackoff: false,
+			expireInSeconds: 60 * 5,
+		});
+		await boss.createQueue("aps-query", { retryLimit: 0, expireInSeconds: 60 * 60 });
+		await boss.createQueue("aps-parse", { retryLimit: 0, expireInSeconds: 60 * 30 });
+		await boss.createQueue("aps-score", {
+			retryLimit: 1,
+			retryDelay: 30,
+			retryBackoff: false,
+			expireInSeconds: 60 * 5,
+		});
 
 		bossInstance = boss;
 		return boss;

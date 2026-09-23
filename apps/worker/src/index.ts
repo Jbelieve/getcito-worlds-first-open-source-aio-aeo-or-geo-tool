@@ -65,6 +65,33 @@ async function main() {
 			retryBackoff: true,
 			expireInSeconds: 60 * 5,
 		},
+		// APS runs are on demand and chained. aps-query fans out to real models, so it gets a long
+		// timeout; the rest are database and judge work over answers that were already paid for.
+		// No retries on the two paid stages: a retry would re-spend money on the same call.
+		{
+			name: "aps-prompt-library",
+			retryLimit: 1,
+			retryDelay: 30,
+			retryBackoff: false,
+			expireInSeconds: 60 * 5,
+		},
+		{
+			name: "aps-query",
+			retryLimit: 0,
+			expireInSeconds: 60 * 60,
+		},
+		{
+			name: "aps-parse",
+			retryLimit: 0,
+			expireInSeconds: 60 * 30,
+		},
+		{
+			name: "aps-score",
+			retryLimit: 1,
+			retryDelay: 30,
+			retryBackoff: false,
+			expireInSeconds: 60 * 5,
+		},
 		{
 			name: "schedule-maintenance",
 			retryLimit: 3,

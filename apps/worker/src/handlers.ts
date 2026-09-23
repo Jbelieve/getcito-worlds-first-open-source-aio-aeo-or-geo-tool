@@ -7,6 +7,10 @@ import { scheduleMaintenanceJob, type ScheduleMaintenanceData } from "./jobs/sch
 import { syncAuth0MembershipsJob, type SyncAuth0MembershipsData } from "./jobs/sync-auth0-memberships";
 import { analyzeBrandJob, type AnalyzeBrandData } from "./jobs/analyze-brand";
 import { aosAuditJob, type AosAuditData } from "./jobs/aos-audit";
+import { apsPromptLibraryJob, type ApsPromptLibraryData } from "./jobs/aps-prompt-library";
+import { apsQueryJob, type ApsQueryData } from "./jobs/aps-query";
+import { apsParseJob, type ApsParseData } from "./jobs/aps-parse";
+import { apsScoreJob, type ApsScoreData } from "./jobs/aps-score";
 
 /**
  * Wraps a pg-boss handler to report errors to Sentry before re-throwing.
@@ -74,6 +78,36 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
 		withSentry("aos-audit", aosAuditJob),
 	);
 	console.log("Registered handler: aos-audit");
+
+	// The APS pipeline is a chain: each stage hands the next one the same run id, so a run never
+	// advances on its own without the previous stage having stored its output.
+	await boss.work<ApsPromptLibraryData>(
+		"aps-prompt-library",
+		{ localConcurrency: 1 },
+		withSentry("aps-prompt-library", apsPromptLibraryJob),
+	);
+	console.log("Registered handler: aps-prompt-library");
+
+	await boss.work<ApsQueryData>(
+		"aps-query",
+		{ localConcurrency: 1 },
+		withSentry("aps-query", (jobs) => apsQueryJob(jobs, boss)),
+	);
+	console.log("Registered handler: aps-query");
+
+	await boss.work<ApsParseData>(
+		"aps-parse",
+		{ localConcurrency: 1 },
+		withSentry("aps-parse", (jobs) => apsParseJob(jobs, boss)),
+	);
+	console.log("Registered handler: aps-parse");
+
+	await boss.work<ApsScoreData>(
+		"aps-score",
+		{ localConcurrency: 1 },
+		withSentry("aps-score", apsScoreJob),
+	);
+	console.log("Registered handler: aps-score");
 
 	if (process.env.DEPLOYMENT_MODE === "whitelabel") {
 		await boss.work<SyncAuth0MembershipsData>(
