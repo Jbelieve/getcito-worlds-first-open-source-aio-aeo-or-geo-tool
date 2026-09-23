@@ -1,0 +1,1 @@
+ALTER TABLE "agent_aps_scores" ADD COLUMN "distribution" json;

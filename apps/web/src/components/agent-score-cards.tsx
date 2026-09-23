@@ -14,6 +14,7 @@ import { Progress } from "@workspace/ui/components/progress";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { getAgentOverviewFn } from "@/server/agent-overview";
+import { ApsMiniBand } from "@/components/aps-visual";
 
 const AOS_BANDS: Record<string, { label: string; tone: string }> = {
 	"Agent-Operable": { label: "Operable por agentes", tone: "text-emerald-600" },
@@ -194,6 +195,7 @@ export function AgentScoreCards({ brandId }: { brandId: string | undefined }) {
 										<div key={model.model} className="flex items-center gap-2 text-xs">
 											<span className="w-32 truncate font-mono">{model.model}</span>
 											<span className={`font-semibold tabular-nums ${APS_BANDS[model.band]?.tone ?? ""}`}>{model.aps}</span>
+											<ApsMiniBand aps={model.aps} p10={model.p10} p90={model.p90} />
 											<span className="text-muted-foreground">
 												{model.observations} respuestas
 												{model.recommendationProbability === null ? "" : ` · P(recomendación) ${model.recommendationProbability}%`}

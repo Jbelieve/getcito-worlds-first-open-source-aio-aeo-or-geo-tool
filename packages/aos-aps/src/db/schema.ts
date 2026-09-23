@@ -209,6 +209,11 @@ export const agentApsScores = pgTable("agent_aps_scores", {
 	p10: integer("p10"),
 	p50: integer("p50"),
 	p90: integer("p90"),
+	/**
+	 * The bootstrap samples behind P10/P50/P90, so the distribution can be drawn from the run that
+	 * actually happened instead of re-simulating it on read.
+	 */
+	distribution: json("distribution"),
 	recommendationProbability: integer("recommendation_probability"),
 	observations: integer("observations").notNull(),
 	/** This score came from a run that answered fewer prompts than it planned. */

@@ -90,6 +90,7 @@ export async function apsScoreJob(jobs: Job<ApsScoreData>[]): Promise<ApsScoreRe
 			p10: score.p10,
 			p50: score.p50,
 			p90: score.p90,
+			distribution: score.samples,
 			recommendationProbability: score.recommendationProbability,
 			observations: score.observations,
 			partial,
