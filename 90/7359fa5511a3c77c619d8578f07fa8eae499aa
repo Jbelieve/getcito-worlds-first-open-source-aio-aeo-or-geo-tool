@@ -1,0 +1,27 @@
+apps/worker/src/jobs/aps-score.ts
+  s_d70e4d37c42cfe::t_cf15d0bf78d4e9 93
+packages/aos-aps/src/db/schema.ts
+  s_d70e4d37c42cfe::t_dab9bd250be29b 212-216
+packages/lib/src/db/migrations/0021_yellow_la_nuit.sql
+  s_d70e4d37c42cfe::t_ad9380081c95f6 1
+packages/lib/src/db/migrations/meta/0021_snapshot.json
+  s_d70e4d37c42cfe::t_007d05134fa32b 1-3035
+packages/lib/src/db/migrations/meta/_journal.json
+  s_d70e4d37c42cfe::t_c5298be767ff34 151-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "907359fa5511a3c77c619d8578f07fa8eae499aa",
+  "prompts": {},
+  "sessions": {
+    "s_d70e4d37c42cfe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1bfd85b7-47f3-4d6a-8f6a-666848028d2a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
