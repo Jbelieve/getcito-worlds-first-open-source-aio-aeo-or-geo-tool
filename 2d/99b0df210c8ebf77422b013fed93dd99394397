@@ -1,0 +1,18 @@
+apps/web/src/components/aos-visual.tsx
+  h_c5ca005a78c880 1-282
+apps/web/src/routes/_authed/app/$brand/agent-ops.tsx
+  h_c5ca005a78c880 6,9-19,22,26-30,34-37,39-41,43-48,50-62,64-65,67-85,87-101,103-127,129-141,143-153,155-191,193-214
+apps/web/src/routes/_authed/app/$brand/agent-preference.tsx
+  h_c5ca005a78c880 23-28,198,200-202,223,227,233-249,253-255,262,264-265,315-319
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2d99b0df210c8ebf77422b013fed93dd99394397",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
