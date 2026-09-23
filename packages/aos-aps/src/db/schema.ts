@@ -14,6 +14,13 @@ export const agentBrandEntities = pgTable("agent_brand_entities", {
 	websiteUrl: text("website_url"),
 	maasyProjectId: text("maasy_project_id"),
 	isPrimary: boolean("is_primary").default(false).notNull(),
+	/**
+	 * Publication gate. Nothing is served or handed to a delivery agent until an operator
+	 * publishes the entity explicitly: closed by default, so a half-configured profile (or one
+	 * signed with a wrong key) never reaches an agent.
+	 */
+	isPublished: boolean("is_published").default(false).notNull(),
+	publishedAt: timestamp("published_at", { withTimezone: true }),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true })
 		.defaultNow()

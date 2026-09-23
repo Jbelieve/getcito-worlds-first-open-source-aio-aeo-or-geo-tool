@@ -72,6 +72,31 @@ hash: hashContent(asset.content),
 return generated.map((asset) => ({ ...asset, hash: hashContent(asset.content) }));
 });
 
+/**
+ * Publication gate. Closed by default: nothing is handed to a delivery agent until an operator
+ * publishes the entity explicitly, so a profile signed with a wrong key never reaches a site.
+ */
+export const setAgentEntityPublishedFn = createServerFn({ method: "POST" })
+.validator(
+z.object({
+brandId: z.string().min(1),
+entityId: z.string().uuid(),
+published: z.boolean(),
+}),
+)
+.handler(async ({ data }) => {
+const session = await requireAuthSession();
+await requireOrgAccess(session.user.id, data.brandId);
+const updated = await db
+.update(agentBrandEntities)
+.set({ isPublished: data.published, publishedAt: data.published ? new Date() : null })
+.where(and(eq(agentBrandEntities.id, data.entityId), eq(agentBrandEntities.brandId, data.brandId)))
+.returning({ id: agentBrandEntities.id, isPublished: agentBrandEntities.isPublished, publishedAt: agentBrandEntities.publishedAt });
+const row = updated[0];
+if (row === undefined) throw new Error("Entity not found");
+return { id: row.id, isPublished: row.isPublished, publishedAt: row.publishedAt?.toISOString() ?? null };
+});
+
 export const getAgentAssetsFn = createServerFn({ method: "POST" })
 .validator(z.object({ brandId: z.string().min(1), entityId: z.string().uuid() }))
 .handler(async ({ data }) => {
