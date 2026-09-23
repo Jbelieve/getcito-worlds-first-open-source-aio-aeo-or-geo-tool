@@ -1,0 +1,31 @@
+apps/web/src/routes/_authed/app/$brand/agent-ops.tsx
+  s_889c2024e4ba67::t_88b1a38654a631 116
+packages/aos-aps/src/aos/audit.ts
+  s_889c2024e4ba67::t_e5834e154ec044 4-21,34,36-41,79-100,105-106,108-113,115,117-122,128-130,133-139,141-144,148-153,155,158-164,166,169,183,189-195,198-212,225-228,230-240,242-262,265-281,285,287,289-290,293,297-299,301-302
+packages/aos-aps/src/aos/index.ts
+  s_889c2024e4ba67::t_362a69765ec028 2
+packages/aos-aps/src/aos/probe.test.ts
+  s_889c2024e4ba67::t_462a4deea1ee96 1-105
+packages/aos-aps/src/aos/probe.ts
+  s_889c2024e4ba67::t_f602eb05b5375c 1-81
+packages/aos-aps/src/aos/requirements.test.ts
+  s_889c2024e4ba67::t_1473746fc6b6ab 2-8,11-12,14-47,51-52,55-66,73,77,80,82,89-110,115-131,136
+packages/aos-aps/src/aos/requirements.ts
+  s_889c2024e4ba67::t_a03f7631684c32 4-7,9-10,27,99-154,196-205,212-213,232-238,242,245-249,258-262
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2a1bd96390246088b5e4de0177cd48d431675574",
+  "prompts": {},
+  "sessions": {
+    "s_889c2024e4ba67": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c4d1234e-df09-4da1-b2ec-30e44596d9ca",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
