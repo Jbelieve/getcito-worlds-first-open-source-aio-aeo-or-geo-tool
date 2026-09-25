@@ -88,6 +88,11 @@ export function AppSidebar({
 				url: "/agent-preference",
 				icon: IconGauge,
 			},
+			{
+				title: "Plan",
+				url: "/blueprint",
+				icon: IconListNumbers,
+			},
 		];
 
 		// Only show Visibility and Citations if the brand is onboarded

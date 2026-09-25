@@ -8,6 +8,7 @@
 		"./aos": "./src/aos/index.ts",
 		"./maasy": "./src/maasy/index.ts",
 		"./assets": "./src/assets/index.ts",
+		"./blueprint": "./src/blueprint/index.ts",
 		"./provenance": "./src/provenance/index.ts",
 		"./preference": "./src/preference/index.ts",
 		"./aps": "./src/aps/index.ts",
