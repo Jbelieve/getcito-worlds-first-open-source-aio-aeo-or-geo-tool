@@ -20,8 +20,19 @@ Los valores exactos de la marca de prueba (Believe) están puestos para que pued
 
 ## Paso 0 · Cargar la web de la entidad (5 minutos, solo una vez)
 
-**Por qué:** hoy la entidad Believe no tiene `website_url`. Todo lo demás se conecta por ese dato; que hoy
-funcione es suerte (el reporte cayó al nombre).
+**Por qué:** hay **dos** lugares donde va la web y solo uno está lleno. La **marca** ya la tiene
+(`https://believe-global.com/`), pero la **entidad** (`agent_brand_entities.website_url`) está **vacía**.
+Son dos campos distintos: la marca es la marca, la entidad es la superficie agéntica de esa marca.
+
+Que hoy funcione es suerte: el generador cae a la web del DNA y el reporte cae al nombre. Cargarla en la
+entidad hace que la entidad tenga su propia identidad y que el vínculo del reporte no dependa de que los
+nombres coincidan.
+
+**Y hasta hoy había algo peor, que ya está arreglado:** el candado de publicación miraba *solo* ese campo
+vacío. Sin web, no podía leer el perfil del sitio, y "no pude leerlo" **no bloquea**. O sea que la
+protección desaparecía justo cuando hacía falta: un clic en "Publicar" habría cambiado las 6 pruebas que tu
+web sirve por las 0 que BeAOS genera. Ahora el candado busca la web en **tres** lugares (entidad → DNA →
+marca) y prueba uno por uno, así que ya no depende de un campo que puede estar vacío.
 
 1. Menú **Agent Entities**.
 2. Busca la entidad **Believe** y cárgale la web: `https://believe-global.com`.
@@ -149,6 +160,10 @@ BrightData y el sistema lo dice en vez de fingir que midió todo.
 llega de Maasy trae `claims[]` vacío, y tu web ya sirve **6**. Publicar eso cambiaría tus 6 pruebas por
 ninguna, en silencio. **Este es el único bloqueo real que queda, y no está en BeAOS: está en Maasy.**
 
+El candado busca la web de la marca en tres lugares —la entidad, el DNA y la marca— y prueba uno por uno,
+para no depender de un solo campo. **Solo si ninguno responde** avisa en vez de bloquear, y en ese caso el
+aviso lo dice con todas las letras.
+
 **Cuando Maasy mande las pruebas, este paso pasa** y con él todo lo que sigue.
 
 ---
@@ -223,8 +238,11 @@ token.
 
 ```
 https://beaos.believe-global.com/.well-known/mcp/server-card.json
+https://beaos.believe-global.com/.well-known/security.txt
 ```
-**Debes ver:** `serverUrl` apuntando a `/mcp` y las 8 herramientas.
+**Debes ver:** el `serverUrl` apuntando a `/mcp` con las 8 herramientas, y el `security.txt` con
+`Contact: mailto:hola@believe-global.com` y un `Expires` a menos de un año (se calcula, no se escribe a
+mano: un `security.txt` vencido se ignora sin que nadie lo note).
 
 ---
 

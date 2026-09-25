@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { claimCount, claimsGuardDecision } from "../claims-guard";
+import { claimCount, claimsGuardDecision, websiteSourcesForClaims } from "../claims-guard";
 
 describe("claimCount", () => {
 	it("cuenta los claims de un brand.json", () => {
@@ -49,5 +49,44 @@ describe("claimsGuardDecision", () => {
 	it("no traduce texto a claims: solo compara", () => {
 		// Publicar un perfil sin claims cuando el sitio tampoco tiene ninguno es legitimo.
 		expect(claimsGuardDecision(0, 0)).toEqual({ blocked: false });
+	});
+});
+
+describe("las fuentes de la web para el candado (el agujero que se cerró)", () => {
+	it("prefiere la entidad, después el DNA, y por último la marca", () => {
+		expect(
+			websiteSourcesForClaims({
+				entityWebsite: "https://entidad.com",
+				dnaWebsite: "https://dna.com",
+				brandWebsite: "https://marca.com",
+			}),
+		).toEqual(["https://entidad.com", "https://dna.com", "https://marca.com"]);
+	});
+
+	it("el caso real de Believe: la entidad vacía y la marca llena", () => {
+		// Esto es exactamente lo que había en producción: `website_url` vacío en la entidad.
+		// Antes devolvía una sola fuente vacía y el candado abría.
+		const sources = websiteSourcesForClaims({
+			entityWebsite: null,
+			dnaWebsite: undefined,
+			brandWebsite: "https://believe-global.com/",
+		});
+		expect(sources).toEqual(["https://believe-global.com/"]);
+		expect(sources.length).toBeGreaterThan(0);
+	});
+
+	it("descarta lo que no es texto, lo vacío y los repetidos", () => {
+		expect(websiteSourcesForClaims({ entityWebsite: "   ", dnaWebsite: 42, brandWebsite: null })).toEqual([]);
+		expect(
+			websiteSourcesForClaims({
+				entityWebsite: "https://misma.com",
+				dnaWebsite: "https://misma.com",
+				brandWebsite: null,
+			}),
+		).toEqual(["https://misma.com"]);
+	});
+
+	it("sin ninguna fuente devuelve vacío: ahí el aviso dice la verdad, no pudimos verificar", () => {
+		expect(websiteSourcesForClaims({})).toEqual([]);
 	});
 });
