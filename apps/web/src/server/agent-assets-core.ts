@@ -17,10 +17,12 @@ import {
 	type DeclaredMcpTool,
 	generateAgentAssets,
 } from "@workspace/aos-aps/assets";
+import { resolveBundleClaims } from "@workspace/aos-aps/claims";
 import {
 	agentApsPromptLibraries,
 	agentApsPrompts,
 	agentAssets,
+	agentBrandClaims,
 	agentBrandDnaSnapshots,
 	agentBrandEntities,
 } from "@workspace/aos-aps/db/schema";
@@ -446,6 +448,25 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 	if (umbrella === null) throw new Error("Entity hierarchy is incomplete: no umbrella found");
 	const signing = signingKeyFromEnv(process.env, keysUriForWebsite(umbrella.websiteUrl));
 
+	/**
+	 * De dónde salen los claims del bundle. La regla de precedencia, y el porqué:
+	 *
+	 *   1. Si el DNA que manda Maasy **ya trae** `claims` con elementos, se usan esos y no se sustituyen. El
+	 *      día que Maasy mande claims de verdad, BeAOS deja de sustituir: es un espejo, no una fuente.
+	 *   2. Si no trae, se usan las **confirmadas en BeAOS** —las que un operador revisó y firmó con su
+	 *      criterio en la pantalla de Pruebas—. Los borradores no entran: un borrador es trabajo en curso,
+	 *      no una declaración.
+	 *
+	 * BeAOS no convierte la prosa de Maasy en claims por su cuenta. El estándar lo dice —*"AOS links proofs,
+	 * it does not create them"*— y un dato inventado en la capa de confianza es peor que su ausencia.
+	 * La decisión es pura y vive en `@workspace/aos-aps/claims`; acá solo se leen las filas.
+	 */
+	const savedClaims = await db
+		.select()
+		.from(agentBrandClaims)
+		.where(and(eq(agentBrandClaims.brandId, brandId), eq(agentBrandClaims.entityId, entityId)));
+	const claimsForBundle = resolveBundleClaims({ dna, saved: savedClaims });
+
 	const websiteUrl =
 		typeof dnaPayload?.website_url === "string" ? dnaPayload.website_url : (current.websiteUrl ?? undefined);
 
@@ -498,7 +519,7 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 		ardEntries,
 		industry: typeof dnaPayload?.industry === "string" ? dnaPayload.industry : undefined,
 		brief: typeof dnaPayload?.brief === "string" ? dnaPayload.brief : undefined,
-		dna,
+		dna: { ...(dna ?? {}), ...claimsForBundle },
 		signing: signing ?? undefined,
 	});
 
@@ -548,11 +569,7 @@ export async function setEntityPublished(
 			.where(and(eq(agentBrandDnaSnapshots.entityId, entityId), eq(agentBrandDnaSnapshots.brandId, brandId)))
 			.orderBy(desc(agentBrandDnaSnapshots.syncedAt))
 			.limit(1);
-		const [brand] = await db
-			.select({ website: brands.website })
-			.from(brands)
-			.where(eq(brands.id, brandId))
-			.limit(1);
+		const [brand] = await db.select({ website: brands.website }).from(brands).where(eq(brands.id, brandId)).limit(1);
 		const dnaWebsite = (snapshot?.payload as Record<string, unknown> | undefined)?.website_url;
 
 		const [bundle] = await db
