@@ -169,6 +169,7 @@ describe("la frontera del fork", () => {
 		"../routes/_authed/app/$brand/agent-assets.tsx",
 		"../routes/_authed/app/$brand/agent-entities.tsx",
 		"../routes/_authed/app/$brand/blueprint.tsx",
+		"../routes/_authed/app/$brand/claims.tsx",
 		// Excepción acordada con Jorge: el reporte es un documento de cara al cliente.
 		"../routes/_authed/reports/render/$reportId.tsx",
 	];

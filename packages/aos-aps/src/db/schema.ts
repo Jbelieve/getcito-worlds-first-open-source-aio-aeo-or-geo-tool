@@ -1,5 +1,15 @@
-import { boolean, integer, json, pgTable, text, timestamp, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { brands } from "@workspace/lib/db/schema";
+import {
+	type AnyPgColumn,
+	boolean,
+	integer,
+	json,
+	pgTable,
+	text,
+	timestamp,
+	uniqueIndex,
+	uuid,
+} from "drizzle-orm/pg-core";
 
 export const agentBrandEntities = pgTable("agent_brand_entities", {
 	id: uuid("id").defaultRandom().primaryKey().notNull(),
@@ -79,6 +89,70 @@ export const agentAssets = pgTable("agent_assets", {
 	hash: text("hash").notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * Los claims que BeAOS **confirmó con un humano**, con la prueba que los sostiene.
+ *
+ * Existe por un caso real: Maasy manda la evidencia de la marca en prosa (`client_results`,
+ * `testimonials`, `social_proof_count`, `references_summary`) y **no tiene** `claims` ni `proofs` en su
+ * modelo, así que el bundle salía con 0 claims mientras el sitio servía 6. BeAOS no puede convertir esa
+ * prosa en claims solo: *"AOS links proofs, it does not create them"*, y un dato inventado en la capa de
+ * confianza es peor que su ausencia.
+ *
+ * Por eso esta tabla es el humano en el medio: BeAOS **muestra** el fragmento original de Maasy y el
+ * operador **confirma** qué es un claim, lo redacta y dice con qué documento se prueba. El texto de
+ * `sourceFragment` se guarda tal cual llegó, para que se vea qué se confirmó y no haya que confiar en
+ * la memoria de nadie.
+ *
+ * Solo las filas `confirmed` entran al bundle: un borrador es trabajo en curso, no una declaración
+ * firmada.
+ */
+export const agentBrandClaims = pgTable(
+	"agent_brand_claims",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id, { onDelete: "cascade" })
+			.notNull(),
+		entityId: uuid("entity_id")
+			.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+			.notNull(),
+		/** El id estable que viaja al `brand.json` como `claim_id`. Lo elige el operador. */
+		claimId: text("claim_id").notNull(),
+		/** La afirmación, redactada por el humano. No se genera sola. */
+		statement: text("statement").notNull(),
+		/** El número tal como está en la evidencia (`"35%"`), sin normalizar ni completar. */
+		metric: text("metric"),
+		category: text("category"),
+		/** Cuándo SÍ aplica el claim. */
+		boundaryApplicableFor: text("boundary_applicable_for"),
+		/** Cuándo NO aplica. */
+		boundaryNotApplicableFor: text("boundary_not_applicable_for"),
+		/**
+		 * La confianza que declara el operador. Se guarda como texto y **no** se emite como
+		 * `claim.confidence`: el estándar deriva la confianza del tamaño de muestra (`metric.n`) y
+		 * prohíbe asignarla a mano, así que un número propio sería un dato inventado.
+		 */
+		confidence: text("confidence"),
+		/** `case_study` | `document` | `testimonial` | `audit` | `other`. */
+		proofType: text("proof_type").notNull(),
+		proofTitle: text("proof_title").notNull(),
+		proofSummary: text("proof_summary"),
+		proofClient: text("proof_client"),
+		/** Cómo lo comprueba un agente. El enum del estándar vive en `preference/types.ts`. */
+		verifiableBy: text("verifiable_by"),
+		confidentiality: text("confidentiality"),
+		/** El texto original de Maasy que el operador confirmó. Copia literal, no un resumen. */
+		sourceFragment: text("source_fragment"),
+		status: text("status").$type<"draft" | "confirmed">().default("draft").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true })
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(table) => [uniqueIndex("agent_brand_claims_entity_claim_uidx").on(table.entityId, table.claimId)],
+);
 
 /**
  * APS Fase 4 — the measuring instrument. Locked for 90 days: while a library is locked its prompts
@@ -245,3 +319,5 @@ export type AgentBrandDnaSnapshot = typeof agentBrandDnaSnapshots.$inferSelect;
 export type NewAgentBrandDnaSnapshot = typeof agentBrandDnaSnapshots.$inferInsert;
 export type AgentAsset = typeof agentAssets.$inferSelect;
 export type NewAgentAsset = typeof agentAssets.$inferInsert;
+export type AgentBrandClaim = typeof agentBrandClaims.$inferSelect;
+export type NewAgentBrandClaim = typeof agentBrandClaims.$inferInsert;
