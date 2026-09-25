@@ -1,0 +1,31 @@
+packages/aos-aps/package.json
+  h_c5ca005a78c880 11
+apps/web/src/routeTree.gen.ts
+  h_c5ca005a78c880 54,288-292,416,472,534,596,652,713,1069-1075,1217,1240
+packages/aos-aps/src/blueprint/index.ts
+  h_c5ca005a78c880 1
+apps/web/src/components/app-sidebar.tsx
+  h_c5ca005a78c880 91-95
+apps/web/src/server/blueprint.ts
+  h_c5ca005a78c880 1-49
+packages/aos-aps/src/blueprint/catalog.ts
+  h_c5ca005a78c880 1-961
+apps/web/src/components/status-tone.test.ts
+  h_c5ca005a78c880 170
+apps/web/src/routes/_authed/app/$brand/blueprint.tsx
+  h_c5ca005a78c880 1-227,230-235,238-264
+  h_c5ca005a78c880 228-229,236-237
+packages/aos-aps/src/blueprint/catalog.test.ts
+  h_c5ca005a78c880 1-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a46b5e8d004ec7716a1682b57fef2cbb97efe873",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
