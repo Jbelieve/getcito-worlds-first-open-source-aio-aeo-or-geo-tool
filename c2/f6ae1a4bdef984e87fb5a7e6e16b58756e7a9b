@@ -1,0 +1,16 @@
+packages/aos-aps/src/maasy/client.test.ts
+  h_c5ca005a78c880 1-27
+packages/aos-aps/src/maasy/client.ts
+  h_c5ca005a78c880 28-53,61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c2f6ae1a4bdef984e87fb5a7e6e16b58756e7a9b",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
