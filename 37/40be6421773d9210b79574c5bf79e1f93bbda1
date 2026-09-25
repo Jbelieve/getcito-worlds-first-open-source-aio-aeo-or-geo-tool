@@ -1,0 +1,18 @@
+apps/web/src/components/status-tone.test.ts
+  h_c5ca005a78c880 166
+apps/web/src/routeTree.gen.ts
+  h_c5ca005a78c880 35,187-192,404,462,524,587,645,706,766,950-956,1360
+apps/web/src/routes/[.]well-known/mcp/server-card[.]json.ts
+  h_c5ca005a78c880 1-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3740be6421773d9210b79574c5bf79e1f93bbda1",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
