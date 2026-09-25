@@ -175,28 +175,114 @@ scores.** Adoptar las ideas de arriba choca con eso, y la salida no es romperlo 
 | Capa Payments | Emergente/diagnóstico hasta que haya señales de comercio. |
 | Pesos derivados del APS | AOS v2. Requiere N corridas para tener muestra. |
 
-## 7. Autocrítica: tres cosas que este análisis destapó de nosotros
+## 7. Lo que esto dice de BeAOS (el producto), no del sitio
 
-1. **Fallamos nuestro propio check.** `web-bot-auth-directory` (`/.well-known/http-message-signatures-directory`)
-   es **nuestro APS-PROV-03**, y `believe-global.com` no lo tiene. Predicamos algo que no practicamos.
-2. **Nuestro `llms.txt` tiene links muertos**: 2 de 4 apuntan a `.../functions/v1/aos-mcp?sit…` y no
-   resuelven. Un archivo que existe para que los agentes nos lean, con links rotos.
-3. **`brand-search-accuracy` falla por la colisión de marca**: buscar "Believe" devuelve 8 resultados y
-   **ninguno es nuestro dominio**. Es el mismo problema que encontramos con el prompt de desambiguación y
-   ScamAdviser, confirmado por un tercero independiente. Y `wikipedia-presence` falla con la misma raíz:
-   **sin fuentes independientes, ningún agente puede verificarnos.**
+Jorge está ajustando `believe-global.com` por su lado. Lo que importa acá es qué le falta **a la
+plataforma**, y el hallazgo es incómodo y muy concreto:
 
-## 8. Plan propuesto
+### 7.1 Su checklist es una especificación de lo que nuestro generador de assets debería emitir
 
-1. **Cerrar las brechas de nuestra propia casa** (barato, y es la mejor demostración del producto):
-   `serverUrl` en el server card, los links rotos del `llms.txt`, `/.well-known/http-message-signatures-directory`,
-   `llms.txt` + 404 para agentes en BeAOS, `text/markdown` en la misma URL.
-2. **`estScoreGain` en nuestro reporte AOS** + re-verificación de un check suelto. Cambia el reporte de
-   "lista de fallas" a "plan priorizado" con poco trabajo.
-3. **El cluster `ax-*` como diagnósticos** (empezando por `ax-tree-injection-safe`, que además es
-   seguridad) + metadata de catálogo (`maturity`, `tier`, `specUrl`, `recommendation`) en los 18 ids.
-4. **CLI + página pública por dominio** (canal y motor de crecimiento).
-5. **La correlación AOS × APS** con los datos que ya tenemos: es la afirmación que ellos no pueden hacer.
+Verificado contra `packages/aos-aps/src/assets/generate.ts` (lo que **emitimos**) y contra
+`packages/aos-aps/src/aos/requirements.ts` (lo que **puntuamos**):
 
-**Pendiente de decisión de Jorge:** si vamos por AOS v2 (OR-scoring + pesos derivados) o mantenemos la
-paridad con Maasy y crecemos solo por diagnósticos.
+**Emitimos 7 archivos:** `/llms.txt`, `/AGENTS.md`, `/robots.txt`, `/sitemap.xml`,
+`/.well-known/agent-card.json`, `/.well-known/agent-permissions.json`, `/.well-known/brand.json`
+(+ `.sig` y `keys.json` cuando está firmado).
+
+| Artefacto | Su rubric | Nuestra rubric | ¿Lo emitimos? |
+|---|---|---|---|
+| `/llms.txt` | 1pt | **AOS-DISC-01** (SHOULD) | ✅ |
+| `/AGENTS.md` | — | **AOS-DISC-03** | ✅ |
+| `/robots.txt` + `/sitemap.xml` | 2pt + 1pt | **AOS-DISC-04** | ✅ |
+| `/.well-known/agent-card.json` (A2A) | 2pt (bonus) | **AOS-IDEN-01** | ✅ |
+| `/.well-known/agent-permissions.json` | — | **AOS-IDEN-02** | ✅ |
+| **`/llms-full.txt`** | — | **AOS-DISC-02** (MAY, **puntuado**) | 🔴 **NO — generamos todo menos esto** |
+| `/.well-known/mcp/server-card.json` (con `serverUrl`) | 2pt (bonus) | **AOS-CAPA-01** (declarar MCP) | 🔴 **NO** — pendiente conocido; su rubric además exige `serverUrl`, que es justo lo que le falta al de la marca |
+| `/.well-known/http-message-signatures-directory` | 2pt (bonus) | **APS-PROV-03** (puntuado) | 🔴 **NO** — exigimos un artefacto que no producimos |
+| `.md` gemelos + `text/markdown` en la misma URL | 2pt | **AOS-CONT-03** (puntuado) | 🔴 **NO** — exigimos el comportamiento pero no publicamos la versión `.md` |
+| `/.well-known/agent-skills/index.json` | 2pt | — | No |
+| `/.well-known/ard.json` (ARD) | 1pt | — | No |
+| `/pricing.md`, manual legible por máquina | 2pt | — | No |
+| 404 para agentes (con body markdown) | 2pt | — | No |
+| Headers `Link:` (RFC 8288) | 1pt (bonus) | — | No |
+
+**El hallazgo incómodo, y el más accionable de todo el análisis:** `AOS-DISC-02` (`/llms-full.txt`) es
+un requerimiento **puntuado** de nuestro propio rubric, nuestro auditor **lo busca**, y **nuestro
+generador de assets no lo produce**. Un cliente que genera y publica con BeAOS **sigue fallando un check
+nuestro**. Igual con `APS-PROV-03` y `AOS-CONT-03`.
+
+**La lección de producto:** no hay que inventar qué publicar. La vara del mercado subió y es explícita
+(con peso y con recomendación por check), y **nuestra propia rubric coincide en la mitad de la lista**.
+La otra mitad es trabajo acotado y ya está priorizada por dos fuentes independientes: la competencia y
+nosotros mismos.
+
+### 7.2 Nuestro reporte comunica menos de lo que sabe
+
+El AOS ya calcula muchísimo (los 18 ids, los archivos de descubrimiento que encontró, si hay MCP u
+OpenAPI, los tipos de JSON-LD, la verificación de firma) y el reporte muestra **✓/✕ + id + título**. La
+competencia muestra, por check: **la evidencia observada** (*"92 controles nativos, 0 div-soup"*,
+*"2 de 4 links probados no resuelven: <url>"*, *"25.148 chars, 1 H1 + 27 H2 + 28 H3"*) y **los puntos
+que ganás si lo arreglás**. Nosotros tenemos el dato y no lo mostramos, ni lo ordenamos por impacto.
+
+### 7.3 Lo que ya hacemos mejor, y hay que defender
+
+- **Medimos comportamiento, no exposición.** El APS corre modelos reales, con repeticiones, bootstrap y
+  banda P10–P90. Su acercamiento equivalente (`agentic-search-usecase`) está **en beta y N/A** en nuestro
+  scan. La frase *"AOS 100 con APS 34–40"* es nuestra y no la pueden hacer.
+- **Assets firmados con gate de publicación.** Ellos puntúan carpetas y archivos; nosotros firmamos
+  Ed25519 y no servimos nada hasta que el operador publica.
+- **Disciplina de N/A y de medición parcial.** Es la misma que ellos predican, pero ya la tenemos
+  implementada y probada.
+
+## 8. Backlog para BeAOS (propuesto, sin el sitio — eso lo lleva Jorge)
+
+### Paquete 1 — El reporte que compite (contenido, sin riesgo de puntaje)
+
+1. **Evidencia por check.** Mostrar lo que el audit ya observó: qué archivos de descubrimiento encontró,
+   por qué vía detectó MCP/OpenAPI, qué tipos de JSON-LD vio, estado de la firma. Convierte el checklist
+   en algo verificable en vez de una lista de tildes.
+2. **`estScoreGain` y orden por impacto.** Con nuestros pesos (MUST 3 / SHOULD 2 / MAY 1) es calculable:
+   puntos del check / puntos aplicables × 100. "Lo que falta" pasa de lista a plan.
+3. **Re-verificar un check suelto.** `aos-audit` acepta un filtro de ids: arreglás `DISC-03` y
+   verificás eso, sin repetir la auditoría entera.
+
+### Paquete 2 — El generador de assets a la altura del mercado
+
+4. **Cerrar la brecha entre lo que puntuamos y lo que generamos.** En orden:
+   **(a) `/llms-full.txt`** — nuestro propio `AOS-DISC-02` puntuado, que el auditor busca y el generador
+   no produce; es el arreglo más barato y más vergonzoso de todos.
+   **(b) `/.well-known/mcp/server-card.json` con `serverUrl`** — nos falta y además su rubric lo exige
+   completo (el de la marca ya existe pero sin `serverUrl`).
+   **(c) `/.well-known/http-message-signatures-directory`** — es nuestro `APS-PROV-03`, puntuado.
+   **(d) `.md` gemelos + `text/markdown` en la misma URL** — nuestro `AOS-CONT-03` puntuado.
+5. **Validar los links del `llms.txt` al generarlo** — que no vuelva a salir un archivo con links muertos.
+6. 404 para agentes en las superficies que servimos.
+
+### Paquete 3 — La plataforma consumible por agentes
+
+7. **Exponer el catálogo** (los 18 ids con `tier`, `maturity`, `specUrl`, `recommendation`, `appliesTo`)
+   como API y en la superficie pública. Es nuestra propia tesis aplicada a nosotros.
+8. **El reporte como interfaz de máquina**: `text/markdown` en la misma URL canónica con `Vary`, JSON
+   API, y un tool MCP read-only que **no dispare un scan**.
+9. **CLI** (`npx beaos audit <url> --min-score`) + contrato de CI (`?format=audit`, `maxAgeSeconds`,
+   `force`) para que AOS sea un gate de CI del cliente.
+10. **Página pública estable por entidad** + leaderboard. Motor de crecimiento.
+
+### Paquete 4 — Ampliar lo que detectamos (diagnósticos, sin tocar la paridad)
+
+11. **Cluster `ax-*`**: estructura de documento, controles nativos, nombres accesibles, labels, y
+    **`ax-tree-injection-safe`** (instrucciones escondidas en `aria-label`/`alt`). Es operabilidad real y
+    además seguridad; conecta con la cuarentena de APS.
+12. **Crédito parcial** donde tiene sentido (por ejemplo 404: estado correcto = parcial, con body
+    markdown = total). Primero como diagnóstico.
+13. **Metadata de catálogo** (`tier`/`maturity`/`bonus`/`specUrl`) en los 18 ids del spec.
+
+### La decisión de fondo (sigue abierta)
+
+**AOS v2 con OR-scoring y pesos derivados del APS** rompe la paridad con Maasy, y es la única forma de
+que dos interfaces equivalentes (MCP **o** OpenAPI **o** `/ask`) no se cuenten como tres fallas. Requiere
+decisión explícita y migración documentada; hasta entonces, todo entra como diagnóstico.
+
+**Recomendación de orden:** Paquete 1 (el reporte compite, y sale con datos que ya tenemos) → Paquete 2
+(los tres artefactos que ya eran pendientes) → Paquete 3. El Paquete 4 suma detección pero no cambia la
+percepción del producto.
