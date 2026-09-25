@@ -84,6 +84,12 @@ export function AppSidebar({
 				icon: IconFileDescription,
 			},
 			{
+				// Las pruebas de la marca: el humano en el medio entre la prosa de Maasy y el bundle firmado.
+				title: "Pruebas",
+				url: "/claims",
+				icon: IconReport,
+			},
+			{
 				title: "APS",
 				url: "/agent-preference",
 				icon: IconGauge,
