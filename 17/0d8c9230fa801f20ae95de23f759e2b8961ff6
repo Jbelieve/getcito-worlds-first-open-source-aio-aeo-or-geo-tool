@@ -1,0 +1,19 @@
+packages/aos-aps/src/assets/generate.test.ts
+  s_8a93d1d4dca631::t_4a6f88e096ea7a 4,47-85,351-803
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "170d8c9230fa801f20ae95de23f759e2b8961ff6",
+  "prompts": {},
+  "sessions": {
+    "s_8a93d1d4dca631": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61ec03f3-96e2-46c4-9462-e6b78147fec4",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
