@@ -583,18 +583,21 @@ Fuente: `docs/AOS-PROTOCOL.md`, `apps/operator-runner/README.md`, `supabase/func
 
 ### Los tres huecos, en orden
 
-1. **MCP de BeAOS (real).** Servidor MCP sobre HTTP en `https://beaos.believe-global.com/mcp`
-   (Traefik ya enruta ese dominio: no hace falta infraestructura nueva). JSON-RPC `tools/list` y
-   `tools/call`, autenticado con token. Tools mínimas: listar/leer marcas, correr y leer la auditoría AOS,
-   leer APS (declarado y medido) y sus corridas, generar el bundle, leerlo, un archivo suelto, y
-   publicar/despublicar. Es la pieza que desbloquea a los otros productos de Believe.
-   *Decisión mía:* arranca read-only salvo `generate`/`publish`, y reusa `ADMIN_API_KEYS` (hoy es una lista
-   compartida, sin identidad por producto ni revocación individual — se puede mejorar después).
+1. ~~**MCP de BeAOS (real).**~~ **HECHO** (PR #44). Servidor MCP en
+   `https://beaos.believe-global.com/mcp`: JSON-RPC 2.0 por POST, sin SSE y sin sesión, autenticado con
+   el mismo `ADMIN_API_KEYS` que ya protege `/api/v1`. Ocho tools: `list_brands`, `get_brand`,
+   `get_aos_audit`, `list_aps_runs`, `get_agent_bundle`, `get_agent_asset`, `generate_agent_assets` y
+   `publish_agent_assets`. La lectura pasa por el **mismo gate** que la API de entrega (no puede filtrar
+   un bundle sin publicar) y las acciones llaman a `agent-assets-core`, que es lo mismo que corre la UI:
+   si el guardián de claims bloquea, también bloquea por acá. Contrato y ejemplos: **`MCP-BEAOS.md`**.
+   *Pendiente:* dogfooding (BeAOS todavía no publica su propio `/.well-known/mcp/server-card.json` en la
+   raíz) y **un token por producto** en vez de una lista compartida.
 2. **Entrega a las webs ("mandarlo a todas las webs que se necesite").** El contrato de *pull* ya existe
-   (`/api/v1/agent-assets/...`). Falta decidir si además BeAOS **empuja** (necesita credenciales de deploy
-   por web) o si esto queda como *pull* desde el agente de cada web.
-3. **Snippet del operador.** BeAOS hoy no lo tiene. **Riesgo a resolver antes de copiarlo acá:** el repo de
-   BeAOS es **público y es un fork**, así que meter `operator.js` de Maasy adentro lo publica. La salida
-   limpia es que BeAOS lo **sirva** como asset (`/operator.js`) desde un origen propio y que el código viva
-   en un repo privado, no que se copie al fork público.
+   (`/api/v1/agent-assets/...` y los tools `get_agent_bundle` / `get_agent_asset`). Falta decidir si
+   además BeAOS **empuja** (necesita credenciales de deploy por web) o si esto queda como *pull* desde el
+   agente de cada web.
+3. **Snippet del operador.** BeAOS hoy no lo tiene. **Decidido: BeAOS lo *sirve*** como asset desde un
+   origen propio (por ejemplo `beaos.believe-global.com/operator.js`) y el **código fuente vive en un
+   repo privado**, no se copia acá: este repo es **público y es un fork**, así que copiarlo lo publicaría.
+   Una sola implementación, y las webs lo consumen igual.
 
