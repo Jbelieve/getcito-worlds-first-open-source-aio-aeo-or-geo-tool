@@ -225,3 +225,47 @@ describe("llms-full.txt (AOS-DISC-02)", () => {
 		expect(paths.indexOf("/sitemap.xml")).toBe(paths.indexOf("/robots.txt") + 1);
 	});
 });
+
+describe("server-card (AOS-CAPA-01)", () => {
+	it("se emite con serverUrl cuando la marca declara un MCP", () => {
+		const assets = generateAgentAssets({
+			name: "Believe",
+			websiteUrl: "https://believe-global.com",
+			dna,
+			mcpUrl: "https://believe-global.com/mcp",
+		});
+		const card = JSON.parse(assetByPath(assets, "/.well-known/mcp/server-card.json")?.content ?? "{}");
+		// Los lectores buscan serverUrl en la raiz: es lo que le faltaba al card del sitio.
+		expect(card.serverUrl).toBe("https://believe-global.com/mcp");
+		expect(card.transport.endpoint).toBe("https://believe-global.com/mcp");
+		expect(card.tools).toEqual([]);
+	});
+
+	it("NO se emite si la marca no declara MCP: no inventamos endpoints", () => {
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna });
+		expect(assetByPath(assets, "/.well-known/mcp/server-card.json")).toBeUndefined();
+	});
+});
+
+describe("directorio de Web Bot Auth (APS-PROV-03)", () => {
+	it("se emite al firmar, y la clave del JWK es la MISMA que publica keys.json", () => {
+		const { signing } = newSigningKey("https://believe-global.com/.well-known/keys.json");
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna, signing });
+		const directory = JSON.parse(
+			assetByPath(assets, "/.well-known/http-message-signatures-directory")?.content ?? "{}",
+		);
+		const keys = JSON.parse(assetByPath(assets, "/.well-known/keys.json")?.content ?? "{}");
+
+		expect(directory.keys).toHaveLength(1);
+		const jwk = directory.keys[0];
+		expect(jwk).toMatchObject({ kty: "OKP", crv: "Ed25519", use: "sig" });
+		expect(jwk.kid).toBe(keys.keys[0].kid);
+		// `x` es la clave cruda en base64url: tiene que decodificar al MISMO hex que keys.json.
+		expect(Buffer.from(jwk.x, "base64url").toString("hex")).toBe(keys.keys[0].public_key_hex);
+	});
+
+	it("no se emite sin firma", () => {
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna });
+		expect(assetByPath(assets, "/.well-known/http-message-signatures-directory")).toBeUndefined();
+	});
+});

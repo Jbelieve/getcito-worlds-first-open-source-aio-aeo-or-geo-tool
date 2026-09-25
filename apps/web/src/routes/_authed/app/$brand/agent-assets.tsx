@@ -57,8 +57,13 @@ mutationFn: async () => {
 if (brandId === undefined || selected === undefined) throw new Error("Selecciona una entidad");
 return setAgentEntityPublishedFn({ data: { brandId, entityId, published: selected.isPublished === false } });
 },
-onSuccess: async () => {
-setError(null);
+onSuccess: async (result) => {
+// El gate puede negarse: publicar un bundle que pierde claims degradaria el perfil de la marca.
+if (result.ok === false) {
+setError(result.reason);
+return;
+}
+setError(result.warning ?? null);
 await entities.refetch();
 },
 onError: (mutationError) => {
