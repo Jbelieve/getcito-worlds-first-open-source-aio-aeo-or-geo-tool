@@ -11,7 +11,7 @@
 
 import { createHash } from "node:crypto";
 import { extractMcpEndpoint } from "@workspace/aos-aps/aos";
-import { generateAgentAssets } from "@workspace/aos-aps/assets";
+import { type DeclaredMcp, type DeclaredMcpTool, generateAgentAssets } from "@workspace/aos-aps/assets";
 import { agentAssets, agentBrandDnaSnapshots, agentBrandEntities } from "@workspace/aos-aps/db/schema";
 import { findUmbrellaEntity, keysUriForWebsite, signingKeyFromEnv } from "@workspace/aos-aps/provenance";
 import { db } from "@workspace/lib/db/db";
@@ -23,17 +23,20 @@ export function hashContent(content: string): string {
 }
 
 /**
- * La URL del MCP que el sitio YA declara, para completar el server-card en el formato que los
- * lectores esperan.
+ * Lo que el sitio YA declara sobre su MCP: la URL y, cuando la publica, sus tools.
  *
- * BeAOS no inventa endpoints: si el sitio no declara ninguno, no se emite server-card. Se lee en el
- * orden en que los lectores lo buscan: `serverUrl` del card que el sitio ya sirve — y si no está,
+ * BeAOS no inventa endpoints ni capacidades: si el sitio no declara MCP, no se emite server-card. Se lee
+ * en el orden en que los lectores lo buscan: `serverUrl` del card que el sitio ya sirve — y si no está,
  * `transport.endpoint`, que es la forma vieja y la que usa believe-global.com, y por eso su card
- * figuraba como incompleto —; y como ultimo recurso, el endpoint declarado en su llms.txt.
+ * figuraba como incompleto —; y como último recurso, el endpoint declarado en su llms.txt.
+ *
+ * Los tools se copian del card en vivo, que es lo que hace útil al server-card: sin ellos el agente sabe
+ * dónde está el MCP pero no qué puede pedirle. Si el card no los declara se omite la clave, en vez de
+ * emitir una lista vacía que afirmaría que el servidor no tiene ninguno.
  *
  * Los dos pedidos tienen timeout corto: esto corre al apretar "Generar assets", no en un job.
  */
-export async function declaredMcpUrl(websiteUrl: string | undefined): Promise<string | undefined> {
+export async function declaredMcp(websiteUrl: string | undefined): Promise<DeclaredMcp | undefined> {
 	if (websiteUrl === undefined) return undefined;
 	let origin: string;
 	try {
@@ -53,7 +56,10 @@ export async function declaredMcpUrl(websiteUrl: string | undefined): Promise<st
 			const found = [card.serverUrl, transport?.endpoint, card.url].find(
 				(value): value is string => typeof value === "string" && value.trim().length > 0,
 			);
-			if (found !== undefined) return found.trim();
+			if (found !== undefined) {
+				const tools = declaredTools(card.tools);
+				return tools === undefined ? { url: found.trim() } : { url: found.trim(), tools };
+			}
 		}
 	} catch {
 		// Sin card accesible: se intenta por llms.txt.
@@ -62,10 +68,29 @@ export async function declaredMcpUrl(websiteUrl: string | undefined): Promise<st
 	try {
 		const response = await fetch(`${origin}/llms.txt`, { signal: AbortSignal.timeout(5000) });
 		if (response.ok === false) return undefined;
-		return extractMcpEndpoint(await response.text()) ?? undefined;
+		const url = extractMcpEndpoint(await response.text());
+		return url === undefined || url === null || url.trim().length === 0 ? undefined : { url: url.trim() };
 	} catch {
 		return undefined;
 	}
+}
+
+/** Normaliza los tools del card en vivo. Descarta lo que no tenga nombre: sin nombre no se puede llamar. */
+function declaredTools(raw: unknown): DeclaredMcpTool[] | undefined {
+	if (Array.isArray(raw) === false) return undefined;
+	const tools: DeclaredMcpTool[] = [];
+	for (const entry of raw) {
+		if (typeof entry !== "object" || entry === null) continue;
+		const record = entry as Record<string, unknown>;
+		if (typeof record.name !== "string" || record.name.trim().length === 0) continue;
+		const tool: DeclaredMcpTool = { name: record.name.trim() };
+		if (typeof record.title === "string" && record.title.trim().length > 0) tool.title = record.title.trim();
+		if (typeof record.description === "string" && record.description.trim().length > 0) {
+			tool.description = record.description.trim();
+		}
+		tools.push(tool);
+	}
+	return tools.length === 0 ? undefined : tools;
 }
 
 /**
@@ -135,10 +160,13 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 	const websiteUrl =
 		typeof dnaPayload?.website_url === "string" ? dnaPayload.website_url : (current.websiteUrl ?? undefined);
 
+	const mcp = await declaredMcp(websiteUrl);
+
 	const generated = generateAgentAssets({
 		name: String(dnaPayload?.brand_name ?? current.name),
 		websiteUrl,
-		mcpUrl: await declaredMcpUrl(websiteUrl),
+		mcpUrl: mcp?.url,
+		mcpTools: mcp?.tools,
 		industry: typeof dnaPayload?.industry === "string" ? dnaPayload.industry : undefined,
 		brief: typeof dnaPayload?.brief === "string" ? dnaPayload.brief : undefined,
 		dna,

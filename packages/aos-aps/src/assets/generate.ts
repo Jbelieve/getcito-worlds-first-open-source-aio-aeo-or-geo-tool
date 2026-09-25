@@ -1,5 +1,5 @@
-import { buildKeysJson, buildWebBotAuthDirectory, signDetached, type SigningKey } from "../provenance";
 import type { Claim, Proof } from "../preference";
+import { buildKeysJson, buildWebBotAuthDirectory, type SigningKey, signDetached } from "../provenance";
 
 /**
  * Generates the agent-facing asset bundle for one brand entity.
@@ -19,6 +19,25 @@ export interface GeneratedAsset {
 	content: string;
 }
 
+/**
+ * Lo que el sitio ya declara sobre su MCP: la URL y, cuando la publica, la lista de tools.
+ *
+ * Los tools son opcionales a propósito. Un `tools: []` afirma "este servidor no tiene tools", que es
+ * falso cuando en realidad no lo sabemos, y deja al agente peor que si no dijéramos nada: le dice que
+ * no hay nada que llamar. Si no los conocemos, se omite la clave.
+ */
+export interface DeclaredMcpTool {
+	name: string;
+	title?: string;
+	description?: string;
+}
+
+/** El MCP que el sitio declara: siempre la URL, los tools solo cuando los publica. */
+export interface DeclaredMcp {
+	url: string;
+	tools?: DeclaredMcpTool[];
+}
+
 export interface AgentAssetInput {
 	name: string;
 	websiteUrl?: string;
@@ -36,6 +55,8 @@ export interface AgentAssetInput {
 	 * evitar. El llamador lo resuelve leyendo lo que el sitio ya publica.
 	 */
 	mcpUrl?: string;
+	/** Tools que el MCP declara. Ausente => el card no afirma nada sobre tools. */
+	mcpTools?: DeclaredMcpTool[];
 }
 
 function asString(value: unknown): string | undefined {
@@ -239,6 +260,9 @@ function mcpServerCard(input: AgentAssetInput): string | null {
 	const serverUrl = asString(input.mcpUrl);
 	if (serverUrl === undefined) return null;
 	const description = descriptionFrom(input) ?? `Superficie MCP de ${input.name}.`;
+	// Los tools se declaran solo si el sitio los declara. Inventarlos sería afirmar capacidades que no
+	// verificamos; una lista vacía sería afirmar que no hay ninguna.
+	const tools = (input.mcpTools ?? []).filter((tool) => asString(tool.name) !== undefined);
 	return `${JSON.stringify(
 		{
 			name: input.name,
@@ -248,7 +272,7 @@ function mcpServerCard(input: AgentAssetInput): string | null {
 			serverUrl,
 			websiteUrl: input.websiteUrl,
 			transport: { type: "streamable-http", endpoint: serverUrl },
-			tools: [],
+			...(tools.length === 0 ? {} : { tools: tools.map((tool) => ({ ...tool, name: tool.name.trim() })) }),
 		},
 		null,
 		2,

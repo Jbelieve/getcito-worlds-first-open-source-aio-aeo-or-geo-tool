@@ -238,7 +238,47 @@ describe("server-card (AOS-CAPA-01)", () => {
 		// Los lectores buscan serverUrl en la raiz: es lo que le faltaba al card del sitio.
 		expect(card.serverUrl).toBe("https://believe-global.com/mcp");
 		expect(card.transport.endpoint).toBe("https://believe-global.com/mcp");
-		expect(card.tools).toEqual([]);
+	});
+
+	it("copia los tools que el sitio declara, para que el card diga que se puede llamar", () => {
+		const assets = generateAgentAssets({
+			name: "Believe",
+			websiteUrl: "https://believe-global.com",
+			dna,
+			mcpUrl: "https://believe-global.com/mcp",
+			mcpTools: [
+				{ name: "ask_brand", title: "Preguntar por la marca", description: "Retrieval sobre el perfil firmado." },
+				{ name: "request_diagnostic" },
+			],
+		});
+		const card = JSON.parse(assetByPath(assets, "/.well-known/mcp/server-card.json")?.content ?? "{}");
+		expect(card.tools).toEqual([
+			{ name: "ask_brand", title: "Preguntar por la marca", description: "Retrieval sobre el perfil firmado." },
+			{ name: "request_diagnostic" },
+		]);
+	});
+
+	it("OMITE tools cuando no los conoce: una lista vacía afirmaría que no hay ninguno", () => {
+		const assets = generateAgentAssets({
+			name: "Believe",
+			websiteUrl: "https://believe-global.com",
+			dna,
+			mcpUrl: "https://believe-global.com/mcp",
+		});
+		const card = JSON.parse(assetByPath(assets, "/.well-known/mcp/server-card.json")?.content ?? "{}");
+		expect(card).not.toHaveProperty("tools");
+	});
+
+	it("descarta un tool sin nombre y no deja la lista vacía", () => {
+		const assets = generateAgentAssets({
+			name: "Believe",
+			websiteUrl: "https://believe-global.com",
+			dna,
+			mcpUrl: "https://believe-global.com/mcp",
+			mcpTools: [{ name: "   " }, { name: "ask_brand" }],
+		});
+		const card = JSON.parse(assetByPath(assets, "/.well-known/mcp/server-card.json")?.content ?? "{}");
+		expect(card.tools).toEqual([{ name: "ask_brand" }]);
 	});
 
 	it("NO se emite si la marca no declara MCP: no inventamos endpoints", () => {
