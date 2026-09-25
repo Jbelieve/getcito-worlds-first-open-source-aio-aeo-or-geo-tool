@@ -1,0 +1,20 @@
+packages/aos-aps/src/db/schema.ts
+  h_c5ca005a78c880 2-12,93-156,322-323
+packages/lib/src/db/migrations/0022_tidy_golden_guardian.sql
+  h_c5ca005a78c880 1-26
+packages/lib/src/db/migrations/meta/0022_snapshot.json
+  h_c5ca005a78c880 1-3221
+packages/lib/src/db/migrations/meta/_journal.json
+  h_c5ca005a78c880 158-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2f5c3cc4ba1568a3543d6ffd10fba59ffbe4f726",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
