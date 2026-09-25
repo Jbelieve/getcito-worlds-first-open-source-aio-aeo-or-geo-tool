@@ -1,0 +1,14 @@
+.changeset/agent-assets-mcp-card-and-claims-guard.md
+  h_c5ca005a78c880 1-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5a4dfe6eba161445a5bbc1eb7759a513c2935624",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
