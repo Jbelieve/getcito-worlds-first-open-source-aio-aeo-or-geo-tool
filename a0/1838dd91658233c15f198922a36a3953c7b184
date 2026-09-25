@@ -1,0 +1,19 @@
+packages/aos-aps/src/assets/generate.test.ts
+  s_0f368474ccac6a::t_992f79609e292a 174-227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a01838dd91658233c15f198922a36a3953c7b184",
+  "prompts": {},
+  "sessions": {
+    "s_0f368474ccac6a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "685ddece-85cd-459d-886a-602eb178d5e4",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
