@@ -1,0 +1,20 @@
+apps/web/src/components/agent-score-cards.tsx
+  h_c5ca005a78c880 128
+apps/web/src/components/aos-visual.tsx
+  h_c5ca005a78c880 34-35,43-49,51-55,222,269,299
+apps/web/src/server/agent-overview.ts
+  h_c5ca005a78c880 19,34,118-123
+packages/aos-aps/src/aos/requirements.test.ts
+  h_c5ca005a78c880 150-153,155-157,159-174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "deb517cd4346c3a18a8aa3e7b110b6ea22a5baab",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
