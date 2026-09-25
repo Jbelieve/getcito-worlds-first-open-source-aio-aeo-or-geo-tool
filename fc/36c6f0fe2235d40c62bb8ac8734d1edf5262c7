@@ -1,0 +1,14 @@
+GUIA-BEAOS.md
+  h_c5ca005a78c880 74-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fc36c6f0fe2235d40c62bb8ac8734d1edf5262c7",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
