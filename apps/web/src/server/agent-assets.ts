@@ -7,6 +7,7 @@ import { agentAssets, agentBrandDnaSnapshots, agentBrandEntities } from "@worksp
 import { generateAgentAssets } from "@workspace/aos-aps/assets";
 import { extractMcpEndpoint } from "@workspace/aos-aps/aos";
 import { findUmbrellaEntity, keysUriForWebsite, signingKeyFromEnv } from "@workspace/aos-aps/provenance";
+import { claimCount, claimsGuardDecision } from "@/lib/claims-guard";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 
 function hashContent(content: string): string {
@@ -127,6 +128,27 @@ return generated.map((asset) => ({ ...asset, hash: hashContent(asset.content) })
  * Publication gate. Closed by default: nothing is handed to a delivery agent until an operator
  * publishes the entity explicitly, so a profile signed with a wrong key never reaches a site.
  */
+/**
+ * Los claims que declara el brand.json que el sitio sirve HOY. `null` si no se puede leer.
+ *
+ * El gate lo compara con los del bundle antes de publicar: nunca interpreta ni traduce el texto, solo
+ * cuenta. La decision es pura y vive en @/lib/claims-guard.
+ */
+async function liveClaimCount(websiteUrl: string | undefined): Promise<number | null> {
+if (websiteUrl === undefined) return null;
+try {
+const origin = new URL(websiteUrl).origin;
+const response = await fetch(`${origin}/.well-known/brand.json`, {
+signal: AbortSignal.timeout(5000),
+headers: { accept: "application/json" },
+});
+if (response.ok === false) return null;
+return claimCount(await response.text());
+} catch {
+return null;
+}
+}
+
 export const setAgentEntityPublishedFn = createServerFn({ method: "POST" })
 .validator(
 z.object({
@@ -138,6 +160,28 @@ published: z.boolean(),
 .handler(async ({ data }) => {
 const session = await requireAuthSession();
 await requireOrgAccess(session.user.id, data.brandId);
+
+// Guardián de regresión: publicar un perfil con MENOS claims que el que el sitio sirve hoy degrada
+// la evidencia verificable de la marca en silencio, y el gate lo dejaba pasar porque solo miraba que
+// el archivo existiera. Solo bloquea cuando el bundle pierde claims; si no puede comparar, avisa.
+let warning: string | undefined;
+if (data.published) {
+const [entity] = await db
+.select({ websiteUrl: agentBrandEntities.websiteUrl })
+.from(agentBrandEntities)
+.where(and(eq(agentBrandEntities.id, data.entityId), eq(agentBrandEntities.brandId, data.brandId)))
+.limit(1);
+const [bundle] = await db
+.select({ content: agentAssets.content })
+.from(agentAssets)
+.where(and(eq(agentAssets.entityId, data.entityId), eq(agentAssets.path, "/.well-known/brand.json")))
+.orderBy(desc(agentAssets.createdAt))
+.limit(1);
+const decision = claimsGuardDecision(claimCount(bundle?.content), await liveClaimCount(entity?.websiteUrl ?? undefined));
+if (decision.blocked) return { ok: false as const, reason: decision.reason ?? "Regresión de claims." };
+warning = decision.warning;
+}
+
 const updated = await db
 .update(agentBrandEntities)
 .set({ isPublished: data.published, publishedAt: data.published ? new Date() : null })
@@ -145,7 +189,7 @@ const updated = await db
 .returning({ id: agentBrandEntities.id, isPublished: agentBrandEntities.isPublished, publishedAt: agentBrandEntities.publishedAt });
 const row = updated[0];
 if (row === undefined) throw new Error("Entity not found");
-return { id: row.id, isPublished: row.isPublished, publishedAt: row.publishedAt?.toISOString() ?? null };
+return { ok: true as const, id: row.id, isPublished: row.isPublished, publishedAt: row.publishedAt?.toISOString() ?? null, warning };
 });
 
 export const getAgentAssetsFn = createServerFn({ method: "POST" })
