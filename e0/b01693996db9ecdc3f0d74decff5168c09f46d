@@ -1,0 +1,24 @@
+.changeset/reporte-con-aos-y-aps.md
+  h_c5ca005a78c880 1-20
+apps/web/src/components/report-agent-page.tsx
+  h_c5ca005a78c880 1-268
+apps/web/src/lib/__tests__/report-agent.test.ts
+  h_c5ca005a78c880 1-173
+apps/web/src/lib/report-agent.ts
+  h_c5ca005a78c880 1-220
+apps/web/src/routes/_authed/reports/render/$reportId.tsx
+  h_c5ca005a78c880 7,11-14,17,22-23,25-34,44-50,66-72,92-94,106-111,114,131,138-140,155-162,165-170,173-177,188-192,194-200,203-212,234-237,248,272-275,279-282,286-289,307-309,314-316,343-345,349-352,370-373,379-381,383-386,398-403,409-412,416-429,436-439,451-460,464-479,486-488,497-500,525-527,535-538,546-548,554-556,560-565,579-581,587-590,596-601,610-614,624-626,633-636,654-659,675-678,717-719,739-741,758-760,763-765,805,830-832,847-855,858-860,884-887
+apps/web/src/server/report-agent.ts
+  h_c5ca005a78c880 1-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e0b01693996db9ecdc3f0d74decff5168c09f46d",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
