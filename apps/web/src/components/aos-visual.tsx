@@ -31,6 +31,8 @@ export interface AosRequirement {
 	title: string;
 	status: "pass" | "fail" | "n_a";
 	strength?: "MUST" | "SHOULD" | "MAY";
+	/** De qué score son los puntos: hay dos ejes y cada uno se normaliza a 100 por su cuenta. */
+	axis?: "AOS" | "APS";
 	diagnostic?: boolean;
 	/** Lo que la auditoría observó, en una línea. Presentación: no sale del puntaje. */
 	evidence?: string;
@@ -38,10 +40,19 @@ export interface AosRequirement {
 	gain?: number;
 }
 
-/** Cuánto devuelve el check si pasa. Es lo que ordena "lo que falta" por impacto. */
-function GainTag({ gain }: { gain: number | undefined }) {
+/**
+ * Cuánto devuelve el check si pasa, y de qué score.
+ *
+ * El eje se nombra porque hay DOS escalas: un check APS devuelve puntos del APS declarado, no del AOS.
+ * Sin la etiqueta, un "+42.9 pts" al lado del anillo de AOS se lee como si moviera ese número.
+ */
+function GainTag({ gain, axis }: { gain: number | undefined; axis?: "AOS" | "APS" }) {
 	if (gain === undefined || gain <= 0) return null;
-	return <span className={MONO_LABEL}>+{gain} pts</span>;
+	return (
+		<span className={MONO_LABEL}>
+			+{gain} {axis ?? "AOS"}
+		</span>
+	);
 }
 
 /** What to do about each requirement, in the operator's words. */
@@ -208,7 +219,7 @@ export function AosNextStep({ failing }: { failing: AosRequirement[] }) {
 		<div className={`border-l-2 ${SIGNAL_RULE} bg-muted/40 py-3 pl-4`}>
 			<Eyebrow>El próximo paso</Eyebrow>
 			<p className="mt-1 text-sm">
-				<span className="font-medium">{next.title}</span> <GainTag gain={next.gain} />
+				<span className="font-medium">{next.title}</span> <GainTag gain={next.gain} axis={next.axis} />
 				{next.diagnostic === true ? " (fuera del puntaje, pero suma)" : ""} —{" "}
 				{FIX_HINTS[next.id] ?? "Revisá el detalle técnico."}
 			</p>
@@ -255,7 +266,7 @@ export function AosJourney({ stages }: { stages: StageSummary[] }) {
 												<li key={requirement.id} className="flex items-start gap-2 text-xs">
 													<span className={BLOCKING_TEXT}>✕</span>
 													<span>{FIX_HINTS[requirement.id] ?? requirement.title}</span>
-													<GainTag gain={requirement.gain} />
+													<GainTag gain={requirement.gain} axis={requirement.axis} />
 													{requirement.diagnostic === true && (
 														<span className="text-muted-foreground">· fuera del puntaje</span>
 													)}
@@ -285,7 +296,7 @@ export function AosChecklist({ requirements }: { requirements: AosRequirement[] 
 				<code className="font-mono text-[11px] text-muted-foreground">{requirement.id}</code>
 				<span className={requirement.status === "fail" ? BLOCKING_TEXT : "text-muted-foreground"}>{requirement.title}</span>
 				{requirement.status === "n_a" && <span className="text-muted-foreground">(no aplica)</span>}
-				<GainTag gain={requirement.gain} />
+				<GainTag gain={requirement.gain} axis={requirement.axis} />
 			</div>
 			{/* La evidencia es lo que convierte el tilde en algo verificable: qué pedimos y qué contestó. */}
 			{requirement.evidence !== undefined && (
