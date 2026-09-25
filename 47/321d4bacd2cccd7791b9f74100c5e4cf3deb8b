@@ -1,0 +1,20 @@
+apps/web/src/lib/__tests__/claims-guard.test.ts
+  h_c5ca005a78c880 1-53
+apps/web/src/lib/claims-guard.ts
+  h_c5ca005a78c880 1-70
+apps/web/src/routes/_authed/app/$brand/agent-assets.tsx
+  h_c5ca005a78c880 60-66
+apps/web/src/server/agent-assets.ts
+  h_c5ca005a78c880 10,131-151,163-184,192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "47321d4bacd2cccd7791b9f74100c5e4cf3deb8b",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
