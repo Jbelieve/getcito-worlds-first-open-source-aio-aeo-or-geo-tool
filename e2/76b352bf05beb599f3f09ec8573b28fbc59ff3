@@ -1,0 +1,14 @@
+MANUAL-EQUIPO-BEAOS.md
+  h_c5ca005a78c880 15,106-162,364-374,376-377,379-430,764-768,800-807,841-848,866-870
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e276b352bf05beb599f3f09ec8573b28fbc59ff3",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
