@@ -121,6 +121,16 @@ Así que la regla es mecánica y no admite criterio propio:
   agregamos `<AgentScoreCards />` y su import, y **cero cambios** a su código (los tres helpers
   `getVisibility*Color` se revirtieron a la versión del upstream, byte a byte). Si hay que tocar un
   archivo del stream para colgar algo nuestro, se agrega; no se reescribe lo que ya estaba.
+- **Excepción acordada: el reporte** (`reports/render/$reportId.tsx`). El 2026-09-25 Jorge lo pidió
+  explícito — *"no look and feel believe"* — y el argumento es bueno: es un **documento que ve el
+  cliente**, no una pantalla viva, y es la cara de la marca. Se repintó entero a los tokens de Believe
+  (grises → tinta/`muted`, semáforo → rampa ordinal azul + peso de tinta, gradiente azul/índigo del CTA →
+  azul de marca). **Tiene precio y se acepta a sabiendas:** sigue siendo un archivo del upstream, así que
+  si algún día Getcito toca el reporte, ese merge da conflicto. La lista de superficies de Believe en
+  `status-tone.test.ts` incluye el reporte, así que no puede volver atrás sin que falle el test.
+  La página de AOS/APS que se le agregó (`components/report-agent-page.tsx`) es nuestra y va aparte: al
+  archivo heredado solo se le sumó un import, una llamada en el loader y una línea, marcados
+  `AGREGADO BeAOS`.
 
 `status-tone.test.ts` sostiene la frontera en las dos direcciones: falla si una superficie nuestra
 aparece con semáforo, y falla si el tablero heredado deja de tenerlo (o lo cambió el upstream —entonces
