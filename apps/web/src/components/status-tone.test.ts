@@ -7,12 +7,12 @@ import { describe, expect, it } from "vitest";
 import {
 	AOS_BANDS,
 	APS_BANDS,
-	STATUS_TONE,
-	STAGE_LEVEL,
-	type Level,
-	apsBand,
 	aosBand,
+	apsBand,
+	type Level,
 	levelFromScore,
+	STAGE_LEVEL,
+	STATUS_TONE,
 	toneOf,
 } from "./status-tone";
 
@@ -141,14 +141,19 @@ describe("status-tone", () => {
 /**
  * La frontera del fork, ejecutable.
  *
- * BeAOS es un fork de Getcito y el upstream sigue vivo: hoy estamos 0 commits atrás y 85 adelante. Las
- * pantallas que vienen del stream se dejan **tal como vienen**, semáforo incluido, para que los merges
- * del upstream no pisen nada. Lo decidió Jorge: *"lo del stream del fork sí toca dejarlos con verdes y
- * rojos para no afectar actualizaciones del stream"*.
+ * BeAOS es un fork de Getcito y el upstream sigue vivo. Las pantallas que vienen del stream se dejan
+ * **tal como vienen**, semáforo incluido, para que los merges del upstream no pisen nada. Lo decidió
+ * Jorge: *"lo del stream del fork sí toca dejarlos con verdes y rojos para no afectar actualizaciones
+ * del stream"*.
  *
- * La paleta de Believe aplica solo a las superficies que son nuestras. Estos dos tests sostienen esa
- * línea en las dos direcciones: si pintamos algo nuestro de verde, y si repintamos algo que no es
- * nuestro.
+ * **La excepción acordada: el reporte.** El 2026-09-25 Jorge pidió repintarlo entero — *"no look and feel
+ * believe"* — y tiene sentido: es un **documento que ve el cliente**, no una pantalla viva, y el reporte
+ * es la cara de la marca. Sigue siendo un archivo del upstream, así que la excepción tiene precio: si
+ * algún día el upstream toca el reporte, ese merge da conflicto. Se acepta a cambio de que el entregable
+ * hable el idioma de Believe.
+ *
+ * Estos dos tests sostienen la línea en las dos direcciones: si pintamos algo nuestro de verde, y si
+ * repintamos algo que no es nuestro ni está en la lista de excepciones.
  */
 describe("la frontera del fork", () => {
 	/** Las superficies de AOS/APS: nuestras, y por lo tanto de la paleta de Believe. */
@@ -157,10 +162,13 @@ describe("la frontera del fork", () => {
 		"./aos-visual.tsx",
 		"./aps-visual.tsx",
 		"./agent-score-cards.tsx",
+		"./report-agent-page.tsx",
 		"../routes/_authed/app/$brand/agent-ops.tsx",
 		"../routes/_authed/app/$brand/agent-preference.tsx",
 		"../routes/_authed/app/$brand/agent-assets.tsx",
 		"../routes/_authed/app/$brand/agent-entities.tsx",
+		// Excepción acordada con Jorge: el reporte es un documento de cara al cliente.
+		"../routes/_authed/reports/render/$reportId.tsx",
 	];
 
 	/** El tablero heredado de Getcito. No es nuestro y no se toca. */
