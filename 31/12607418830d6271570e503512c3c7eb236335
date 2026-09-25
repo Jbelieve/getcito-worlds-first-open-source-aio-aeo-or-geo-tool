@@ -1,0 +1,20 @@
+apps/web/src/server/agent-assets.ts
+  h_c5ca005a78c880 8,16-61,99-101,104-105
+packages/aos-aps/src/assets/generate.test.ts
+  h_c5ca005a78c880 228-271
+packages/aos-aps/src/assets/generate.ts
+  h_c5ca005a78c880 1,33-38,231-257,353-358,383-391
+packages/aos-aps/src/provenance/sign.ts
+  h_c5ca005a78c880 92-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3112607418830d6271570e503512c3c7eb236335",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
