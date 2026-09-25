@@ -193,6 +193,15 @@ export interface Probes {
 	[signal: string]: boolean;
 }
 
+/**
+ * Lo que observamos para cada señal, en una línea, indexado por señal.
+ *
+ * Es PRESENTACIÓN: viaja con cada requerimiento para que el reporte muestre la evidencia en vez de un
+ * tilde pelado. No participa de ningún puntaje — el score sigue saliendo solo de `probes`, que es lo
+ * que lo mantiene idéntico al de Maasy.
+ */
+export type EvidenceMap = Record<string, string>;
+
 /** Strong signal only: a brand must not be graded as an API just because it has a website. */
 export function classifyBusinessType(signals: {
 	hasOpenApi?: boolean;
@@ -211,6 +220,13 @@ export interface RequirementResult {
 	status: Status;
 	/** True for the extended checks: reported, never scored. */
 	diagnostic?: boolean;
+	/** Lo que vimos al comprobarlo. Presentación: no cambia ningún puntaje. */
+	evidence?: string;
+	/**
+	 * Puntos de AOS/APS que devolvería si pasa. Solo en los puntuados que hoy fallan: un diagnóstico
+	 * nunca puntúa, así que no tiene puntos que ganar y no aparece acá.
+	 */
+	gain?: number;
 }
 
 export interface StandardsResult {
@@ -234,19 +250,46 @@ function evaluate(
 	probes: Probes,
 	businessType: BusinessType,
 	diagnostic = false,
+	evidence?: EvidenceMap,
 ): RequirementResult[] {
 	return defs.map((def) => {
 		const applies = def.applies.includes(businessType);
 		const status: Status = applies === false ? "n_a" : probes[def.signal] ? "pass" : "fail";
 		const result: RequirementResult = { id: def.id, axis: def.axis, strength: def.strength, title: def.title, status };
 		if (diagnostic) result.diagnostic = true;
+		const observed = evidence?.[def.signal];
+		if (observed !== undefined && observed.length > 0) result.evidence = observed;
 		return result;
 	});
 }
 
+/**
+ * Los puntos que devolvería cada check puntuado que hoy falla, sobre 100.
+ *
+ * Es lo que convierte "lo que falta" en un plan ordenado por impacto en vez de una lista. El
+ * denominador son los checks PUNTUADOS que aplican a este tipo de negocio: los diagnósticos y los
+ * `n_a` quedan afuera, así que un diagnóstico nunca infla el denominador ni se lleva puntos ajenos.
+ *
+ * Propiedad que sostiene el cálculo: la suma de las ganancias de los que fallan es, redondeo mediante,
+ * `100 - score`. Hay un test que lo verifica.
+ */
+export function estimateGains(results: RequirementResult[]): RequirementResult[] {
+	const scored = results.filter((result) => result.diagnostic !== true && result.status !== "n_a");
+	const maxByAxis = new Map<Axis, number>();
+	for (const result of scored) {
+		maxByAxis.set(result.axis, (maxByAxis.get(result.axis) ?? 0) + STRENGTH_WEIGHT[result.strength]);
+	}
+	return results.map((result) => {
+		if (result.diagnostic === true || result.status !== "fail") return result;
+		const max = maxByAxis.get(result.axis) ?? 0;
+		if (max === 0) return result;
+		return { ...result, gain: Math.round((STRENGTH_WEIGHT[result.strength] / max) * 1000) / 10 };
+	});
+}
+
 /** The scored evaluation: the same output the Maasy audit produces for the same probes. */
-export function evaluateStandards(probes: Probes, businessType: BusinessType): StandardsResult {
-	const requirements = evaluate(REQUIREMENTS, probes, businessType);
+export function evaluateStandards(probes: Probes, businessType: BusinessType, evidence?: EvidenceMap): StandardsResult {
+	const requirements = estimateGains(evaluate(REQUIREMENTS, probes, businessType, false, evidence));
 	return {
 		business_type: businessType,
 		requirements,
@@ -257,6 +300,6 @@ export function evaluateStandards(probes: Probes, businessType: BusinessType): S
 }
 
 /** Diagnostic-only evaluation of the rest of the standard. Never feeds a score. */
-export function evaluateExtended(probes: Probes, businessType: BusinessType): RequirementResult[] {
-	return evaluate(EXTENDED_REQUIREMENTS, probes, businessType, true);
+export function evaluateExtended(probes: Probes, businessType: BusinessType, evidence?: EvidenceMap): RequirementResult[] {
+	return evaluate(EXTENDED_REQUIREMENTS, probes, businessType, true, evidence);
 }

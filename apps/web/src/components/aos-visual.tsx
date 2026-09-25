@@ -15,6 +15,7 @@ import {
 	BandChip,
 	BLOCKING_TEXT,
 	Eyebrow,
+	MONO_LABEL,
 	REQUIREMENT_GLYPH,
 	REQUIREMENT_TONE,
 	SIGNAL_RULE,
@@ -31,6 +32,16 @@ export interface AosRequirement {
 	status: "pass" | "fail" | "n_a";
 	strength?: "MUST" | "SHOULD" | "MAY";
 	diagnostic?: boolean;
+	/** Lo que la auditoría observó, en una línea. Presentación: no sale del puntaje. */
+	evidence?: string;
+	/** Puntos que devolvería si pasa. Solo en los puntuados que fallan. */
+	gain?: number;
+}
+
+/** Cuánto devuelve el check si pasa. Es lo que ordena "lo que falta" por impacto. */
+function GainTag({ gain }: { gain: number | undefined }) {
+	if (gain === undefined || gain <= 0) return null;
+	return <span className={MONO_LABEL}>+{gain} pts</span>;
 }
 
 /** What to do about each requirement, in the operator's words. */
@@ -184,16 +195,20 @@ export function aosDiagnosis(score: number, failing: AosRequirement[]): string {
  */
 export function AosNextStep({ failing }: { failing: AosRequirement[] }) {
 	const scored = failing.filter((requirement) => requirement.diagnostic !== true);
-	const ordered = [...scored].sort(
-		(a, b) => (STRENGTH_POINTS[b.strength ?? "MUST"] ?? 1) - (STRENGTH_POINTS[a.strength ?? "MUST"] ?? 1),
-	);
+	// Primero por puntos que devuelve, y a igualdad por fuerza. Es el criterio de la competencia
+	// (`estScoreGain`) y es más útil que la fuerza sola: dos MUST pueden valer distinto.
+	const ordered = [...scored].sort((a, b) => {
+		const byGain = (b.gain ?? 0) - (a.gain ?? 0);
+		if (byGain !== 0) return byGain;
+		return (STRENGTH_POINTS[b.strength ?? "MUST"] ?? 1) - (STRENGTH_POINTS[a.strength ?? "MUST"] ?? 1);
+	});
 	const next = ordered[0] ?? failing[0];
 	if (next === undefined) return null;
 	return (
 		<div className={`border-l-2 ${SIGNAL_RULE} bg-muted/40 py-3 pl-4`}>
 			<Eyebrow>El próximo paso</Eyebrow>
 			<p className="mt-1 text-sm">
-				<span className="font-medium">{next.title}</span>
+				<span className="font-medium">{next.title}</span> <GainTag gain={next.gain} />
 				{next.diagnostic === true ? " (fuera del puntaje, pero suma)" : ""} —{" "}
 				{FIX_HINTS[next.id] ?? "Revisá el detalle técnico."}
 			</p>
@@ -234,15 +249,18 @@ export function AosJourney({ stages }: { stages: StageSummary[] }) {
 								</div>
 								{stage.failing.length > 0 ? (
 									<ul className="space-y-1">
-										{stage.failing.map((requirement) => (
-											<li key={requirement.id} className="flex items-start gap-2 text-xs">
-												<span className={BLOCKING_TEXT}>✕</span>
-												<span>{FIX_HINTS[requirement.id] ?? requirement.title}</span>
-												{requirement.diagnostic === true && (
-													<span className="text-muted-foreground">· fuera del puntaje</span>
-												)}
-											</li>
-										))}
+										{[...stage.failing]
+											.sort((a, b) => (b.gain ?? 0) - (a.gain ?? 0))
+											.map((requirement) => (
+												<li key={requirement.id} className="flex items-start gap-2 text-xs">
+													<span className={BLOCKING_TEXT}>✕</span>
+													<span>{FIX_HINTS[requirement.id] ?? requirement.title}</span>
+													<GainTag gain={requirement.gain} />
+													{requirement.diagnostic === true && (
+														<span className="text-muted-foreground">· fuera del puntaje</span>
+													)}
+												</li>
+											))}
 									</ul>
 								) : (
 									<p className="text-xs text-muted-foreground">Sin pendientes en esta etapa.</p>
@@ -261,11 +279,18 @@ export function AosChecklist({ requirements }: { requirements: AosRequirement[] 
 	const scored = requirements.filter((requirement) => requirement.diagnostic !== true);
 	const diagnostics = requirements.filter((requirement) => requirement.diagnostic === true);
 	const row = (requirement: AosRequirement) => (
-		<li key={requirement.id} className="flex items-center gap-2 text-xs">
-			<span className={REQUIREMENT_TONE[requirement.status]}>{REQUIREMENT_GLYPH[requirement.status]}</span>
-			<code className="font-mono text-[11px] text-muted-foreground">{requirement.id}</code>
-			<span className={requirement.status === "fail" ? BLOCKING_TEXT : "text-muted-foreground"}>{requirement.title}</span>
-			{requirement.status === "n_a" && <span className="text-muted-foreground">(no aplica)</span>}
+		<li key={requirement.id} className="space-y-0.5 text-xs">
+			<div className="flex flex-wrap items-center gap-2">
+				<span className={REQUIREMENT_TONE[requirement.status]}>{REQUIREMENT_GLYPH[requirement.status]}</span>
+				<code className="font-mono text-[11px] text-muted-foreground">{requirement.id}</code>
+				<span className={requirement.status === "fail" ? BLOCKING_TEXT : "text-muted-foreground"}>{requirement.title}</span>
+				{requirement.status === "n_a" && <span className="text-muted-foreground">(no aplica)</span>}
+				<GainTag gain={requirement.gain} />
+			</div>
+			{/* La evidencia es lo que convierte el tilde en algo verificable: qué pedimos y qué contestó. */}
+			{requirement.evidence !== undefined && (
+				<p className="pl-5 text-[11px] text-muted-foreground">{requirement.evidence}</p>
+			)}
 		</li>
 	);
 	return (

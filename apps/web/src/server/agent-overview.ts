@@ -17,6 +17,8 @@ interface StoredRequirement {
 	title: string;
 	status: "pass" | "fail" | "n_a";
 	diagnostic?: boolean;
+	/** Puntos que devolvería si pasa. Presentación: lo calcula la auditoría, no el puntaje. */
+	gain?: number;
 }
 
 export interface AgentOverview {
@@ -28,7 +30,7 @@ export interface AgentOverview {
 		passed: number;
 		applicable: number;
 		/** What is failing in the scored rubric: the actionable list. */
-		failing: Array<{ id: string; title: string }>;
+		failing: Array<{ id: string; title: string; gain: number | null }>;
 		/** Failing checks that are reported but do not move the score. */
 		diagnosticsFailing: number;
 	} | null;
@@ -107,9 +109,12 @@ export const getAgentOverviewFn = createServerFn({ method: "POST" })
 							auditedAt: audit.createdAt.toISOString(),
 							passed: applicable.filter((requirement) => requirement.status === "pass").length,
 							applicable: applicable.length,
+							// Ordenados por lo que devolvería arreglarlos, no por el orden del rubric: la
+							// tarjeta es un resumen, y en un resumen manda el impacto.
 							failing: applicable
 								.filter((requirement) => requirement.status === "fail")
-								.map((requirement) => ({ id: requirement.id, title: requirement.title })),
+								.sort((a, b) => (b.gain ?? 0) - (a.gain ?? 0))
+								.map((requirement) => ({ id: requirement.id, title: requirement.title, gain: requirement.gain ?? null })),
 							diagnosticsFailing: (requirements ?? []).filter(
 								(requirement) => requirement.diagnostic === true && requirement.status === "fail",
 							).length,

@@ -125,6 +125,7 @@ export function AgentScoreCards({ brandId }: { brandId: string | undefined }) {
 													className="rounded-full border border-dashed border-foreground/25 px-2.5 py-0.5 text-xs text-foreground"
 												>
 													{requirement.title}
+													{requirement.gain === null ? "" : <span className={MONO_LABEL}> +{requirement.gain}</span>}
 												</span>
 											))}
 										</div>
