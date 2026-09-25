@@ -1,0 +1,20 @@
+.changeset/server-card-declara-tools.md
+  h_c5ca005a78c880 1-11
+apps/web/src/server/agent-assets-core.ts
+  h_c5ca005a78c880 14,26,28-29,31-35,39,59-62,71-72,78-95,163-164,168-169
+packages/aos-aps/src/assets/generate.test.ts
+  h_c5ca005a78c880 241-281
+packages/aos-aps/src/assets/generate.ts
+  h_c5ca005a78c880 2,22-40,58-59,263-265,275
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0058e24225db089ca94c402f2d56df1a1cf5d2ad",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
