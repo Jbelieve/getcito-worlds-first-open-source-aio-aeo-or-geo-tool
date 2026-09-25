@@ -1,4 +1,4 @@
-import { buildKeysJson, signDetached, type SigningKey } from "../provenance";
+import { buildKeysJson, buildWebBotAuthDirectory, signDetached, type SigningKey } from "../provenance";
 import type { Claim, Proof } from "../preference";
 
 /**
@@ -30,6 +30,12 @@ export interface AgentAssetInput {
 	 * so the bundle carries the umbrella identity. Absent => no provenance assets are emitted.
 	 */
 	signing?: SigningKey;
+	/**
+	 * URL del MCP que la marca declara. Ausente => no se emite server-card: BeAOS no inventa
+	 * endpoints, y un server-card sin `serverUrl` es exactamente el estado incompleto que hay que
+	 * evitar. El llamador lo resuelve leyendo lo que el sitio ya publica.
+	 */
+	mcpUrl?: string;
 }
 
 function asString(value: unknown): string | undefined {
@@ -222,6 +228,33 @@ function llmsFullTxt(input: AgentAssetInput): string {
 	return lines.join("\n");
 }
 
+/**
+ * `/.well-known/mcp/server-card.json` (AOS-CAPA-01), con `serverUrl`.
+ *
+ * Se emite solo cuando la marca declara un MCP. Los lectores buscan `serverUrl` en la raíz; el card de
+ * `believe-global.com` lo tenía dentro de `transport.endpoint`, que es la forma vieja, y por eso
+ * figuraba como incompleto. `tools` va vacío a propósito: no inventamos herramientas.
+ */
+function mcpServerCard(input: AgentAssetInput): string | null {
+	const serverUrl = asString(input.mcpUrl);
+	if (serverUrl === undefined) return null;
+	const description = descriptionFrom(input) ?? `Superficie MCP de ${input.name}.`;
+	return `${JSON.stringify(
+		{
+			name: input.name,
+			description,
+			version: "1.0.0",
+			protocolVersion: "2025-06-18",
+			serverUrl,
+			websiteUrl: input.websiteUrl,
+			transport: { type: "streamable-http", endpoint: serverUrl },
+			tools: [],
+		},
+		null,
+		2,
+	)}\n`;
+}
+
 function agentsMd(input: AgentAssetInput): string {
 	const description = descriptionFrom(input) ?? "";
 	return [
@@ -317,6 +350,12 @@ export function generateAgentAssets(input: AgentAssetInput): GeneratedAsset[] {
 		{ path: "/.well-known/brand.json", type: "application/json", content: brand },
 	];
 
+	// AOS-CAPA-01: solo si la marca declara un MCP. Nunca inventamos el endpoint.
+	const serverCard = mcpServerCard(input);
+	if (serverCard !== null) {
+		assets.push({ path: "/.well-known/mcp/server-card.json", type: "application/json", content: serverCard });
+	}
+
 	// El sitemap va pegado a robots.txt. El indice se busca por ruta y no por numero: cuando era
 	// `splice(3, ...)` alcanzaba con insertar un archivo antes para dejarlo en el lugar equivocado.
 	const sitemap = sitemapXml(input);
@@ -339,6 +378,15 @@ export function generateAgentAssets(input: AgentAssetInput): GeneratedAsset[] {
 				path: "/.well-known/keys.json",
 				type: "application/json",
 				content: `${JSON.stringify(keys, null, 2)}\n`,
+			});
+		}
+		// APS-PROV-03: el directorio de Web Bot Auth, derivado de la MISMA clave que firma.
+		const directory = buildWebBotAuthDirectory(input.signing);
+		if (directory !== null) {
+			assets.push({
+				path: "/.well-known/http-message-signatures-directory",
+				type: "application/json",
+				content: `${JSON.stringify(directory, null, 2)}\n`,
 			});
 		}
 	}

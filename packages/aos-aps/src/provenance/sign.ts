@@ -89,6 +89,26 @@ export function signingKeyInfo(key: SigningKey): SigningKeyInfo | null {
 	};
 }
 
+/**
+ * El directorio de Web Bot Auth (`/.well-known/http-message-signatures-directory`), que es nuestro
+ * propio `APS-PROV-03`: lo exigimos en la rubric y no lo emitíamos.
+ *
+ * Es un JWKS con la clave pública **cruda** en base64url (`x`), que es lo que un verificador espera
+ * para comprobar una firma de mensaje HTTP. Se deriva de la misma clave que firma `brand.json`, así
+ * que un agente que nos verifica por Web Bot Auth verifica la misma identidad.
+ */
+export interface WebBotAuthDirectory {
+	keys: Array<{ kty: "OKP"; crv: "Ed25519"; x: string; kid: string; use: "sig"; alg: "Ed25519" }>;
+}
+
+export function buildWebBotAuthDirectory(key: SigningKey): WebBotAuthDirectory | null {
+	const info = signingKeyInfo(key);
+	if (info === null) return null;
+	// `publicKeyHex` son los 32 bytes crudos; base64url sin padding es la forma del JWK.
+	const x = Buffer.from(info.publicKeyHex, "hex").toString("base64url");
+	return { keys: [{ kty: "OKP", crv: "Ed25519", x, kid: info.kid, use: "sig", alg: "Ed25519" }] };
+}
+
 export function hasSigningKey(key: SigningKey | null): boolean {
 	return key !== null && decodeSigningMaterial(key.material) !== null;
 }

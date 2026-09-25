@@ -5,11 +5,58 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@workspace/lib/db/db";
 import { agentAssets, agentBrandDnaSnapshots, agentBrandEntities } from "@workspace/aos-aps/db/schema";
 import { generateAgentAssets } from "@workspace/aos-aps/assets";
+import { extractMcpEndpoint } from "@workspace/aos-aps/aos";
 import { findUmbrellaEntity, keysUriForWebsite, signingKeyFromEnv } from "@workspace/aos-aps/provenance";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 
 function hashContent(content: string): string {
 return createHash("sha256").update(content).digest("hex");
+}
+
+/**
+ * La URL del MCP que el sitio YA declara, para completar el server-card en el formato que los
+ * lectores esperan.
+ *
+ * BeAOS no inventa endpoints: si el sitio no declara ninguno, no se emite server-card. Se lee en el
+ * orden en que los lectores lo buscan: `serverUrl` del card que el sitio ya sirve — y si no está,
+ * `transport.endpoint`, que es la forma vieja y la que usa believe-global.com, y por eso su card
+ * figuraba como incompleto —; y como ultimo recurso, el endpoint declarado en su llms.txt.
+ *
+ * Los dos pedidos tienen timeout corto: esto corre al apretar "Generar assets", no en un job.
+ */
+async function declaredMcpUrl(websiteUrl: string | undefined): Promise<string | undefined> {
+if (websiteUrl === undefined) return undefined;
+let origin: string;
+try {
+origin = new URL(websiteUrl).origin;
+} catch {
+return undefined;
+}
+
+try {
+const response = await fetch(`${origin}/.well-known/mcp/server-card.json`, {
+signal: AbortSignal.timeout(5000),
+headers: { accept: "application/json" },
+});
+if (response.ok) {
+const card = (await response.json()) as Record<string, unknown>;
+const transport = card.transport as { endpoint?: unknown } | undefined;
+const found = [card.serverUrl, transport?.endpoint, card.url].find(
+(value): value is string => typeof value === "string" && value.trim().length > 0,
+);
+if (found !== undefined) return found.trim();
+}
+} catch {
+// Sin card accesible: se intenta por llms.txt.
+}
+
+try {
+const response = await fetch(`${origin}/llms.txt`, { signal: AbortSignal.timeout(5000) });
+if (response.ok === false) return undefined;
+return extractMcpEndpoint(await response.text()) ?? undefined;
+} catch {
+return undefined;
+}
 }
 
 export const generateAgentAssetsFn = createServerFn({ method: "POST" })
@@ -49,9 +96,13 @@ const umbrella = findUmbrellaEntity(hierarchy, data.entityId);
 if (umbrella === null) throw new Error("Entity hierarchy is incomplete: no umbrella found");
 const signing = signingKeyFromEnv(process.env, keysUriForWebsite(umbrella.websiteUrl));
 
+const websiteUrl =
+typeof dnaPayload?.website_url === "string" ? dnaPayload.website_url : current.websiteUrl ?? undefined;
+
 const generated = generateAgentAssets({
 name: String(dnaPayload?.brand_name ?? current.name),
-websiteUrl: typeof dnaPayload?.website_url === "string" ? dnaPayload.website_url : current.websiteUrl ?? undefined,
+websiteUrl,
+mcpUrl: await declaredMcpUrl(websiteUrl),
 industry: typeof dnaPayload?.industry === "string" ? dnaPayload.industry : undefined,
 brief: typeof dnaPayload?.brief === "string" ? dnaPayload.brief : undefined,
 dna,
