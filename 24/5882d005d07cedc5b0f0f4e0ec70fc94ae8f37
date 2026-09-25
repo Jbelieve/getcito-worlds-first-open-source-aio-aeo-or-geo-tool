@@ -1,0 +1,14 @@
+TEST-E2E.md
+  h_c5ca005a78c880 1-272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "245882d005d07cedc5b0f0f4e0ec70fc94ae8f37",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
