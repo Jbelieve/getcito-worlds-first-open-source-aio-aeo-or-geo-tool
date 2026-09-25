@@ -138,3 +138,74 @@ describe("classifyBusinessType", () => {
 		expect(classifyBusinessType({})).toBe("brand");
 	});
 });
+
+describe("estimateGains / evidencia", () => {
+	/** Todos los puntuados pasan: no hay nada que ganar. */
+	function allPass(): Record<string, boolean> {
+		const probes: Record<string, boolean> = {};
+		for (const def of REQUIREMENTS) probes[def.signal] = true;
+		return probes;
+	}
+
+	it("la suma de las ganancias es, redondeo mediante, 100 menos el score", () => {
+		const probes = allPass();
+		probes.robots_sitemap = false; // MUST: el que más pesa
+		probes.llms_txt = false; // SHOULD
+		const result = evaluateStandards(probes, "brand");
+		const fallando = result.requirements.filter((r) => r.status === "fail");
+		const total = result.requirements.reduce((sum, r) => sum + (r.gain ?? 0), 0);
+		expect(result.aos_standards).toBeLessThan(100);
+		// El score se redondea a entero (±0,5) y cada ganancia a un decimal (±0,05 cada una), asi que
+		// la igualdad exacta no es alcanzable: se verifica contra el bound real del redondeo.
+		const tolerancia = 0.5 + 0.05 * fallando.length;
+		expect(Math.abs(total - (100 - result.aos_standards))).toBeLessThanOrEqual(tolerancia);
+	});
+
+	it("solo los puntuados que fallan traen ganancia", () => {
+		const probes = allPass();
+		probes.llms_txt = false;
+		probes.jsonld = false;
+		const { requirements } = evaluateStandards(probes, "brand");
+		for (const r of requirements) {
+			if (r.status === "fail") expect(r.gain).toBeGreaterThan(0);
+			else expect(r.gain).toBeUndefined();
+		}
+	});
+
+	it("los diagnosticos no traen ganancia ni se llevan puntos ajenos", () => {
+		const probes = allPass();
+		for (const def of EXTENDED_REQUIREMENTS) probes[def.signal] = false;
+		const scored = evaluateStandards(probes, "brand");
+		const extended = evaluateExtended(probes, "brand");
+		// El score con TODOS los diagnosticos en rojo es identico al de todos en verde.
+		expect(scored.aos_standards).toBe(100);
+		for (const r of extended) {
+			expect(r.diagnostic).toBe(true);
+			expect(r.gain).toBeUndefined();
+		}
+	});
+
+	it("un check que no aplica queda n/a y no ensucia el denominador", () => {
+		const probes = allPass();
+		const brand = evaluateStandards(probes, "brand");
+		const productApi = evaluateStandards(probes, "product_api");
+		const naBrand = brand.requirements.filter((r) => r.status === "n_a");
+		const naProductApi = productApi.requirements.filter((r) => r.status === "n_a");
+		// Los conjuntos que aplican difieren entre tipos de negocio.
+		expect(naBrand.length).not.toBe(naProductApi.length);
+		expect(brand.aos_standards).toBe(100);
+		expect(productApi.aos_standards).toBe(100);
+	});
+
+	it("adjunta la evidencia que le pasan, sin cambiar el score", () => {
+		const probes = allPass();
+		const sinEvidencia = evaluateStandards(probes, "brand");
+		const conEvidencia = evaluateStandards(probes, "brand", { llms_txt: "/llms.txt responde 200 (text/plain, 812 chars)." });
+		expect(conEvidencia.aos_standards).toBe(sinEvidencia.aos_standards);
+		const disc01 = conEvidencia.requirements.find((r) => r.id === "AOS-DISC-01");
+		expect(disc01?.evidence).toContain("/llms.txt responde 200");
+		// Y donde no hay evidencia, el campo no existe (no queda un string vacio).
+		const disc03 = conEvidencia.requirements.find((r) => r.id === "AOS-DISC-03");
+		expect(disc03?.evidence).toBeUndefined();
+	});
+});

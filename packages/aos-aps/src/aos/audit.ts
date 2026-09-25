@@ -13,6 +13,7 @@ import {
 } from "./probe";
 import {
 	classifyBusinessType,
+	type EvidenceMap,
 	evaluateExtended,
 	evaluateStandards,
 	type Probes,
@@ -261,6 +262,66 @@ export async function runAosAudit(input: AosAuditInput): Promise<AosAuditResult>
 		? computeApsScore(profile, { signedProvenanceVerified: signatureValid })
 		: null;
 
+	const markdownNegotiation = await probeMarkdownNegotiation(base, timeoutMs);
+	const discoveredTypes = jsonLdTypes(html);
+	const PROOF_TYPES = ["CreativeWork", "CaseStudy", "Review", "Article"];
+	const proofTypes = discoveredTypes.filter((type) => PROOF_TYPES.includes(type));
+
+	/**
+	 * Lo que vimos, por señal, en una línea.
+	 *
+	 * Es presentación: viaja con cada requerimiento para que el reporte muestre evidencia en vez de un
+	 * tilde pelado, y no participa de ningún puntaje — el score sale solo de `probes` (ver requirements.ts).
+	 * Los checks de claims/proofs quedan sin línea a propósito: sus números ya se muestran en el bloque
+	 * de APS declarado, y preferimos no decir dos veces lo mismo con menos precisión.
+	 */
+	const describeFile = (result: Probe | null, path: string): string => {
+		if (result === null) return `No pudimos pedir ${path}: sin respuesta.`;
+		if (result.ok === false) return `${path} responde ${result.status}.`;
+		const tipo = result.contentType.length > 0 ? result.contentType : "sin content-type";
+		return `${path} responde ${result.status} · ${tipo} · ${result.body.length} chars.`;
+	};
+	const evidence: EvidenceMap = {
+		llms_txt: describeFile(llmsTxt, "/llms.txt"),
+		agents_md:
+			agentsMd !== null && agentsMd.ok === true && agentsMd.contentType.toLowerCase().includes("html")
+				? "/AGENTS.md responde 200 pero devuelve HTML: un SPA sirviendo su home no cuenta."
+				: describeFile(agentsMd, "/AGENTS.md"),
+		robots_sitemap: `robots.txt ${robots?.ok === true ? `responde ${robots.status}` : "no responde"} · sitemap.xml ${sitemap?.ok === true ? `responde ${sitemap.status}` : "no responde"}.`,
+		jsonld:
+			discoveredTypes.length > 0
+				? `JSON-LD en el HTML con tipos: ${discoveredTypes.join(", ")}.`
+				: "Ningún bloque JSON-LD en el HTML.",
+		agent_card: describeFile(agentCard, "/.well-known/agent-card.json"),
+		agent_permissions: describeFile(agentPermissions, "/.well-known/agent-permissions.json"),
+		mcp_server_card: isJsonObject(mcpServerCard)
+			? "/.well-known/mcp/server-card.json responde JSON."
+			: hasMcpOrOpenApi
+				? "Sin server-card propio, pero detectamos MCP u OpenAPI por otra vía."
+				: "Ni server-card, ni MCP, ni OpenAPI por las vías que probamos.",
+		openapi: hasMcpOrOpenApi
+			? "Detectamos una superficie MCP u OpenAPI."
+			: "No encontramos MCP ni OpenAPI por ninguna de las vías que probamos.",
+		brand_json: describeFile(brandJsonResponse, "/.well-known/brand.json"),
+		keys_json: describeFile(keysJson, "/.well-known/keys.json"),
+		signature_valid: signatureValid
+			? "La firma verifica contra /.well-known/keys.json sobre los bytes servidos."
+			: "Sin firma válida: no pudimos verificar los bytes servidos contra la clave pública.",
+		llms_full_txt:
+			discoveryFiles.llms_full_txt === true ? "/llms-full.txt responde." : "/llms-full.txt no responde.",
+		proof_objects:
+			proofTypes.length > 0
+				? `JSON-LD de evidencia con tipos: ${proofTypes.join(", ")}.`
+				: "Sin JSON-LD de tipo CreativeWork, CaseStudy, Review ni Article.",
+		markdown_negotiation: markdownNegotiation
+			? "Con Accept: text/markdown devuelve markdown."
+			: "Con Accept: text/markdown no devuelve markdown.",
+		nlweb_ask: nlwebAsk === null ? "No hay endpoint /ask." : `/ask responde ${nlwebAsk.status}.`,
+		http_message_signatures: isJsonObject(httpMessageSignatures)
+			? "/.well-known/http-message-signatures-directory responde JSON."
+			: "/.well-known/http-message-signatures-directory no responde JSON.",
+	};
+
 	const probes: Probes = {
 		llms_txt: llmsTxt?.ok === true,
 		agents_md: agentsMd?.ok === true && agentsMd.contentType.toLowerCase().includes("html") === false,
@@ -275,8 +336,8 @@ export async function runAosAudit(input: AosAuditInput): Promise<AosAuditResult>
 		signature_valid: signatureValid,
 		// Extended and unscored: the rest of spec.json plus what this audit checks on top.
 		llms_full_txt: discoveryFiles.llms_full_txt === true,
-		proof_objects: jsonLdTypes(html).some((type) => ["CreativeWork", "CaseStudy", "Review", "Article"].includes(type)),
-		markdown_negotiation: await probeMarkdownNegotiation(base, timeoutMs),
+		proof_objects: proofTypes.length > 0,
+		markdown_negotiation: markdownNegotiation,
 		nlweb_ask: nlwebAsk !== null && nlwebAsk.status !== 404 && nlwebAsk.status !== 410,
 		http_message_signatures: isJsonObject(httpMessageSignatures),
 		claim_boundaries: profile.signals.claimBoundaries,
@@ -285,8 +346,8 @@ export async function runAosAudit(input: AosAuditInput): Promise<AosAuditResult>
 		operator_detected: detectMaasyOperator(html),
 	};
 
-	const standards = evaluateStandards(probes, businessType);
-	const extended = evaluateExtended(probes, businessType);
+	const standards = evaluateStandards(probes, businessType, evidence);
+	const extended = evaluateExtended(probes, businessType, evidence);
 
 	return {
 		url: base.toString(),

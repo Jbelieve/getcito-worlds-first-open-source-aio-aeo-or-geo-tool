@@ -24,7 +24,10 @@ band: result.band,
 businessType: result.businessType,
 standards: result.standards,
 probes: result.probes,
-requirements: result.standards.requirements,
+// Los diagnosticos viajan con los puntuados, marcados con `diagnostic: true`. Sin esto la seccion
+// "chequeos que no puntuan" de la UI renderizaba vacio desde siempre, y el resumen del dashboard
+// reportaba 0 diagnosticos fallando aunque los hubiera.
+requirements: [...result.standards.requirements, ...result.extended],
 apsScore: result.aps?.aps ?? null,
 apsBreakdown: result.aps,
 scoringVersion: result.aps?.scoring_version ?? null,
