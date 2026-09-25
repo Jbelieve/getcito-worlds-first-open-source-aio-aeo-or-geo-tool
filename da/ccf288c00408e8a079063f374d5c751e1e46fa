@@ -1,0 +1,24 @@
+packages/aos-aps/package.json
+  h_c5ca005a78c880 11
+packages/aos-aps/src/claims/candidates.test.ts
+  h_c5ca005a78c880 1-144
+packages/aos-aps/src/claims/candidates.ts
+  h_c5ca005a78c880 1-309
+packages/aos-aps/src/claims/index.ts
+  h_c5ca005a78c880 1-9
+packages/aos-aps/src/claims/mapping.test.ts
+  h_c5ca005a78c880 1-184
+packages/aos-aps/src/claims/mapping.ts
+  h_c5ca005a78c880 1-196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "daccf288c00408e8a079063f374d5c751e1e46fa",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
