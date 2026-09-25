@@ -436,7 +436,10 @@ rotarlo cuando se pueda.
 - **Score legacy de Maasy (76)**: decidir si BeAOS lo porta y lo muestra al lado del 89.
 - **Generación de prompts desde la UI**: hoy se puede generar y revisar; falta el botón de regenerar
   tras el lock con confirmación explícita (ya existe `supersede`).
-- **MCP card propio**: el bundle no emite `/.well-known/mcp/server-card.json`.
+- ~~**MCP card propio**: el bundle no emite `/.well-known/mcp/server-card.json`.~~ **ARREGLADO** (PR #42):
+  el bundle lo emite leyendo el MCP que el sitio ya publica (`declaredMcpUrl`), y agrega el directorio de
+  Web Bot Auth. Verificado contra `believe-global.com` en vivo: `serverUrl = https://believe-global.com/mcp`.
+- **Falta la paridad de *generación y entrega* con Maasy AOS, y el MCP propio de BeAOS**: ver §10.
 
 ---
 
@@ -540,3 +543,58 @@ on-demand · `#12` panel Agent Preference · `#13` key de gateway · `#14` costo
 `#17` timeout por llamada + corridas parciales · `#18` documentación de estado y runbook ·
 `#19` AOS y APS en el dashboard + renombre · `#20` APS visual con la Montecarlo real ·
 `#21` AOS con la estructura de la extensión · `#22` una sola paleta, en los tintes de Believe.
+`#23`–`#41`: frontera del fork, diagnóstico del idioma, investigación LATAM, estado en SiYuan, manual,
+corrida de 4 modelos, timeouts de captura, evidencia de BrightData, parche del locale, verificación,
+cuarentena, ganancia por eje, análisis de ora/is-agentic ×2, evidencia + ganancia, `llms-full.txt`.
+`#42` server-card con `serverUrl` + directorio de Web Bot Auth + guardián de claims.
+
+---
+
+## 10. Paridad con Maasy AOS, y el MCP propio de BeAOS
+
+**Decisión de Jorge (esta sesión).** La idea acordada no es *analizar* lo que hace Maasy AOS: es
+**construir acá todo lo que Maasy AOS construye**, para una marca y sus webs, y mandarlo a la web que lo
+necesite. Si BeAOS no genera lo mismo, hay que vivir en dos mundos. Y **BeAOS necesita su propio MCP
+real** para que los demás productos de Believe lo consuman.
+
+### Qué genera Maasy AOS hoy (leído en `/Volumes/DEV/Developer/MAASY/AOS`)
+
+Fuente: `docs/AOS-PROTOCOL.md`, `apps/operator-runner/README.md`, `supabase/functions/aos-*`.
+
+| Pieza | Qué es | Dónde vive |
+|---|---|---|
+| `aos-audit-url` | audita una URL, mapea forms reales, calcula nivel y persiste en `aos_audits` | Supabase EF |
+| `aos-generate` | por cada form ejecutable genera el JSON-LD `PotentialAction` **y** el `inputSchema` de un tool MCP | Supabase EF |
+| `aos-generate-llms` | genera el `llms.txt` | Supabase EF |
+| `llms.txt` | declarado como generado *client-side*: se **copia/descarga y se publica a mano** en el sitio | cliente |
+| `aos-mcp` | **el MCP autoalojado por Maasy**: un endpoint público por auditoría (`?audit_id=`), JSON-RPC `tools/list` / `tools/call`, proxy genérico que reenvía el `action`/`method` del form del cliente | Supabase EF |
+| `maasy-operator` (`operator.js`) | el **snippet del operador**: el agente que opera el sitio del cliente | `packages/maasy-operator` |
+| `operator-runner` | headless (Fly.io + Playwright) que ejecuta `operator.js` contra el sitio y devuelve `TaskResult` firmado con HMAC | `apps/operator-runner` |
+| `mcp`, `mcp-gateway`, `mcp-create-token`, `mcp-oauth-*` | la infraestructura MCP con tokens y OAuth | `supabase/functions/` |
+
+### Qué tiene BeAOS hoy
+
+- Genera el bundle de 12 archivos (con firma y, desde #42, con el server-card y el directorio de Web Bot Auth).
+- Cierra la publicación con el guardián de claims.
+- Expone `/api/v1/agent-assets/:entityId` (bundle completo) y `/:entityId/raw?path=` (un archivo, byte a byte
+  con su sha256) para que **un agente de entrega los monte** — el comentario del propio endpoint ya dice
+  que Maasy lo envuelve en su gateway MCP y el *be agent* de la marca monta los archivos.
+- **No** tiene MCP propio. **No** tiene snippet de operador. **No** empuja archivos a ningún sitio: solo los sirve.
+
+### Los tres huecos, en orden
+
+1. **MCP de BeAOS (real).** Servidor MCP sobre HTTP en `https://beaos.believe-global.com/mcp`
+   (Traefik ya enruta ese dominio: no hace falta infraestructura nueva). JSON-RPC `tools/list` y
+   `tools/call`, autenticado con token. Tools mínimas: listar/leer marcas, correr y leer la auditoría AOS,
+   leer APS (declarado y medido) y sus corridas, generar el bundle, leerlo, un archivo suelto, y
+   publicar/despublicar. Es la pieza que desbloquea a los otros productos de Believe.
+   *Decisión mía:* arranca read-only salvo `generate`/`publish`, y reusa `ADMIN_API_KEYS` (hoy es una lista
+   compartida, sin identidad por producto ni revocación individual — se puede mejorar después).
+2. **Entrega a las webs ("mandarlo a todas las webs que se necesite").** El contrato de *pull* ya existe
+   (`/api/v1/agent-assets/...`). Falta decidir si además BeAOS **empuja** (necesita credenciales de deploy
+   por web) o si esto queda como *pull* desde el agente de cada web.
+3. **Snippet del operador.** BeAOS hoy no lo tiene. **Riesgo a resolver antes de copiarlo acá:** el repo de
+   BeAOS es **público y es un fork**, así que meter `operator.js` de Maasy adentro lo publica. La salida
+   limpia es que BeAOS lo **sirva** como asset (`/operator.js`) desde un origen propio y que el código viva
+   en un repo privado, no que se copie al fork público.
+
