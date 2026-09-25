@@ -1,0 +1,16 @@
+apps/web/src/lib/__tests__/agent-assets-discovery.test.ts
+  h_c5ca005a78c880 1-206
+apps/web/src/server/agent-assets-core.ts
+  h_c5ca005a78c880 14-26,32-40,45-289,428-462,465,469-474
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d731e23d5cf358b823a39e13b4e010e05aee1420",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
