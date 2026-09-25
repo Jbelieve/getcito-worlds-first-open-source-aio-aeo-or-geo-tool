@@ -25,10 +25,32 @@ function gatewayBaseUrl(): string {
 	return raw.replace(/\/$/, "");
 }
 
-function gatewayToken(): string {
-	const token = process.env.MAASY_MCP_TOKEN;
-	if (token === undefined || token.length === 0) throw new Error("MAASY_MCP_TOKEN is required");
-	return token;
+/**
+ * La credencial contra el gateway de Maasy.
+ *
+ * El gateway acepta **dos** cosas (ver `_shared/mcp-core.ts` de Maasy): una **API key** de perfil, que
+ * **no expira**, y un token OAuth, que **sí expira**. BeAOS usaba el segundo y se venció: la importación
+ * de marcas y la sincronización del DNA quedaron mudas, con un `401 OAuth token expired` que nadie ve
+ * hasta que alguien aprieta el botón.
+ *
+ * Un token que expira no sirve para una integración de servidor a servidor: no hay nadie mirando una
+ * pantalla que pueda volver a autorizar. Se prefiere la API key cuando está, y el token queda como
+ * respaldo para no romper una instalación que ya funcionaba.
+ *
+ * Recibe el entorno como parámetro para poder probar la precedencia sin tocar el proceso.
+ */
+export function maasyAuthHeaders(env: Record<string, string | undefined> = process.env): Record<string, string> {
+	const apiKey = env.MAASY_MCP_API_KEY?.trim();
+	if (apiKey !== undefined && apiKey.length > 0) return { "x-api-key": apiKey };
+
+	const token = env.MAASY_MCP_TOKEN?.trim();
+	if (token === undefined || token.length === 0) {
+		throw new Error(
+			"Falta la credencial de Maasy: definí MAASY_MCP_API_KEY (la API key del perfil, que no expira) " +
+				"o MAASY_MCP_TOKEN (token OAuth, que expira).",
+		);
+	}
+	return { authorization: `Bearer ${token}` };
 }
 
 export async function callMaasyTool<T>(tool: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -36,7 +58,7 @@ export async function callMaasyTool<T>(tool: string, args: Record<string, unknow
 		method: "POST",
 		headers: {
 			"content-type": "application/json",
-			authorization: `Bearer ${gatewayToken()}`,
+			...maasyAuthHeaders(),
 		},
 		body: JSON.stringify({ tool, args }),
 	});
