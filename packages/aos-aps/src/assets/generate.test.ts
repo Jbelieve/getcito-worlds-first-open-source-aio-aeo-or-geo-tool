@@ -171,3 +171,57 @@ describe("generateAgentAssets signing", () => {
 		expect(assetByPath(assets, "/.well-known/brand.json.sig")).toBeUndefined();
 	});
 });
+
+describe("llms-full.txt (AOS-DISC-02)", () => {
+	it("se emite, y el bundle ya no publica solo el indice", () => {
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna });
+		const full = assetByPath(assets, "/llms-full.txt");
+		expect(full?.type).toBe("text/plain");
+		expect(full?.content.length).toBeGreaterThan(500);
+		// El indice enlaza; el completo trae el contenido.
+		const index = assetByPath(assets, "/llms.txt")?.content ?? "";
+		expect(index.length).toBeLessThan(full?.content.length ?? 0);
+	});
+
+	it("incluye cada claim con su boundary y la evidencia que lo sostiene", () => {
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna });
+		const content = assetByPath(assets, "/llms-full.txt")?.content ?? "";
+		expect(content).toContain("Trust Logistics redujo errores de picking 30%.");
+		expect(content).toContain("`claim_id`: CLM-R01");
+		expect(content).toContain("Fulfillment con volumen.");
+		expect(content).toContain("**No** aplica a: Sin datos operativos.");
+		expect(content).toContain("[case_study] Trust Logistics");
+	});
+
+	it("sin claims lo dice con todas las letras en vez de rellenar", () => {
+		// Es el caso REAL de produccion: el DNA sincronizado trae client_results como texto libre y
+		// claims[] vacio. El archivo tiene que reflejarlo, no inventar evidencia.
+		const sinClaims = { ...dna, claims: [], proofs: [] };
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna: sinClaims });
+		const content = assetByPath(assets, "/llms-full.txt")?.content ?? "";
+		expect(content).toContain("no declara claims");
+		expect(content).not.toContain("###");
+	});
+
+	it("un claim sin proof se marca como no verificado", () => {
+		const huerfano = { ...dna, proofs: [] };
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna: huerfano });
+		const content = assetByPath(assets, "/llms-full.txt")?.content ?? "";
+		expect(content).toContain("sin proof que lo sostenga");
+	});
+
+	it("escribe saltos de linea reales", () => {
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna });
+		for (const path of ["/llms-full.txt", "/llms.txt", "/AGENTS.md", "/robots.txt", "/sitemap.xml"]) {
+			const content = assetByPath(assets, path)?.content ?? "";
+			expect(content).toContain("\n");
+			expect(content).not.toContain("\\n");
+		}
+	});
+
+	it("deja el sitemap pegado a robots.txt sin importar cuantos archivos se agreguen antes", () => {
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna });
+		const paths = assets.map((asset) => asset.path);
+		expect(paths.indexOf("/sitemap.xml")).toBe(paths.indexOf("/robots.txt") + 1);
+	});
+});
