@@ -1,0 +1,24 @@
+TEST-E2E.md
+  h_c5ca005a78c880 23-35,163-166,241,243-245
+apps/web/src/lib/__tests__/claims-guard.test.ts
+  h_c5ca005a78c880 2,54-92
+apps/web/src/lib/claims-guard.ts
+  h_c5ca005a78c880 42-69
+apps/web/src/routeTree.gen.ts
+  h_c5ca005a78c880 21,118-123,405,467,527,591,653,712,776,866-872,1378
+apps/web/src/routes/[.]well-known/security[.]txt.ts
+  h_c5ca005a78c880 1-51
+apps/web/src/server/agent-assets-core.ts
+  h_c5ca005a78c880 29,31,383-405,538-539,545-557,566-572
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "075df03f5ad952e60bbf35345e4610da280e0b22",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
