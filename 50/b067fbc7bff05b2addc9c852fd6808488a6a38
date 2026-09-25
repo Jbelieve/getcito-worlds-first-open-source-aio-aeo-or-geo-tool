@@ -1,0 +1,19 @@
+HALLAZGO-CLAIMS-MAASY.md
+  s_e2970214f12c02::t_97c95947ff0c4a 1-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "50b067fbc7bff05b2addc9c852fd6808488a6a38",
+  "prompts": {},
+  "sessions": {
+    "s_e2970214f12c02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8b169c50-dc61-432a-8cf4-6dbc08eb8095",
+        "model": "unknown"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
