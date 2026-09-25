@@ -1,0 +1,45 @@
+AOS-APS-ESTADO.md
+  s_0f368474ccac6a::t_6406b77d381932 586-594,596-602
+MCP-BEAOS.md
+  s_0f368474ccac6a::t_dae7f636d40eef 1-91
+apps/web/src/routeTree.gen.ts
+  s_8a93d1d4dca631::t_20f46c3b5b4c00 12,71-75,384,443,500,561,620,676,737,763-769,1314
+apps/web/src/routes/mcp.ts
+  s_0f368474ccac6a::t_1f3714aee16b49 1-92
+apps/web/src/server/agent-assets-core.ts
+  s_0f368474ccac6a::t_00c9325c80ee36 1-218
+apps/web/src/server/agent-assets.ts
+  s_0f368474ccac6a::t_f42bd726ed1727 2,4-5,7,10-11,14-19,22-33,36-57
+apps/web/src/server/mcp/__tests__/jsonrpc.test.ts
+  s_0f368474ccac6a::t_d07a8c66678098 1-188
+apps/web/src/server/mcp/__tests__/tools.test.ts
+  s_0f368474ccac6a::t_d357270babba85 1-67
+apps/web/src/server/mcp/jsonrpc.ts
+  s_0f368474ccac6a::t_5ec96b6ea8c130 1-248
+apps/web/src/server/mcp/tools.ts
+  s_0f368474ccac6a::t_144d118586d157 1-367
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "989ab583eda269aa5d2dfe2892c37877502dfd01",
+  "prompts": {},
+  "sessions": {
+    "s_0f368474ccac6a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "685ddece-85cd-459d-886a-602eb178d5e4",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    },
+    "s_8a93d1d4dca631": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61ec03f3-96e2-46c4-9462-e6b78147fec4",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
