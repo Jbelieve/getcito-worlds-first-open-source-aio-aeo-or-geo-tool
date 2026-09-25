@@ -12,7 +12,7 @@ hacer al respecto. **No hace falta saber programar** para usar la mayoría del p
 1. [Cómo usar este manual](#1-cómo-usar-este-manual)
 2. [Qué es BeAOS, en humano](#2-qué-es-beaos-en-humano)
 3. [Quién hace qué](#3-quién-hace-qué)
-4. [El mapa del producto](#4-el-mapa-del-producto)
+4. [El mapa del producto, y **qué es nuestro y qué viene de Getcito**](#4-el-mapa-del-producto)
 5. [Sección por sección](#5-sección-por-sección)
 6. [Resultado por resultado: cómo se lee cada número](#6-resultado-por-resultado-cómo-se-lee-cada-número)
 7. [Integración por integración](#7-integración-por-integración)
@@ -100,6 +100,63 @@ Citations, Opportunities.
 **Admin** (solo administradores): Brands, Reports, Workflows, Queue, API Usage, Tools.
 
 > Las direcciones son del tipo `/app/default/aos`. `default` es el id de la marca Believe.
+
+---
+
+### 4.1 · El origen: qué es nuestro y qué viene de Getcito
+
+**Esto es importante que lo entienda todo el equipo, porque explica la mitad de las cosas raras que van a
+ver.**
+
+BeAOS **no se construyó desde cero**. Es un *fork* —una copia que sigue su propio camino— de **Getcito**, una
+plataforma open source de visibilidad en buscadores con IA. Heredamos su motor, sus pantallas, su manejo de
+marcas, su sistema de usuarios y su infraestructura. Sobre eso construimos la capa de agentes.
+
+O sea que el producto tiene **dos mitades**:
+
+| | **La mitad heredada (Getcito)** | **La mitad nuestra (BeAOS)** |
+|---|---|---|
+| **Qué pregunta responde** | ¿Cómo aparece la marca **hoy** en las respuestas de la IA? | ¿Puede un agente **usar** y **verificar** la marca? |
+| **Qué mide** | Menciones, share of voice, citas, consultas | AOS, APS, pruebas, operabilidad |
+| **Qué produce** | Monitoreo y reportes de visibilidad | Archivos firmados que la web publica |
+| **Secciones** | Overview, Visibility, Share of Voice, Query Fan-Out, Citations, Opportunities, Configuración, Admin | AOS, Agent Entities, Agent Assets, Pruebas, APS, Plan |
+| **Cómo se ve** | Su propio lenguaje visual (verde/ámbar/rojo) | Los colores de Believe (azul/tinta/cian) |
+| **De quién es el idioma** | El original | Español, y con la marca aplicada |
+
+**Las dos mitades son válidas y se complementan.** Una dice cómo te ve la IA hoy; la otra hace que te pueda
+usar y verificar mañana. Las dos terminan en el mismo reporte del cliente.
+
+#### Por qué la mitad heredada se ve distinto (y no es un bug)
+
+Decisión explícita, y conviene tenerla clara antes de reportar nada:
+
+- **El código heredado se deja tal como viene.** Getcito sigue vivo y publica actualizaciones; cada línea
+  nuestra ahí es un conflicto futuro. Así que las pantallas heredadas **conservan sus colores originales**
+  (el semáforo verde/ámbar/rojo) y su vocabulario. **Es a propósito.**
+- **Nuestras pantallas usan los colores de Believe.** La regla es: si la superficie es nuestra, habla el
+  idioma de la marca.
+- **La única excepción es el reporte**, que se repintó entero porque es un documento que ve el cliente. Esa
+  excepción tiene un precio escrito: si Getcito toca el reporte, ese merge da conflicto. Se aceptó a
+  sabiendas.
+
+**Lo que esto significa para vos al probar:** que una pantalla heredada tenga verdes y rojos **no es un
+hallazgo**, es la frontera. Pero **si te confunde, si no entendés un número, o si el texto está en inglés y
+no debería — eso sí reportalo.** Confusión no es lo mismo que estilo.
+
+#### Cosas heredadas que vas a notar
+
+| Qué vas a ver | Por qué | Qué hacer |
+|---|---|---|
+| Colores verde/ámbar/rojo en las pantallas heredadas | Frontera del fork | Nada: es a propósito |
+| **Opportunities** en español, pero con los colores viejos | El texto se arregló con un parche local; el estilo no se toca | Nada |
+| Los **gráficos del reporte** en inglés | Son componentes compartidos con la mitad heredada | Reportalo si te molesta: es una decisión abierta |
+| Vocabulario distinto ("menciones", "citas", "share of voice") | Es el vocabulario del monitoreo, no el de agentes | Usá el glosario (sección 10) |
+
+#### Un detalle que conviene saber
+
+El arreglo que hace que el contenido generado salga **en español** en vez de inglés es un **parche local**
+nuestro, porque el proyecto original todavía no lo aceptó. El día que lo acepte, el parche se borra. Hasta
+entonces, si ves contenido generado en inglés, avisá: puede ser que el parche se haya caído.
 
 ---
 
@@ -304,17 +361,73 @@ lo que BeAOS no genera**. Cuatro grupos:
 
 ---
 
-### 5.8 · Visibility, Share of Voice, Query Fan-Out, Citations, Opportunities
+### 5.8 · La mitad heredada, pantalla por pantalla
 
-El bloque heredado, sobre **visibilidad en buscadores con IA**. Solo aparece si la marca está *onboarded*.
+> **Todas estas pantallas vienen de Getcito**, no las construimos nosotros (ver 4.1). Conservan su estilo y su
+> vocabulario a propósito. Solo aparecen si la marca está *onboarded*.
 
-- **Visibility** — cuánto aparece la marca en las respuestas de cada motor.
-- **Share of Voice** — qué porción de las menciones se lleva la marca contra sus competidores.
-- **Query Fan-Out** — las búsquedas que un modelo dispara para responder una pregunta.
-- **Citations** — de dónde saca la información el modelo (las fuentes que cita).
-- **Opportunities** — recomendaciones priorizadas. **Ojo: esta sección sigue con los colores del producto
-  original** (semáforo verde/rojo), a propósito, para no romper las actualizaciones. Las secciones de agentes
-  son las que hablan el idioma visual de Believe.
+#### 5.8.1 · Visibility
+
+**Qué responde:** dónde y cómo aparece la marca en las respuestas de cada motor de IA.
+
+**Qué muestra:** las preguntas monitoreadas y, para cada una, si la marca fue mencionada y en qué motor.
+Es la pantalla para ver el detalle crudo: no interpreta, muestra.
+
+**Cómo se usa:** elegí el período y mirá prompt por prompt. Sirve para responder *"¿en qué preguntas
+concretas no aparecemos?"*.
+
+**Ojo:** que una marca **no** aparezca en una respuesta no significa que el motor la odie; significa que
+**no la citó para esa pregunta**. La sección **Opportunities** es la que convierte eso en acción.
+
+#### 5.8.2 · Share of Voice
+
+**Qué responde:** qué porción de las menciones se lleva la marca **contra sus competidores**.
+
+**Qué muestra:**
+- **Leaderboard** — el ranking de marcas por menciones.
+- **Trends** — cómo se mueve en el tiempo.
+
+**Cómo se lee:** no importa solo el número propio, importa **la distancia con el que va primero** y **si la
+tendencia sube o baja**. Un 11% que sube vale más que un 15% que cae.
+
+**Cuidado con una trampa:** el share of voice depende de **qué competidores cargaste** y **qué preguntas
+monitoreás**. Si cambia la lista de competidores, el porcentaje cambia sin que nada haya pasado en el
+mercado. Anotá siempre contra qué set lo mediste.
+
+#### 5.8.3 · Query Fan-Out
+
+**Qué responde:** cuando un modelo responde una pregunta, **qué búsquedas dispara por dentro**.
+
+**Qué muestra:** las consultas que se repiten entre tus preguntas y las que dispara cada pregunta, con las
+palabras de cada consulta.
+
+**Para qué sirve de verdad:** es la pantalla **más accionable** de la mitad heredada. Te dice **qué
+términos** están buscando los modelos para responder sobre tu categoría. Eso es, literalmente, **de qué
+escribir**. Si un competidor aparece y vos no, mirá acá: probablemente haya una consulta que él cubre y vos
+no.
+
+#### 5.8.4 · Citations
+
+**Qué responde:** **de dónde saca la información** el modelo cuando habla de tu categoría.
+
+**Qué muestra:** las fuentes citadas, con filtros por marca y por competidor.
+
+**Para qué sirve:** si el modelo te cita desde un medio que no controlás, ahí hay una relación que cuidar.
+Si cita a un competidor desde su propio sitio y a vos desde un tercero, ahí hay un hueco de contenido
+propio.
+
+#### 5.8.5 · Opportunities
+
+**Qué responde:** **qué hacer**, priorizado.
+
+**Qué muestra:** un informe con las oportunidades detectadas a partir de todo lo anterior.
+
+**Lo que hay que saber:** este contenido **lo genera la IA**, y es el que más sufre el tema del idioma. Hoy
+sale **en español** gracias a un parche nuestro (ver 4.1). Se regenera cada cierto tiempo; si lo ves en
+inglés, avisá.
+
+**Cómo se usa:** es la pantalla para llevarle al cliente. Cruzá lo que dice acá con **Plan**: lo de acá es
+*"qué contenido falta"*, lo de Plan es *"qué le falta a la web para que un agente la use"*.
 
 ---
 
@@ -648,6 +761,11 @@ pendiente: avisá si te molesta y se cambia.
 
 **Esta sección es la razón del manual.** Queremos feedback **real**, no un "anda bien" o un "no me gustó".
 
+**Probá las dos mitades**: la nuestra (AOS, APS, Pruebas, Plan, Agent Assets) **y la heredada de Getcito**
+(Visibility, Share of Voice, Query Fan-Out, Citations, Opportunities, Configuración, Admin). De la heredada
+no vamos a cambiar el estilo —eso es la frontera— pero sí nos importa si **no se entiende**, si **un número no
+cierra** o si **el texto está en inglés cuando no debería**.
+
 ### Antes de probar: dos reglas
 
 1. **Una tarea por prueba.** No "probé todo": *"di de alta la marca X y vinculé el proyecto de Maasy"*.
@@ -679,6 +797,14 @@ Cada una tiene un **resultado esperado**. Si lo que ves no coincide, **eso** es 
 | 18 | **Reports**: generar y abrir | Trae AOS y APS con sus fechas; se imprime bien en blanco y negro |
 | 19 | **Configuración → Brand**: cambiar el idioma destino | El contenido generado después sale en ese idioma |
 | 20 | Entrar desde el celular | Las pantallas se pueden leer y usar |
+| 21 | **Visibility**: elegir un período y ver el detalle por pregunta | Se ve si la marca fue mencionada, motor por motor |
+| 22 | **Share of Voice**: mirar leaderboard y tendencias | Ranking de marcas y su evolución |
+| 23 | **Share of Voice**: cambiar la lista de competidores y volver | El porcentaje cambia: **anotá contra qué set lo mediste** |
+| 24 | **Query Fan-Out**: buscar una pregunta y ver sus consultas | Las búsquedas que dispara esa pregunta |
+| 25 | **Citations**: filtrar por competidor | Las fuentes citadas, filtradas |
+| 26 | **Opportunities**: abrir el informe | El contenido generado está **en español** |
+| 27 | **Configuración → Competitors / Prompts / LLMs**: revisar y guardar | Los cambios persisten y se usan en las mediciones |
+| 28 | **Admin → Queue**: mirar los trabajos en curso | Se ve qué está corriendo y qué terminó |
 
 ### El formato del reporte
 
@@ -712,7 +838,14 @@ SEVERIDAD:        (ver abajo)
 - **"La corrida salió parcial."** Se muestra como parcial **a propósito**.
 - **"Un modelo dio distinto que otro."** Ese **es** el resultado.
 - **"El Plan dice 'por verificar'."** BeAOS no afirma lo que no midió.
-- **"La sección Opportunities tiene colores del otro producto."** Es la frontera del fork, documentada.
+- **"La sección Opportunities (o Visibility, o Citations) tiene colores verdes y rojos."** Es la frontera del
+  fork: lo heredado se deja tal como viene (ver 4.1), documentado y a propósito.
+- **"El vocabulario de la mitad heredada es distinto."** Habla de menciones, citas y share of voice, que es el
+  vocabulario del monitoreo. Está en el glosario.
+
+**Lo que SÍ queremos que reportes de la mitad heredada:** que un número **no se entienda**, que una pantalla
+**no diga para qué sirve**, que el contenido generado salga **en inglés**, o que algo **no cargue**. Eso es
+producto, no estilo.
 
 ### Y lo que más nos sirve
 
@@ -729,6 +862,11 @@ producto, no la persona. Eso es exactamente lo que queremos saber antes de mostr
   archivos firmado, el candado de publicación, la entrega por API y por URL pública, el MCP de BeAOS con sus
   8 herramientas, la sección **Plan** completa, la sección **Pruebas** con los candidatos reales de Maasy, el
   reporte con AOS y APS en español, y las superficies públicas de BeAOS.
+
+**La mitad heredada de Getcito** (Visibility, Share of Voice, Query Fan-Out, Citations, Opportunities,
+Configuración, Admin) **funciona y se prueba igual**, con dos cosas a tener presentes: conserva su estilo a
+propósito (4.1), y su contenido generado depende de un parche de idioma que se borra cuando el proyecto
+original acepte el arreglo.
 
 **Falta, y por eso lo vas a ver incompleto:**
 
