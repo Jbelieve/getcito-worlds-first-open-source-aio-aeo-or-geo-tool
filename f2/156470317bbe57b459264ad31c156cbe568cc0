@@ -1,0 +1,14 @@
+ANALISIS-ORA-IS-AGENTIC.md
+  h_c5ca005a78c880 178-288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f2156470317bbe57b459264ad31c156cbe568cc0",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
