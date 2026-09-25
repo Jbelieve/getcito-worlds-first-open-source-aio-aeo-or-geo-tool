@@ -1,0 +1,29 @@
+apps/web/src/components/agent-score-cards.tsx
+  s_25d830d7e3f368::t_e656b753f8644a 128
+apps/web/src/components/aos-visual.tsx
+  s_25d830d7e3f368::t_54c168c90ba617 18,35-44,198-204,211,252-263,282-293
+apps/worker/src/jobs/aos-audit.ts
+  s_25d830d7e3f368::t_b3b1d645ecb9d8 27-30
+packages/aos-aps/src/aos/audit.ts
+  s_25d830d7e3f368::t_88afd3b5e9a144 16,265-324,339-340,349-350
+packages/aos-aps/src/aos/requirements.test.ts
+  s_25d830d7e3f368::t_772c435a0b46fb 141-211
+packages/aos-aps/src/aos/requirements.ts
+  s_25d830d7e3f368::t_55659eb5827b40 196-204,223-229,253,260-261,266-289,291-292,303-304
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e52657ef5441a4e7473a95f42fc17646bd763e22",
+  "prompts": {},
+  "sessions": {
+    "s_25d830d7e3f368": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e46d2264-f175-4091-b86a-0d3ef1fdf473",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
