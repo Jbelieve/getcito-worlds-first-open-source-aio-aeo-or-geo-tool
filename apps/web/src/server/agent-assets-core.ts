@@ -26,8 +26,9 @@ import {
 } from "@workspace/aos-aps/db/schema";
 import { findUmbrellaEntity, keysUriForWebsite, signingKeyFromEnv } from "@workspace/aos-aps/provenance";
 import { db } from "@workspace/lib/db/db";
+import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
-import { claimCount, claimsGuardDecision } from "@/lib/claims-guard";
+import { claimCount, claimsGuardDecision, websiteSourcesForClaims } from "@/lib/claims-guard";
 
 /**
  * Techo de cada descubrimiento contra el sitio de la marca.
@@ -379,6 +380,29 @@ export async function liveClaimCount(websiteUrl: string | undefined): Promise<nu
 	}
 }
 
+/**
+ * Los claims que el sitio declara hoy, probando **varias** fuentes de web y quedándose con la primera
+ * que responda.
+ *
+ * El agujero que esto cierra: el candado miraba un solo campo, `agent_brand_entities.website_url`, y ese
+ * campo puede estar vacío —de hecho **estaba vacío** en la entidad de Believe—. Con la web vacía,
+ * `liveClaimCount(undefined)` devolvía `null`, y `claimsGuardDecision` con `fromLive: null` **no bloquea**:
+ * publica con un aviso. O sea que el candado que existe para impedir una degradación silenciosa era, él
+ * mismo, silencioso: un clic en "Publicar" habría reemplazado las 6 pruebas que el sitio sirve por las 0
+ * que el bundle declara.
+ *
+ * La web de una marca vive en tres lugares y ninguno es obligatorio. Se prueban todos en orden en vez de
+ * confiar en uno: si una está mal escrita o el sitio no responde, se intenta la siguiente. Solo si
+ * **ninguna** responde se devuelve `null`, y ahí el aviso dice la verdad: no pudimos verificar.
+ */
+export async function liveClaimCountFrom(urls: Array<string | null | undefined>): Promise<number | null> {
+	for (const url of urls) {
+		const count = await liveClaimCount(url ?? undefined);
+		if (count !== null) return count;
+	}
+	return null;
+}
+
 export interface GeneratedAsset {
 	path: string;
 	type: string;
@@ -511,11 +535,26 @@ export async function setEntityPublished(
 ): Promise<PublishResult> {
 	let warning: string | undefined;
 	if (published) {
+		// Las tres fuentes de la web de la marca. La entidad primero (es la más específica), después el
+		// DNA que sincroniza Maasy, y por último la marca. Ver `liveClaimCountFrom` para el porqué.
 		const [entity] = await db
 			.select({ websiteUrl: agentBrandEntities.websiteUrl })
 			.from(agentBrandEntities)
 			.where(and(eq(agentBrandEntities.id, entityId), eq(agentBrandEntities.brandId, brandId)))
 			.limit(1);
+		const [snapshot] = await db
+			.select({ payload: agentBrandDnaSnapshots.payload })
+			.from(agentBrandDnaSnapshots)
+			.where(and(eq(agentBrandDnaSnapshots.entityId, entityId), eq(agentBrandDnaSnapshots.brandId, brandId)))
+			.orderBy(desc(agentBrandDnaSnapshots.syncedAt))
+			.limit(1);
+		const [brand] = await db
+			.select({ website: brands.website })
+			.from(brands)
+			.where(eq(brands.id, brandId))
+			.limit(1);
+		const dnaWebsite = (snapshot?.payload as Record<string, unknown> | undefined)?.website_url;
+
 		const [bundle] = await db
 			.select({ content: agentAssets.content })
 			.from(agentAssets)
@@ -524,7 +563,13 @@ export async function setEntityPublished(
 			.limit(1);
 		const decision = claimsGuardDecision(
 			claimCount(bundle?.content),
-			await liveClaimCount(entity?.websiteUrl ?? undefined),
+			await liveClaimCountFrom(
+				websiteSourcesForClaims({
+					entityWebsite: entity?.websiteUrl,
+					dnaWebsite,
+					brandWebsite: brand?.website,
+				}),
+			),
 		);
 		if (decision.blocked) return { ok: false, reason: decision.reason ?? "Regresión de claims." };
 		warning = decision.warning;

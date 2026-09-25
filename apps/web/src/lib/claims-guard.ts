@@ -40,6 +40,34 @@ export interface ClaimsGuardDecision {
 }
 
 /**
+ * Las webs donde puede estar el perfil del sitio, en orden de preferencia.
+ *
+ * Existe por un agujero real: el candado miraba **un solo** campo, la web de la entidad, y ese campo
+ * estaba vacío en la entidad de Believe. Con la web vacía no se podía leer el perfil del sitio, y "no
+ * pude leerlo" **no bloquea** —así está diseñado, para no frenar publicaciones legítimas cuando el sitio
+ * está caído—. El resultado era que la protección desaparecía justo cuando más hacía falta.
+ *
+ * La web de una marca vive en tres lugares y ninguno es obligatorio: la entidad (lo más específico), el
+ * DNA que sincroniza Maasy, y la marca. Se devuelven todas, en ese orden, y el llamador prueba una por
+ * una. Es una función pura para poder probar la precedencia sin base ni red.
+ */
+export function websiteSourcesForClaims(input: {
+	entityWebsite?: string | null;
+	dnaWebsite?: unknown;
+	brandWebsite?: string | null;
+}): string[] {
+	const candidates = [input.entityWebsite, input.dnaWebsite, input.brandWebsite];
+	const sources: string[] = [];
+	for (const candidate of candidates) {
+		if (typeof candidate !== "string") continue;
+		const trimmed = candidate.trim();
+		if (trimmed.length === 0 || sources.includes(trimmed)) continue;
+		sources.push(trimmed);
+	}
+	return sources;
+}
+
+/**
  * Decide si un bundle puede publicarse, comparando sus claims con los del perfil que el sitio sirve.
  *
  * Bloquea solo en el caso que importa: que el bundle **pierda** claims. Empates y mejoras pasan.

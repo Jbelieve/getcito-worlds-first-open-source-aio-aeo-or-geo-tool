@@ -18,6 +18,7 @@ import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthedReportsRouteImport } from './routes/_authed/reports'
 import { Route as AuthedAppRouteImport } from './routes/_authed/app'
 import { Route as AuthedAdminRouteImport } from './routes/_authed/admin'
+import { Route as DotwellKnownSecurityDottxtRouteImport } from './routes/[.]well-known/security[.]txt'
 import { Route as ApiSetupStatusIndexRouteImport } from './routes/api/setup-status/index'
 import { Route as ApiOgIndexRouteImport } from './routes/api/og/index'
 import { Route as ApiManifestIndexRouteImport } from './routes/api/manifest/index'
@@ -114,6 +115,12 @@ const AuthedAdminRoute = AuthedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthedRoute,
 } as any)
+const DotwellKnownSecurityDottxtRoute =
+  DotwellKnownSecurityDottxtRouteImport.update({
+    id: '/.well-known/security.txt',
+    path: '/.well-known/security.txt',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiSetupStatusIndexRoute = ApiSetupStatusIndexRouteImport.update({
   id: '/api/setup-status/',
   path: '/api/setup-status/',
@@ -395,6 +402,7 @@ const AuthedAppBrandPromptsPromptIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/mcp': typeof McpRoute
+  '/.well-known/security.txt': typeof DotwellKnownSecurityDottxtRoute
   '/admin': typeof AuthedAdminRouteWithChildren
   '/app': typeof AuthedAppRouteWithChildren
   '/reports': typeof AuthedReportsRouteWithChildren
@@ -456,6 +464,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/mcp': typeof McpRoute
+  '/.well-known/security.txt': typeof DotwellKnownSecurityDottxtRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/auth/register': typeof AuthRegisterRoute
@@ -515,6 +524,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authed': typeof AuthedRouteWithChildren
   '/mcp': typeof McpRoute
+  '/.well-known/security.txt': typeof DotwellKnownSecurityDottxtRoute
   '/_authed/admin': typeof AuthedAdminRouteWithChildren
   '/_authed/app': typeof AuthedAppRouteWithChildren
   '/_authed/reports': typeof AuthedReportsRouteWithChildren
@@ -578,6 +588,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/mcp'
+    | '/.well-known/security.txt'
     | '/admin'
     | '/app'
     | '/reports'
@@ -639,6 +650,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/mcp'
+    | '/.well-known/security.txt'
     | '/auth/login'
     | '/auth/logout'
     | '/auth/register'
@@ -697,6 +709,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authed'
     | '/mcp'
+    | '/.well-known/security.txt'
     | '/_authed/admin'
     | '/_authed/app'
     | '/_authed/reports'
@@ -760,6 +773,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthedRoute: typeof AuthedRouteWithChildren
   McpRoute: typeof McpRoute
+  DotwellKnownSecurityDottxtRoute: typeof DotwellKnownSecurityDottxtRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
@@ -848,6 +862,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin'
       preLoaderRoute: typeof AuthedAdminRouteImport
       parentRoute: typeof AuthedRoute
+    }
+    '/.well-known/security.txt': {
+      id: '/.well-known/security.txt'
+      path: '/.well-known/security.txt'
+      fullPath: '/.well-known/security.txt'
+      preLoaderRoute: typeof DotwellKnownSecurityDottxtRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/setup-status/': {
       id: '/api/setup-status/'
@@ -1354,6 +1375,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRoute: AuthedRouteWithChildren,
   McpRoute: McpRoute,
+  DotwellKnownSecurityDottxtRoute: DotwellKnownSecurityDottxtRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,
   AuthRegisterRoute: AuthRegisterRoute,
