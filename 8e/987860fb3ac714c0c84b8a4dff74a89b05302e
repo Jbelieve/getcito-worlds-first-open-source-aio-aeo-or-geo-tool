@@ -1,0 +1,16 @@
+apps/web/src/server/agent-assets-core.ts
+  h_c5ca005a78c880 20,25,451-469,522,572
+apps/web/src/server/claims.ts
+  h_c5ca005a78c880 146-149,165,174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8e987860fb3ac714c0c84b8a4dff74a89b05302e",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}

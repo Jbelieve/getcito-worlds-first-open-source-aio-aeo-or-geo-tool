@@ -1,0 +1,22 @@
+apps/web/src/server/claims.ts
+  h_c5ca005a78c880 1-145,150-164,166-173,175-197
+apps/web/src/components/app-sidebar.tsx
+  h_c5ca005a78c880 86-91
+apps/web/src/components/status-tone.test.ts
+  h_c5ca005a78c880 172
+apps/web/src/routeTree.gen.ts
+  h_c5ca005a78c880 55,298-302,440,499,564,629,688,752,1116-1122,1280,1304
+apps/web/src/routes/_authed/app/$brand/claims.tsx
+  h_c5ca005a78c880 1-681
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "50742cce132e244ec36f6c27bc3b92e6d6873716",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
