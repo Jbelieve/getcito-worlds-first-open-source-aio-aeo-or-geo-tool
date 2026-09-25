@@ -15,6 +15,31 @@ Los valores exactos de la marca de prueba (Believe) están puestos para que pued
 | 2 | La entidad existe y tiene su web cargada | ⚠️ **La entidad `Believe` NO tiene la web cargada** — el reporte se vincula por nombre. Cárgala antes (ver paso 0) |
 | 3 | El MCP tiene token | ✅ `ADMIN_API_KEYS` en el `.env` del servidor |
 | 4 | Las pruebas (claims) llegan desde Maasy | ❌ **NO llegan.** Esto hace fallar el paso 6 a propósito |
+| 5 | La credencial de Maasy está viva | ❌ **Vencida.** El token que BeAOS usa contra Maasy devuelve `401 OAuth token expired` |
+
+---
+
+## Paso -1 · Renovar la credencial de Maasy (bloquea la importación)
+
+**Por qué:** BeAOS habla con Maasy por su gateway, y la credencial que usa **está vencida**. Probado hoy:
+`list_brands` y `get_brand_context` devuelven `401 OAuth token expired`. Eso deja mudas **dos** cosas: la
+importación de marcas y la sincronización del DNA — o sea que BeAOS no puede traer nada de Maasy.
+
+El gateway acepta dos credenciales y elegimos mal la que expira:
+
+| Credencial | Dónde se saca | ¿Expira? |
+|---|---|---|
+| **API key** del perfil | Maasy → ajustes de API key → copiar | **No** |
+| Token OAuth ("conectar sin API key") | Se genera desde Maasy | **Sí**, y es el que está vencido |
+
+**Qué hacer:** copiar la **API key** del perfil en Maasy y ponerla en el `.env` del servidor como
+`MAASY_MCP_API_KEY`. El código ya la prefiere; el token queda solo como respaldo.
+
+**Comprobar:** apretar **Cargar marcas Maasy** en *Agent Entities*. Debe listar marcas, no dar error.
+
+> **Importar marcas NO quita los 404.** Son dos cosas distintas: el 404 es el gate de entrega (la entidad
+> no está publicada), y la publicación está bloqueada por los claims. El orden real es:
+> **credencial → claims → publicar → el 404 desaparece.**
 
 ---
 
