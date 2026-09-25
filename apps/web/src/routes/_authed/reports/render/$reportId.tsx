@@ -16,7 +16,6 @@ import {
 	computePromptSoV,
 	type FullPromptRun,
 	findContentGaps,
-	getSoVLevel,
 	type PromptCategory,
 	type ReportPromptRun,
 	selectRepresentativePrompts,
@@ -111,7 +110,7 @@ export const Route = createFileRoute("/_authed/reports/render/$reportId")({
 		return { report, agentContext };
 	},
 	head: () => ({
-		meta: [{ title: "AI Share of Voice Report" }, { name: "robots", content: "noindex, nofollow" }],
+		meta: [{ title: "Informe de Share of Voice en IA" }, { name: "robots", content: "noindex, nofollow" }],
 	}),
 	component: ReportRenderPage,
 });
@@ -126,6 +125,18 @@ export const Route = createFileRoute("/_authed/reports/render/$reportId")({
 
 function sovTone(sov: number | null) {
 	return toneOf(sov === null ? "unknown" : levelFromScore(sov, { full: 60, high: 40, mid: 20 }));
+}
+
+/**
+ * El nivel de SoV en español. `getSoVLevel` vive en `@workspace/lib/report-metrics`, que es código
+ * compartido con el tablero heredado y no se toca (frontera del fork), así que la traducción se hace
+ * acá: el reporte es nuestro y habla en español, la librería sigue en inglés para el stream.
+ */
+function sovLevelEs(sov: number | null): { label: string; description: string } {
+	if (sov === null) return { label: "Sin datos", description: "No se detectaron menciones." };
+	if (sov >= 40) return { label: "Fuerte", description: "Tu marca lidera la conversación." };
+	if (sov >= 20) return { label: "Moderada", description: "Hay margen de mejora." };
+	return { label: "Baja", description: "Los competidores dominan este espacio." };
 }
 
 /** "High/Medium/Low opportunity" es gravedad, no cantidad: va en peso de tinta, no en tono. */
@@ -147,7 +158,7 @@ function ReportRenderPage() {
 		return (
 			<div className="max-w-3xl mx-auto p-8 text-center">
 				<p className="text-muted-foreground">
-					Report status: <span className="font-medium">{report.status}</span>
+					Estado del informe: <span className="font-medium">{report.status}</span>
 				</p>
 			</div>
 		);
@@ -301,7 +312,7 @@ function ReportRenderPage() {
 	}
 	topSearchQueries.sort((a, b) => b.competitorCount - a.competitorCount);
 
-	const sovLevel = getSoVLevel(overallSoV);
+	const sovLevel = sovLevelEs(overallSoV);
 	const sov = sovTone(overallSoV);
 	const totalPrompts = mockPrompts.length;
 	const promptsWithMentions = promptSoVs.filter((p) => p.brandMentionCount > 0).length;
@@ -339,7 +350,7 @@ function ReportRenderPage() {
 
 				<div className="flex-1 flex flex-col justify-center">
 					<div className="text-[10px] font-semibold tracking-[0.25em] uppercase text-muted-foreground mb-4">
-						AI Share of Voice Report
+						Informe de Share of Voice en IA
 					</div>
 					<h1 className="text-4xl font-bold tracking-tight mb-2">{report.brandName}</h1>
 					<div className="w-16 h-[2px] bg-believe-700 mb-12" />
@@ -347,7 +358,7 @@ function ReportRenderPage() {
 					<div className="bg-muted/50 rounded-xl p-8 max-w-md mb-12">
 						<div className="flex items-baseline gap-4">
 							<span className={`text-6xl font-extrabold tracking-tighter ${sov.text}`}>
-								{overallSoV !== null ? `${overallSoV}%` : "N/A"}
+								{overallSoV !== null ? `${overallSoV}%` : "S/D"}
 							</span>
 							<div>
 								<div className="text-sm font-semibold">Share of Voice</div>
@@ -365,9 +376,9 @@ function ReportRenderPage() {
 					</div>
 
 					<div className="grid grid-cols-3 gap-6 max-w-lg">
-						<CoverStat value={String(totalPrompts)} label="Prompts Tested" />
-						<CoverStat value={String(promptsWithMentions)} label="Brand Mentions" />
-						<CoverStat value={String(filteredCompetitors.length)} label="Competitors" />
+						<CoverStat value={String(totalPrompts)} label="Prompts evaluados" />
+						<CoverStat value={String(promptsWithMentions)} label="Menciones de marca" />
+						<CoverStat value={String(filteredCompetitors.length)} label="Competidores" />
 					</div>
 				</div>
 
@@ -379,8 +390,8 @@ function ReportRenderPage() {
 				<RunningHeader brand={report.brandName} />
 
 				<Section
-					title="AI Engine Performance"
-					subtitle={`Brand mention rate across ${engineBreakdown.reduce((s, e) => s + e.totalRuns, 0)} evaluations`}
+					title="Desempeño por motor de IA"
+					subtitle={`Tasa de mención de marca sobre ${engineBreakdown.reduce((s, e) => s + e.totalRuns, 0)} evaluaciones`}
 				/>
 				<div className="grid grid-cols-3 gap-3 mb-8">
 					{engineBreakdown.map((eng) => (
@@ -388,7 +399,7 @@ function ReportRenderPage() {
 							<div className="text-[11px] font-medium text-muted-foreground mb-2">{eng.engine}</div>
 							<div className={`text-3xl font-bold ${sovTone(eng.mentionRate).text}`}>{eng.mentionRate}%</div>
 							<div className="text-[10px] text-muted-foreground mt-1">
-								{eng.brandMentions} of {eng.totalRuns} runs
+								{eng.brandMentions} de {eng.totalRuns} corridas
 							</div>
 							<div className="mt-2.5 w-full bg-muted rounded-full h-1.5">
 								<div
@@ -403,17 +414,17 @@ function ReportRenderPage() {
 					))}
 				</div>
 
-				<Section title="Competitive Landscape" subtitle="Share of voice comparison across all tested prompts" />
+				<Section title="Panorama competitivo" subtitle="Comparación de share of voice en todos los prompts evaluados" />
 				<div className="border border-border rounded-lg overflow-hidden mb-8 print:pb-px">
 					<table className="w-full">
 						<thead>
 							<tr className="bg-muted/50 border-b border-border">
-								<TH align="left">Brand</TH>
+								<TH align="left">Marca</TH>
 								<TH align="right" className="w-16">
 									SoV
 								</TH>
 								<TH align="left" className="w-[40%]">
-									Share
+									Participación
 								</TH>
 							</tr>
 						</thead>
@@ -450,16 +461,16 @@ function ReportRenderPage() {
 				{competitorFreq.length > 0 && (
 					<>
 						<Section
-							title="Mention Rate"
-							subtitle="Each prompt is evaluated multiple times across AI engines — mentions show total appearances, unique prompts show how many distinct prompts include the brand"
+							title="Tasa de mención"
+							subtitle="Cada prompt se evalúa varias veces en distintos motores de IA: las menciones muestran las apariciones totales y los prompts únicos, en cuántos prompts distintos aparece la marca"
 						/>
 						<div className="border border-border rounded-lg overflow-hidden print:pb-px">
 							<table className="w-full">
 								<thead>
 									<tr className="bg-muted/50 border-b border-border">
-										<TH align="left">Brand</TH>
-										<TH align="center">Mentions</TH>
-										<TH align="center">Unique Prompts</TH>
+										<TH align="left">Marca</TH>
+										<TH align="center">Menciones</TH>
+										<TH align="center">Prompts únicos</TH>
 									</tr>
 								</thead>
 								<tbody className="divide-y divide-border/60">
@@ -511,11 +522,11 @@ function ReportRenderPage() {
 
 					{pageIdx === 0 ? (
 						<Section
-							title="Prompt Analysis"
-							subtitle="Share of voice for representative prompts — strengths and growth opportunities"
+							title="Análisis de prompts"
+							subtitle="Share of voice de los prompts representativos: fortalezas y oportunidades de crecimiento"
 						/>
 					) : (
-						<div className="text-xs text-muted-foreground italic mb-4">Prompt Analysis (continued)</div>
+						<div className="text-xs text-muted-foreground italic mb-4">Análisis de prompts (continúa)</div>
 					)}
 
 					<div className="flex-1 flex flex-col gap-5">
@@ -549,8 +560,8 @@ function ReportRenderPage() {
 				<RunningHeader brand={report.brandName} />
 
 				<Section
-					title="Content Gaps"
-					subtitle={`Prompts where competitors appear but ${report.brandName} does not — highest-value opportunities`}
+					title="Brechas de contenido"
+					subtitle={`Prompts donde aparecen competidores y no aparece ${report.brandName}: las oportunidades de mayor valor`}
 				/>
 
 				{contentGaps.length > 0 ? (
@@ -560,7 +571,7 @@ function ReportRenderPage() {
 								<tr className="bg-muted/50 border-b border-border">
 									<TH align="left">Prompt</TH>
 									<TH align="left" className="w-[50%]">
-										Competitors Found
+										Competidores encontrados
 									</TH>
 								</tr>
 							</thead>
@@ -595,7 +606,7 @@ function ReportRenderPage() {
 				) : (
 					<div className="border border-border rounded-lg p-6 text-center mb-8">
 						<p className="text-muted-foreground text-sm">
-							{report.brandName} appears in all prompts where competitors are mentioned.
+							{report.brandName} aparece en todos los prompts donde se menciona a los competidores.
 						</p>
 					</div>
 				)}
@@ -603,19 +614,19 @@ function ReportRenderPage() {
 				{topSearchQueries.length > 0 && (
 					<>
 						<Section
-							title="Top AI Search Queries"
-							subtitle="Common web search queries AI models run when answering prompts in your category"
+							title="Consultas de búsqueda en IA más frecuentes"
+							subtitle="Consultas web que los modelos de IA hacen al responder prompts de tu categoría"
 						/>
 						<div className="border border-border rounded-lg overflow-hidden">
 							<table className="w-full">
 								<thead>
 									<tr className="bg-muted/50 border-b border-border">
-										<TH align="left">Query</TH>
+										<TH align="left">Consulta</TH>
 										<TH align="center" className="w-28">
-											Competitors Found
+											Competidores encontrados
 										</TH>
 										<TH align="center" className="w-24">
-											Brand Mentioned
+											Marca mencionada
 										</TH>
 									</tr>
 								</thead>
@@ -649,19 +660,19 @@ function ReportRenderPage() {
 				<RunningHeader brand={report.brandName} />
 
 				<Section
-					title="Share of Voice Opportunity"
-					subtitle="Overview of your current AI share of voice and growth potential"
+					title="Oportunidad de share of voice"
+					subtitle="Resumen de tu share of voice actual en IA y su potencial de crecimiento"
 				/>
 
 				<div className="border border-border rounded-lg overflow-hidden mb-8">
 					<table className="w-full">
 						<thead>
 							<tr className="bg-muted/50 border-b border-border">
-								<TH align="center">Prompts With Mentions</TH>
-								<TH align="center">Total Prompts Tested</TH>
-								<TH align="center">Overall SoV</TH>
-								<TH align="center">Opportunity</TH>
-								<TH align="left">Recommendation</TH>
+								<TH align="center">Prompts con menciones</TH>
+								<TH align="center">Prompts evaluados</TH>
+								<TH align="center">SoV general</TH>
+								<TH align="center">Oportunidad</TH>
+								<TH align="left">Recomendación</TH>
 							</tr>
 						</thead>
 						<tbody>
@@ -675,15 +686,15 @@ function ReportRenderPage() {
 									<span
 										className={`inline-block border px-2 py-0.5 rounded-md text-[10px] font-semibold ${opportunityChip(overallSoV)}`}
 									>
-										{(overallSoV ?? 0) < 20 ? "High" : (overallSoV ?? 0) < 40 ? "Medium" : "Low"}
+										{(overallSoV ?? 0) < 20 ? "Alta" : (overallSoV ?? 0) < 40 ? "Media" : "Baja"}
 									</span>
 								</td>
 								<td className="py-3 px-4 text-xs text-muted-foreground">
 									{(overallSoV ?? 0) < 20
-										? "Prioritize content creation to establish AI presence"
+										? "Priorizá la creación de contenido para construir presencia en IA"
 										: (overallSoV ?? 0) < 40
-											? "Expand content to increase brand share of voice"
-											: "Maintain leadership and defend competitive position"}
+											? "Ampliá el contenido para aumentar el share of voice de la marca"
+											: "Sostené el liderazgo y defendé la posición competitiva"}
 								</td>
 							</tr>
 						</tbody>
@@ -691,8 +702,8 @@ function ReportRenderPage() {
 				</div>
 
 				<Section
-					title="What Should I Do Next?"
-					subtitle={`Prompts where competitors outperform ${report.brandName} — your biggest growth opportunities`}
+					title="¿Qué hago ahora?"
+					subtitle={`Prompts donde los competidores superan a ${report.brandName}: tus mayores oportunidades de crecimiento`}
 				/>
 
 				{(() => {
@@ -733,7 +744,7 @@ function ReportRenderPage() {
 						return (
 							<div className="border border-border rounded-lg p-6 text-center">
 								<p className="text-muted-foreground text-sm">
-									{report.brandName} leads or matches competitors across all tested prompts.
+									{report.brandName} lidera o iguala a los competidores en todos los prompts evaluados.
 								</p>
 							</div>
 						);
@@ -745,10 +756,10 @@ function ReportRenderPage() {
 								<thead>
 									<tr className="bg-muted/50 border-b border-border">
 										<TH align="left">Prompt</TH>
-										<TH align="center">Current SoV</TH>
-										<TH align="center">Top Competitor SoV</TH>
-										<TH align="center">Goal SoV</TH>
-										<TH align="left">Recommendation</TH>
+										<TH align="center">SoV actual</TH>
+										<TH align="center">SoV del competidor líder</TH>
+										<TH align="center">SoV objetivo</TH>
+										<TH align="left">Recomendación</TH>
 									</tr>
 								</thead>
 								<tbody className="divide-y divide-border/60">
@@ -765,7 +776,7 @@ function ReportRenderPage() {
 											</td>
 											<td className="py-2.5 px-4 text-center text-xs font-semibold text-believe-900">{o.goalSoV}%</td>
 											<td className="py-2.5 px-4 text-xs text-muted-foreground">
-												Write {o.articleCount} LLM-friendly articles on &ldquo;{o.promptValue}&rdquo;
+												Escribí {o.articleCount} artículos aptos para LLM sobre &ldquo;{o.promptValue}&rdquo;
 											</td>
 										</tr>
 									))}
@@ -783,57 +794,76 @@ function ReportRenderPage() {
 			{/* ===== AGREGADO BeAOS: AOS + APS ===== */}
 			{agentContext !== null && <ReportAgentPage context={agentContext} brandName={report.brandName} />}
 
-			{/* ===== CTA ===== */}
+			{/* ===== CTA =====
+			    Rediseñado con la marca: papel, azul Believe y tinta, sin degradados ni colores prestados.
+			    La jerarquía no depende del color —los pasos van numerados, en peso y tamaño— porque esto
+			    se imprime en blanco y negro. El cian aparece UNA sola vez: es la señal de "acá se actúa",
+			    no decoración. El cierre dice explícitamente que el siguiente paso lo da BeAOS. */}
 			<div className="print:break-before-page print:h-[9.5in] print:flex print:flex-col print:justify-center p-10 print:p-0">
-				<div className="bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/30 rounded-xl p-10 text-center">
-					<h2 className="text-2xl font-bold text-foreground mb-2">Ready to Optimize Your AI Visibility?</h2>
-					<p className="text-muted-foreground text-base mb-8">
-						Take your brand's AI presence to the next level with {branding?.name || "Getcito"}
+				<div className="bg-background border border-border rounded-xl p-10">
+					<div className="flex items-center justify-between gap-6 mb-6">
+						<span className="text-[10px] font-semibold tracking-[0.25em] uppercase text-muted-foreground">
+							Siguiente paso
+						</span>
+						{/* La única señal cian de toda la pieza. */}
+						<span className="h-[3px] w-16 bg-signal" />
+					</div>
+
+					<h2 className="text-2xl font-bold tracking-tight text-believe-900 mb-2">El siguiente paso lo da BeAOS</h2>
+					<p className="text-muted-foreground text-base mb-8 max-w-xl leading-relaxed">
+						El diagnóstico ya está. BeAOS ejecuta lo que sigue sobre la marca que reporta este informe, con{" "}
+						{branding?.name || "BeAOS"}.
 					</p>
 
-					<div className="grid grid-cols-3 gap-6 mb-8">
-						<div className="text-center p-4">
-							<div className="flex justify-center mb-3">
-								<Target className="h-8 w-8 text-muted-foreground" />
+					<div className="grid grid-cols-3 gap-6 mb-10">
+						<div className="border-t-2 border-believe-700 pt-4">
+							<div className="flex items-center gap-2 mb-3">
+								<Target className="h-5 w-5 text-believe-900" />
+								<span className="text-lg font-extrabold tracking-tight text-believe-900">01</span>
 							</div>
-							<h3 className="font-semibold text-foreground mb-2">Strategic Optimization</h3>
+							<h3 className="font-semibold text-foreground mb-2">Priorizar</h3>
 							<p className="text-sm text-muted-foreground leading-relaxed">
-								Develop content strategies that increase your brand's share of voice in AI responses
+								Elegimos los prompts donde la marca queda afuera y definimos qué contenido los cubre primero.
 							</p>
 						</div>
-						<div className="text-center p-4">
-							<div className="flex justify-center mb-3">
-								<BarChart3 className="h-8 w-8 text-muted-foreground" />
+						<div className="border-t-2 border-believe-700 pt-4">
+							<div className="flex items-center gap-2 mb-3">
+								<BarChart3 className="h-5 w-5 text-believe-900" />
+								<span className="text-lg font-extrabold tracking-tight text-believe-900">02</span>
 							</div>
-							<h3 className="font-semibold text-foreground mb-2">Continuous Monitoring</h3>
+							<h3 className="font-semibold text-foreground mb-2">Medir</h3>
 							<p className="text-sm text-muted-foreground leading-relaxed">
-								Track your AI share of voice across hundreds of relevant prompts and topics
+								Seguimos el share of voice en cada motor de IA y volvemos a medir sobre los mismos prompts, para
+								comparar contra una línea base y no contra una impresión.
 							</p>
 						</div>
-						<div className="text-center p-4">
-							<div className="flex justify-center mb-3">
-								<Rocket className="h-8 w-8 text-muted-foreground" />
+						<div className="border-t-2 border-believe-700 pt-4">
+							<div className="flex items-center gap-2 mb-3">
+								<Rocket className="h-5 w-5 text-believe-900" />
+								<span className="text-lg font-extrabold tracking-tight text-believe-900">03</span>
 							</div>
-							<h3 className="font-semibold text-foreground mb-2">Competitive Advantage</h3>
+							<h3 className="font-semibold text-foreground mb-2">Publicar</h3>
 							<p className="text-sm text-muted-foreground leading-relaxed">
-								Stay ahead of competitors in the rapidly evolving AI search landscape
+								Dejamos la marca operable para agentes con su perfil, sus claims y su evidencia firmados.
 							</p>
 						</div>
 					</div>
 
-					<div className="pt-6 border-t border-primary/30">
-						<p className="text-foreground font-medium mb-2">Get started with {branding?.name || "Getcito"} today</p>
+					<div className="pt-6 border-t border-believe-700">
+						<p className="text-foreground font-semibold mb-2">
+							El siguiente paso lo da BeAOS, no lo dejamos en tus manos.
+						</p>
 						<p className="text-muted-foreground text-sm text-balance">
-							Visit{" "}
+							Escribinos en{" "}
 							<a
-								href={branding?.url || "https://getcito.chat"}
+								href={branding?.url || "https://beaos.believe-global.com"}
 								target="_blank"
 								rel="noopener noreferrer"
-								className="font-bold text-primary hover:underline hover:text-primary"
+								className="font-bold text-believe-900 underline decoration-believe-700 decoration-2 underline-offset-2"
 							>
-								{branding?.url || "Getcito.chat"}
+								{branding?.url || "beaos.believe-global.com"}
 							</a>{" "}
-							to learn more about our AI visibility platform and services.
+							y lo ejecutamos con vos.
 						</p>
 					</div>
 				</div>
@@ -848,7 +878,7 @@ function RunningHeader({ brand }: { brand: string }) {
 	return (
 		<div className="flex items-center justify-between mb-6 pb-3 border-b border-border/60">
 			<span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-muted-foreground">
-				AI Share of Voice Report
+				Informe de Share of Voice en IA
 			</span>
 			<span className="text-[10px] font-medium text-muted-foreground">{brand}</span>
 		</div>
@@ -912,7 +942,7 @@ function Badge({ category }: { category: PromptCategory }) {
 			: "bg-muted/60 text-foreground border-foreground/20";
 	return (
 		<span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold border ${cls}`}>
-			{category === "strength" ? "Strength" : "Opportunity"}
+			{category === "strength" ? "Fortaleza" : "Oportunidad"}
 		</span>
 	);
 }
@@ -939,7 +969,7 @@ function PageFooter({ branding }: { branding?: ClientConfig["branding"] }) {
 	return (
 		<div className="pt-4 border-t border-border/60 flex justify-between items-center text-[10px] text-muted-foreground">
 			<Logo iconClassName="!size-3" textClassName="text-[10px] font-medium text-muted-foreground" />
-			<span>{branding?.url || "Getcito.chat"}</span>
+			<span>{branding?.url || "beaos.believe-global.com"}</span>
 		</div>
 	);
 }
