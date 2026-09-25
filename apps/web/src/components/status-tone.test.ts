@@ -163,6 +163,7 @@ describe("la frontera del fork", () => {
 		"./aps-visual.tsx",
 		"./agent-score-cards.tsx",
 		"./report-agent-page.tsx",
+		"../routes/[.]well-known/mcp/server-card[.]json.ts",
 		"../routes/_authed/app/$brand/agent-ops.tsx",
 		"../routes/_authed/app/$brand/agent-preference.tsx",
 		"../routes/_authed/app/$brand/agent-assets.tsx",

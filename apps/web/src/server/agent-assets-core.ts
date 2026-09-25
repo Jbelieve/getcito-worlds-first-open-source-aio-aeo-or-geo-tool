@@ -11,15 +11,280 @@
 
 import { createHash } from "node:crypto";
 import { extractMcpEndpoint } from "@workspace/aos-aps/aos";
-import { type DeclaredMcp, type DeclaredMcpTool, generateAgentAssets } from "@workspace/aos-aps/assets";
-import { agentAssets, agentBrandDnaSnapshots, agentBrandEntities } from "@workspace/aos-aps/db/schema";
+import {
+	type DeclaredAgentResource,
+	type DeclaredMcp,
+	type DeclaredMcpTool,
+	generateAgentAssets,
+} from "@workspace/aos-aps/assets";
+import {
+	agentApsPromptLibraries,
+	agentApsPrompts,
+	agentAssets,
+	agentBrandDnaSnapshots,
+	agentBrandEntities,
+} from "@workspace/aos-aps/db/schema";
 import { findUmbrellaEntity, keysUriForWebsite, signingKeyFromEnv } from "@workspace/aos-aps/provenance";
 import { db } from "@workspace/lib/db/db";
 import { and, desc, eq } from "drizzle-orm";
 import { claimCount, claimsGuardDecision } from "@/lib/claims-guard";
 
+/**
+ * Techo de cada descubrimiento contra el sitio de la marca.
+ *
+ * Esto corre cuando el operador aprieta "Generar assets", no en un job: un sitio que no contesta no
+ * puede colgar la pantalla. El reloj se crea una vez por funcion y lo comparten todos sus pedidos, asi
+ * que el peor caso de cada descubrimiento es este techo y no la suma de sus intentos.
+ */
+const DISCOVERY_TIMEOUT_MS = 5000;
+
 export function hashContent(content: string): string {
 	return createHash("sha256").update(content).digest("hex");
+}
+
+/**
+ * El `Contact:` de un `security.txt` (RFC 9116), ya validado.
+ *
+ * La RFC admite varios campos `Contact`, comentarios con `#` y valores sin espacios. Se devuelve el
+ * primero que sea una URI usable (`mailto:` o `https:`, que es lo que el generador acepta) porque un
+ * `Contact:` que no lleva a ningun lado es peor que no publicar el archivo: un agente lee ese valor y
+ * manda ahi el aviso de vulnerabilidad.
+ */
+export function parseSecurityContact(body: string): string | undefined {
+	for (const rawLine of body.split(/\r?\n/)) {
+		const line = rawLine.trim();
+		if (line.length === 0 || line.startsWith("#")) continue;
+		const match = /^contact\s*:\s*(.+)$/i.exec(line);
+		if (match === null) continue;
+		const value = (match[1] ?? "").trim();
+		if (value.startsWith("mailto:") && value.length > "mailto:".length) return value;
+		if (value.startsWith("https://") && value.length > "https://".length) return value;
+	}
+	return undefined;
+}
+
+/** Un enlace del header `Link` (RFC 8288). `rel` puede traer varios valores separados por espacios. */
+export interface ParsedLink {
+	url: string;
+	rel: string;
+}
+
+/**
+ * Parsea un header `Link` sin romperse con las comas.
+ *
+ * Las URLs pueden contener comas, asi que solo se corta en las comas de afuera de los `<>`. Los
+ * parametros que no son `rel` se ignoran: aca solo se busca la relacion declarada.
+ */
+export function parseLinkHeader(value: string | null | undefined): ParsedLink[] {
+	if (typeof value !== "string" || value.trim().length === 0) return [];
+	const parts: string[] = [];
+	let current = "";
+	let insideAngle = false;
+	for (const char of value) {
+		if (char === "<") insideAngle = true;
+		if (char === ">") insideAngle = false;
+		if (char === "," && insideAngle === false) {
+			parts.push(current);
+			current = "";
+			continue;
+		}
+		current += char;
+	}
+	parts.push(current);
+
+	const links: ParsedLink[] = [];
+	for (const part of parts) {
+		const url = /<([^>]*)>/.exec(part)?.[1]?.trim();
+		if (url === undefined || url.length === 0) continue;
+		const rel = /\brel\s*=\s*"?([^";]+)"?/i.exec(part)?.[1]?.trim();
+		if (rel === undefined || rel.length === 0) continue;
+		links.push({ url, rel });
+	}
+	return links;
+}
+
+/** El primer enlace cuya `rel` declarada incluya la buscada, o `undefined`. */
+export function linkByRel(links: ParsedLink[], rel: string): string | undefined {
+	for (const link of links) {
+		if (link.rel.split(/\s+/).includes(rel)) return link.url;
+	}
+	return undefined;
+}
+
+/** Resuelve una URL declarada contra el origen. Un valor relativo vale; uno inventado no. */
+function resolveUrl(value: unknown, origin: string): string | undefined {
+	if (typeof value !== "string" || value.trim().length === 0) return undefined;
+	try {
+		return new URL(value.trim(), origin).toString();
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * La API que la marca declara en su descripcion OpenAPI, ya derivada.
+ *
+ * `apiDocsUrl` cae en `/developers` cuando la marca no la declara: es la convencion que la propia
+ * consigna pide, no un endpoint que inventemos. `apiStatusUrl` solo viaja si la marca lo declaro en un
+ * `Link rel="status"`: sin dato no se emite, y el generador ya sabe omitir campos que faltan.
+ */
+export interface DeclaredApi {
+	apiUrl: string;
+	openApiUrl: string;
+	apiDocsUrl: string;
+	apiStatusUrl?: string;
+}
+
+/**
+ * Deriva el catalogo de API del documento OpenAPI que el sitio YA sirve.
+ *
+ * Devolver `undefined` cuando el JSON no trae `openapi` es la regla del bundle: un documento que
+ * responde 200 pero no es una descripcion de API no declara ninguna API, y el `api-catalog` (RFC 9727)
+ * no puede emitirse por el solo hecho de que exista una URL.
+ */
+export function apiFromOpenApiDocument(
+	document: unknown,
+	openApiUrl: string,
+	origin: string,
+	declaredDocsUrl?: string,
+	declaredStatusUrl?: string,
+): DeclaredApi | undefined {
+	if (typeof document !== "object" || document === null) return undefined;
+	const record = document as Record<string, unknown>;
+	if (typeof record.openapi !== "string" || record.openapi.trim().length === 0) return undefined;
+
+	// `servers[0].url` es la raiz que la propia API declara; si no la hay, se cae al prefijo
+	// convencional del origen en vez de inventar un host.
+	const servers = Array.isArray(record.servers) ? record.servers : [];
+	const firstServer = servers.find(
+		(server): server is Record<string, unknown> => typeof server === "object" && server !== null,
+	);
+	const apiUrl = resolveUrl(firstServer?.url, origin) ?? `${origin}/api/v1`;
+
+	const docsUrl = resolveUrl(declaredDocsUrl, origin) ?? `${origin}/developers`;
+	const statusUrl = resolveUrl(declaredStatusUrl, origin);
+	return {
+		apiUrl,
+		openApiUrl,
+		apiDocsUrl: docsUrl,
+		...(statusUrl === undefined ? {} : { apiStatusUrl: statusUrl }),
+	};
+}
+
+/**
+ * El contacto de seguridad que el sitio YA publica, leido en el orden en que los lectores lo buscan:
+ * `/.well-known/security.txt` y, si no esta, `security.txt` en la raiz.
+ *
+ * Sin contacto no se emite el archivo y no se inventa un buzon: una direccion falsa manda a quien
+ * reporta una vulnerabilidad al vacio, que es peor que no publicar nada.
+ */
+export async function declaredSecurityContact(websiteUrl: string | undefined): Promise<string | undefined> {
+	if (websiteUrl === undefined) return undefined;
+	let origin: string;
+	try {
+		origin = new URL(websiteUrl).origin;
+	} catch {
+		return undefined;
+	}
+
+	const signal = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
+	for (const path of ["/.well-known/security.txt", "/security.txt"]) {
+		try {
+			const response = await fetch(`${origin}${path}`, { signal, headers: { accept: "text/plain" } });
+			if (response.ok === false) continue;
+			const contact = parseSecurityContact(await response.text());
+			if (contact !== undefined) return contact;
+		} catch {
+			// Sin archivo accesible en esta ubicacion: se prueba la siguiente.
+		}
+	}
+	return undefined;
+}
+
+/**
+ * La API que el sitio YA declara, descubierta como el MCP: primero el `Link rel="service-desc"` del
+ * home, despues `/openapi.json` y `/.well-known/openapi.json`.
+ *
+ * Sin API declarada no se pasa nada y el `api-catalog` no se emite. El generador exige `apiUrl` y
+ * `openApiUrl` juntos: un catalogo sin descripcion no lleva a ninguna parte.
+ */
+export async function declaredApi(websiteUrl: string | undefined): Promise<DeclaredApi | undefined> {
+	if (websiteUrl === undefined) return undefined;
+	let origin: string;
+	try {
+		origin = new URL(websiteUrl).origin;
+	} catch {
+		return undefined;
+	}
+
+	const signal = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
+
+	// El `Link` del home es la unica fuente que puede declarar tambien la doc y el estado. Las URLs
+	// pueden venir relativas (`</openapi.json>`), asi que se resuelven contra el origen antes de usarlas.
+	let declaredDocsUrl: string | undefined;
+	let declaredStatusUrl: string | undefined;
+	let declaredDescUrl: string | undefined;
+	try {
+		const home = await fetch(`${origin}/`, { signal, headers: { accept: "text/html" }, redirect: "follow" });
+		if (home.ok) {
+			const links = parseLinkHeader(home.headers.get("link"));
+			declaredDescUrl = resolveUrl(linkByRel(links, "service-desc"), origin);
+			declaredDocsUrl = resolveUrl(linkByRel(links, "service-doc"), origin);
+			declaredStatusUrl = resolveUrl(linkByRel(links, "status"), origin);
+		}
+	} catch {
+		// Sin home accesible: quedan los archivos conocidos.
+	}
+
+	const candidates = [declaredDescUrl, `${origin}/openapi.json`, `${origin}/.well-known/openapi.json`].filter(
+		(candidate): candidate is string => candidate !== undefined && candidate.length > 0,
+	);
+
+	for (const candidate of candidates) {
+		try {
+			const response = await fetch(candidate, { signal, headers: { accept: "application/json" } });
+			if (response.ok === false) continue;
+			const api = apiFromOpenApiDocument(await response.json(), candidate, origin, declaredDocsUrl, declaredStatusUrl);
+			if (api !== undefined) return api;
+		} catch {
+			// No es JSON, no es OpenAPI o no respondio: se prueba el siguiente candidato.
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Las preguntas reales de la marca: la biblioteca de prompts activa de la entidad, hasta cinco.
+ *
+ * Son las `representativeQueries` del `ai-catalog.json` (ARD). No se generan nuevas: si la entidad no
+ * tiene biblioteca activa, o la biblioteca no tiene prompts habilitados, devuelve la lista vacia y el
+ * `ai-catalog` no se emite, porque una entrada ARD sin consultas no describe como se llega al recurso.
+ */
+export async function activePromptQueries(brandId: string, entityId: string, limit = 5): Promise<string[]> {
+	const [library] = await db
+		.select({ id: agentApsPromptLibraries.id })
+		.from(agentApsPromptLibraries)
+		.where(
+			and(
+				eq(agentApsPromptLibraries.brandId, brandId),
+				eq(agentApsPromptLibraries.entityId, entityId),
+				eq(agentApsPromptLibraries.status, "active"),
+			),
+		)
+		.orderBy(desc(agentApsPromptLibraries.version))
+		.limit(1);
+	if (library === undefined) return [];
+
+	const rows = await db
+		.select({ text: agentApsPrompts.text })
+		.from(agentApsPrompts)
+		.where(and(eq(agentApsPrompts.libraryId, library.id), eq(agentApsPrompts.enabled, true)))
+		.limit(limit);
+
+	return rows
+		.map((row) => row.text.trim())
+		.filter((text) => text.length > 0)
+		.slice(0, limit);
 }
 
 /**
@@ -160,13 +425,53 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 	const websiteUrl =
 		typeof dnaPayload?.website_url === "string" ? dnaPayload.website_url : (current.websiteUrl ?? undefined);
 
-	const mcp = await declaredMcp(websiteUrl);
+	// Los cuatro descubrimientos corren en paralelo y cada uno tiene su propio techo: la pantalla que
+	// aprieta "Generar assets" espera al mas lento, no a la suma de todos.
+	const [mcp, securityContact, api, queries] = await Promise.all([
+		declaredMcp(websiteUrl),
+		declaredSecurityContact(websiteUrl),
+		declaredApi(websiteUrl),
+		activePromptQueries(brandId, entityId),
+	]);
+
+	// ARD: la entrada del perfil de marca se arma solo si hay al menos dos preguntas reales, porque el
+	// generador exige entre 2 y 5 `representativeQueries` por entrada. Con una sola, o con la biblioteca
+	// activa vacia, no se emite `ai-catalog`: inventar la segunda pregunta seria afirmar algo que la
+	// marca no declara.
+	const origin = (() => {
+		if (websiteUrl === undefined) return undefined;
+		try {
+			return new URL(websiteUrl).origin;
+		} catch {
+			return undefined;
+		}
+	})();
+	const name = String(dnaPayload?.brand_name ?? current.name);
+	const ardEntries: DeclaredAgentResource[] =
+		origin === undefined || queries.length < 2
+			? []
+			: [
+					{
+						name: "brand-profile",
+						namespace: "brand",
+						type: "application/json",
+						displayName: `Perfil de marca de ${name}`,
+						url: `${origin}/.well-known/brand.json`,
+						representativeQueries: queries,
+					},
+				];
 
 	const generated = generateAgentAssets({
-		name: String(dnaPayload?.brand_name ?? current.name),
+		name,
 		websiteUrl,
 		mcpUrl: mcp?.url,
 		mcpTools: mcp?.tools,
+		securityContact,
+		apiUrl: api?.apiUrl,
+		openApiUrl: api?.openApiUrl,
+		apiDocsUrl: api?.apiDocsUrl,
+		apiStatusUrl: api?.apiStatusUrl,
+		ardEntries,
 		industry: typeof dnaPayload?.industry === "string" ? dnaPayload.industry : undefined,
 		brief: typeof dnaPayload?.brief === "string" ? dnaPayload.brief : undefined,
 		dna,

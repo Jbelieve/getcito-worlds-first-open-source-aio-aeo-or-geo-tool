@@ -32,6 +32,7 @@ import { Route as AuthedAdminWorkflowsRouteImport } from './routes/_authed/admin
 import { Route as AuthedAdminUsageRouteImport } from './routes/_authed/admin/usage'
 import { Route as AuthedAdminToolsRouteImport } from './routes/_authed/admin/tools'
 import { Route as AuthedAdminQueueRouteImport } from './routes/_authed/admin/queue'
+import { Route as DotwellKnownMcpServerCardDotjsonRouteImport } from './routes/[.]well-known/mcp/server-card[.]json'
 import { Route as ApiV1ReportsIndexRouteImport } from './routes/api/v1/reports/index'
 import { Route as ApiV1PromptsIndexRouteImport } from './routes/api/v1/prompts/index'
 import { Route as ApiV1DocsIndexRouteImport } from './routes/api/v1/docs/index'
@@ -183,6 +184,12 @@ const AuthedAdminQueueRoute = AuthedAdminQueueRouteImport.update({
   path: '/queue',
   getParentRoute: () => AuthedAdminRoute,
 } as any)
+const DotwellKnownMcpServerCardDotjsonRoute =
+  DotwellKnownMcpServerCardDotjsonRouteImport.update({
+    id: '/.well-known/mcp/server-card.json',
+    path: '/.well-known/mcp/server-card.json',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1ReportsIndexRoute = ApiV1ReportsIndexRouteImport.update({
   id: '/api/v1/reports/',
   path: '/api/v1/reports/',
@@ -394,6 +401,7 @@ export interface FileRoutesByFullPath {
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/auth/register': typeof AuthRegisterRoute
+  '/.well-known/mcp/server-card.json': typeof DotwellKnownMcpServerCardDotjsonRoute
   '/admin/queue': typeof AuthedAdminQueueRoute
   '/admin/tools': typeof AuthedAdminToolsRoute
   '/admin/usage': typeof AuthedAdminUsageRoute
@@ -451,6 +459,7 @@ export interface FileRoutesByTo {
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/auth/register': typeof AuthRegisterRoute
+  '/.well-known/mcp/server-card.json': typeof DotwellKnownMcpServerCardDotjsonRoute
   '/admin/queue': typeof AuthedAdminQueueRoute
   '/admin/tools': typeof AuthedAdminToolsRoute
   '/admin/usage': typeof AuthedAdminUsageRoute
@@ -512,6 +521,7 @@ export interface FileRoutesById {
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/auth/register': typeof AuthRegisterRoute
+  '/.well-known/mcp/server-card.json': typeof DotwellKnownMcpServerCardDotjsonRoute
   '/_authed/admin/queue': typeof AuthedAdminQueueRoute
   '/_authed/admin/tools': typeof AuthedAdminToolsRoute
   '/_authed/admin/usage': typeof AuthedAdminUsageRoute
@@ -574,6 +584,7 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/auth/logout'
     | '/auth/register'
+    | '/.well-known/mcp/server-card.json'
     | '/admin/queue'
     | '/admin/tools'
     | '/admin/usage'
@@ -631,6 +642,7 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/auth/logout'
     | '/auth/register'
+    | '/.well-known/mcp/server-card.json'
     | '/admin/queue'
     | '/admin/tools'
     | '/admin/usage'
@@ -691,6 +703,7 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/auth/logout'
     | '/auth/register'
+    | '/.well-known/mcp/server-card.json'
     | '/_authed/admin/queue'
     | '/_authed/admin/tools'
     | '/_authed/admin/usage'
@@ -750,6 +763,7 @@ export interface RootRouteChildren {
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
+  DotwellKnownMcpServerCardDotjsonRoute: typeof DotwellKnownMcpServerCardDotjsonRoute
   AgentEntityIdSplatRoute: typeof AgentEntityIdSplatRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiManifestIndexRoute: typeof ApiManifestIndexRoute
@@ -932,6 +946,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/queue'
       preLoaderRoute: typeof AuthedAdminQueueRouteImport
       parentRoute: typeof AuthedAdminRoute
+    }
+    '/.well-known/mcp/server-card.json': {
+      id: '/.well-known/mcp/server-card.json'
+      path: '/.well-known/mcp/server-card.json'
+      fullPath: '/.well-known/mcp/server-card.json'
+      preLoaderRoute: typeof DotwellKnownMcpServerCardDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/v1/reports/': {
       id: '/api/v1/reports/'
@@ -1336,6 +1357,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,
   AuthRegisterRoute: AuthRegisterRoute,
+  DotwellKnownMcpServerCardDotjsonRoute: DotwellKnownMcpServerCardDotjsonRoute,
   AgentEntityIdSplatRoute: AgentEntityIdSplatRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiManifestIndexRoute: ApiManifestIndexRoute,
