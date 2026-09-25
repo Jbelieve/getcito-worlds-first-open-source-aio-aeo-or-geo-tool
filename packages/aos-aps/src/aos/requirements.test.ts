@@ -147,18 +147,31 @@ describe("estimateGains / evidencia", () => {
 		return probes;
 	}
 
-	it("la suma de las ganancias es, redondeo mediante, 100 menos el score", () => {
+	it("la suma de las ganancias de UN EJE es, redondeo mediante, 100 menos el score de ese eje", () => {
+		// Hay DOS ejes y cada uno se normaliza a 100 por su cuenta. Sumarlos juntos da hasta 200 y no
+		// significa nada: la propiedad vale por eje. (La version anterior de este test solo fallaba
+		// checks AOS, asi que pasaba por casualidad y no cubria el caso mezclado.)
 		const probes = allPass();
-		probes.robots_sitemap = false; // MUST: el que más pesa
-		probes.llms_txt = false; // SHOULD
+		probes.robots_sitemap = false; // AOS, MUST
+		probes.llms_txt = false; // AOS, SHOULD
+		probes.brand_json = false; // APS, MUST (claim_boundaries seria un DIAGNOSTICO: no mueve el eje)
 		const result = evaluateStandards(probes, "brand");
-		const fallando = result.requirements.filter((r) => r.status === "fail");
-		const total = result.requirements.reduce((sum, r) => sum + (r.gain ?? 0), 0);
-		expect(result.aos_standards).toBeLessThan(100);
-		// El score se redondea a entero (±0,5) y cada ganancia a un decimal (±0,05 cada una), asi que
-		// la igualdad exacta no es alcanzable: se verifica contra el bound real del redondeo.
-		const tolerancia = 0.5 + 0.05 * fallando.length;
-		expect(Math.abs(total - (100 - result.aos_standards))).toBeLessThanOrEqual(tolerancia);
+
+		for (const [axis, score] of [
+			["AOS", result.aos_standards],
+			["APS", result.aps_standards],
+		] as const) {
+			const delEje = result.requirements.filter((r) => r.axis === axis);
+			const fallando = delEje.filter((r) => r.status === "fail");
+			const total = delEje.reduce((sum, r) => sum + (r.gain ?? 0), 0);
+			// El score se redondea a entero (±0,5) y cada ganancia a un decimal (±0,05 cada una), asi
+			// que la igualdad exacta no es alcanzable: se verifica contra el bound real del redondeo.
+			const tolerancia = 0.5 + 0.05 * fallando.length;
+			expect(score).toBeLessThan(100);
+			expect(Math.abs(total - (100 - score)), `${axis}: ${total} vs ${100 - score}`).toBeLessThanOrEqual(
+				tolerancia,
+			);
+		}
 	});
 
 	it("solo los puntuados que fallan traen ganancia", () => {

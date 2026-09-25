@@ -16,6 +16,7 @@ interface StoredRequirement {
 	id: string;
 	title: string;
 	status: "pass" | "fail" | "n_a";
+	axis?: "AOS" | "APS";
 	diagnostic?: boolean;
 	/** Puntos que devolvería si pasa. Presentación: lo calcula la auditoría, no el puntaje. */
 	gain?: number;
@@ -30,7 +31,7 @@ export interface AgentOverview {
 		passed: number;
 		applicable: number;
 		/** What is failing in the scored rubric: the actionable list. */
-		failing: Array<{ id: string; title: string; gain: number | null }>;
+		failing: Array<{ id: string; title: string; axis: "AOS" | "APS"; gain: number | null }>;
 		/** Failing checks that are reported but do not move the score. */
 		diagnosticsFailing: number;
 	} | null;
@@ -114,7 +115,12 @@ export const getAgentOverviewFn = createServerFn({ method: "POST" })
 							failing: applicable
 								.filter((requirement) => requirement.status === "fail")
 								.sort((a, b) => (b.gain ?? 0) - (a.gain ?? 0))
-								.map((requirement) => ({ id: requirement.id, title: requirement.title, gain: requirement.gain ?? null })),
+								.map((requirement) => ({
+									id: requirement.id,
+									title: requirement.title,
+									axis: requirement.axis ?? "AOS",
+									gain: requirement.gain ?? null,
+								})),
 							diagnosticsFailing: (requirements ?? []).filter(
 								(requirement) => requirement.diagnostic === true && requirement.status === "fail",
 							).length,
