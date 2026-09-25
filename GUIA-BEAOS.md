@@ -71,6 +71,21 @@ Son **tres pasos, en orden**, en el menú **APS**:
 2. Cuando termine, lo abres y lo **imprimes o guardas como PDF** desde el navegador.
 3. Trae el Share of Voice **más** la página nueva de AOS y APS.
 
+### D2. Ver el plan de implementación (la pantalla para tu equipo)
+
+1. Menú **Plan** → *Plan de implementación*.
+2. Es **todo lo que hay que hacer** para que los agentes puedan usar la marca, no solo los archivos que
+   BeAOS genera. Está en cuatro grupos: **lo que BeAOS ya genera**, **lo que hay que hacer en la web**,
+   **lo que hay que hacer fuera de la web**, y **lo que decidimos NO hacer** (con el motivo, para que nadie
+   lo "arregle" por error).
+3. Cada tarjeta dice **de quién es el trabajo** (*lo hace BeAOS* / *tu desarrollador* / *vos* / *no se
+   hace*), **por qué** existe, los **pasos numerados**, **el detalle exacto** de la especificación, el
+   **snippet para copiar**, y **cómo comprobar que quedó**.
+4. Es la pantalla que se le pasa a un desarrollador cuando pregunta "¿y ahora qué hago?". No hace falta
+   que nadie explique nada: la tarjeta se explica sola.
+5. Los estados: **Listo** (está en el bundle), **Falta** (lo genera BeAOS y todavía no existe), **Por
+   verificar** (está en la web o fuera de ella: hay que medirlo desde afuera) y **No se hace**.
+
 ### E. Que otro producto tuyo use BeAOS (el MCP)
 
 Esto es para Maasy, BeAds, o el agente de una marca. Se conecta así:
