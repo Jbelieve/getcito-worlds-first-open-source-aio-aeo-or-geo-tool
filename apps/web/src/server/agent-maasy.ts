@@ -5,6 +5,7 @@ import { db } from "@workspace/lib/db/db";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
+import { ensureEntity } from "@/server/agent-entities-core";
 import { syncAgentDnaForEntity } from "@/server/agent-maasy-core";
 
 function requireAdmin(session: { user: { role?: string | null } }): void {
@@ -80,6 +81,33 @@ export const linkMaasyProjectFn = createServerFn({ method: "POST" })
 			isPrimary: data.isPrimary ?? false,
 		});
 		return { ok: true, updated: false };
+	});
+
+/**
+ * La otra vía de creación de entidades: la UI.
+ *
+ * `linkMaasyProjectFn` solo crea al vincular una marca de Maasy, así que una entidad que no está en
+ * Maasy (un dealer independiente de Autex) no tenía cómo nacer desde la interfaz. Esta server function
+ * llama al mismo `ensureEntity` que el tool `ensure_entity` del MCP: la idempotencia por host y por
+ * proyecto de Maasy, y la validación de la jerarquía, son una sola.
+ */
+export const createAgentEntityFn = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			brandId: z.string().min(1),
+			name: z.string().min(1),
+			// Igual que el MCP: la web se valida por host en el núcleo (`hostOf`), no por el formato.
+			websiteUrl: z.string().min(1).optional(),
+			entityType: z.enum(["umbrella", "product"]),
+			parentEntityId: z.string().uuid().optional(),
+			maasyProjectId: z.string().min(1).optional(),
+			isPrimary: z.boolean().optional(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const session = await requireAuthSession();
+		await requireOrgAccess(session.user.id, data.brandId);
+		return ensureEntity(data);
 	});
 
 export const syncAgentDnaFn = createServerFn({ method: "POST" })

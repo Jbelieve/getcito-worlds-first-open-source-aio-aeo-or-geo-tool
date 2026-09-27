@@ -11,14 +11,13 @@
  * idempotentes a propósito: un consumidor que reintenta no duplica una marca ni rompe una jerarquía.
  */
 
-import { agentBrandEntities, type NewAgentBrandEntity } from "@workspace/aos-aps/db/schema";
-import { findUmbrellaEntity } from "@workspace/aos-aps/provenance";
 import { db } from "@workspace/lib/db/db";
 import { brands, type NewBrand } from "@workspace/lib/db/schema";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { hostOf } from "@/lib/report-agent";
 import { startApsRunForBrand } from "@/server/agent-aps-core";
 import { generateAssetsForEntity, setEntityPublished } from "@/server/agent-assets-core";
+import { EnsureEntityError, ensureEntity as ensureEntityCore } from "@/server/agent-entities-core";
 import { syncAgentDnaForEntity } from "@/server/agent-maasy-core";
 import type { McpTool } from "../jsonrpc";
 import {
@@ -52,35 +51,6 @@ function uniqueBrandId(base: string, taken: Set<string>): string {
 	let suffix = 2;
 	while (taken.has(`${base}-${suffix}`)) suffix += 1;
 	return `${base}-${suffix}`;
-}
-
-/**
- * Valida la jerarquía antes de escribir. Un padre de otra marca o un ciclo hacen que la generación de
- * assets falle más tarde, cuando el error ya es caro de rastrear; acá se dice en el momento.
- */
-function assertEntityHierarchy(
-	rows: Array<{ id: string; parentEntityId: string | null }>,
-	entityId: string | null,
-	parentEntityId: string | undefined,
-): void {
-	if (parentEntityId === undefined) return;
-	const parent = rows.find((row) => row.id === parentEntityId);
-	if (parent === undefined) {
-		throw new ToolInputError(`"parentEntityId" ${parentEntityId} no pertenece a esta marca.`);
-	}
-	if (findUmbrellaEntity(rows, parentEntityId) === null) {
-		throw new ToolInputError(
-			`La jerarquía de "${parentEntityId}" ya está rota o tiene un ciclo: hay que repararla antes.`,
-		);
-	}
-	if (entityId === null) return;
-	if (entityId === parentEntityId) throw new ToolInputError("Una entidad no puede ser su propio padre.");
-	const proposed = rows.map((row) => (row.id === entityId ? { ...row, parentEntityId } : row));
-	if (findUmbrellaEntity(proposed, entityId) === null) {
-		throw new ToolInputError(
-			`Ese padre crearía un ciclo: "${parentEntityId}" desciende de la entidad que se está editando.`,
-		);
-	}
 }
 
 const ensureBrand: McpTool = {
@@ -212,54 +182,31 @@ const ensureEntity: McpTool = {
 		const maasyProjectId = optionalString(args, "maasyProjectId");
 		const isPrimary = optionalBoolean(args, "isPrimary");
 
-		const [brand] = await db.select({ id: brands.id }).from(brands).where(eq(brands.id, brandId)).limit(1);
-		if (brand === undefined) {
-			throw new ToolInputError(`No existe la marca "${brandId}". Creala primero con ensure_brand o mirá list_brands.`);
+		// La lógica vive en `agent-entities-core` para que la UI cree entidades por la misma puerta.
+		// El mensaje de error se traduce a `ToolInputError` para no cambiar el contrato del tool.
+		let result: Awaited<ReturnType<typeof ensureEntityCore>>;
+		try {
+			result = await ensureEntityCore({
+				brandId,
+				name,
+				entityType,
+				websiteUrl,
+				parentEntityId,
+				maasyProjectId,
+				isPrimary,
+			});
+		} catch (error) {
+			if (error instanceof EnsureEntityError) throw new ToolInputError(error.message);
+			throw error;
 		}
 
-		const siteHost = websiteUrl === undefined ? null : hostOf(websiteUrl);
-		if (websiteUrl !== undefined && siteHost === null) {
-			throw new ToolInputError(`"websiteUrl" no es una URL usable: ${websiteUrl}`);
-		}
-
-		const rows = await db
-			.select({
-				id: agentBrandEntities.id,
-				parentEntityId: agentBrandEntities.parentEntityId,
-				websiteUrl: agentBrandEntities.websiteUrl,
-				maasyProjectId: agentBrandEntities.maasyProjectId,
-			})
-			.from(agentBrandEntities)
-			.where(eq(agentBrandEntities.brandId, brandId));
-
-		const byProject =
-			maasyProjectId === undefined ? undefined : rows.find((row) => row.maasyProjectId === maasyProjectId);
-		const byHost = siteHost === null ? undefined : rows.find((row) => hostOf(row.websiteUrl) === siteHost);
-		const existing = byProject ?? byHost;
-
-		assertEntityHierarchy(rows, existing?.id ?? null, parentEntityId);
-
-		if (existing !== undefined) {
-			const patch: Partial<NewAgentBrandEntity> = { name, entityType };
-			if (websiteUrl !== undefined) patch.websiteUrl = websiteUrl;
-			if (parentEntityId !== undefined) patch.parentEntityId = parentEntityId;
-			if (maasyProjectId !== undefined) patch.maasyProjectId = maasyProjectId;
-			if (isPrimary !== undefined) patch.isPrimary = isPrimary;
-			await db
-				.update(agentBrandEntities)
-				.set(patch)
-				.where(and(eq(agentBrandEntities.id, existing.id), eq(agentBrandEntities.brandId, brandId)));
-			const payload = { entityId: existing.id, created: false };
-			return textResult(`La entidad "${existing.id}" ya existía; se actualizó.`, payload);
-		}
-
-		const values: NewAgentBrandEntity = { brandId, name, entityType, websiteUrl: websiteUrl ?? null };
-		if (parentEntityId !== undefined) values.parentEntityId = parentEntityId;
-		if (maasyProjectId !== undefined) values.maasyProjectId = maasyProjectId;
-		if (isPrimary !== undefined) values.isPrimary = isPrimary;
-		const [inserted] = await db.insert(agentBrandEntities).values(values).returning({ id: agentBrandEntities.id });
-		const payload = { entityId: inserted.id, created: true };
-		return textResult(`Entidad "${inserted.id}" creada para la marca "${brandId}".`, payload);
+		// El payload sigue siendo `{ entityId, created }`: `updated` es información nueva del núcleo,
+		// no un cambio de contrato para los consumidores que ya están en producción.
+		const payload = { entityId: result.entityId, created: result.created };
+		const text = result.created
+			? `Entidad "${result.entityId}" creada para la marca "${brandId}".`
+			: `La entidad "${result.entityId}" ya existía; se actualizó.`;
+		return textResult(text, payload);
 	},
 };
 
