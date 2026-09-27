@@ -1,0 +1,22 @@
+apps/web/src/routes/_authed/app/$brand/agent-entities.tsx
+  h_c5ca005a78c880 2,5,7-16,19,22-33,35-48,50-54,56-92,94-130,132-143,145-176,179-184,186-339
+apps/web/src/server/__tests__/agent-entities-core.test.ts
+  h_c5ca005a78c880 1-90
+apps/web/src/server/agent-entities-core.ts
+  h_c5ca005a78c880 1-165
+apps/web/src/server/agent-maasy.ts
+  h_c5ca005a78c880 8,86-112
+apps/web/src/server/mcp/tools/actions.ts
+  h_c5ca005a78c880 16,20,185-200,203-209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "76d8e9f5ade296d61e09033d381a1b74fdeb5f0c",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
