@@ -1,0 +1,19 @@
+apps/web/src/lib/report-agent.ts
+  s_1e0965b08f30d0::t_2b5f74e00ad38e 44-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "46d2a7583cfa15c8f1eaa564da98af86644457b7",
+  "prompts": {},
+  "sessions": {
+    "s_1e0965b08f30d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8459631c-b0e2-4620-935f-3474fd8b2def",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
