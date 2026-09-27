@@ -12,11 +12,12 @@
  *   así que cualquier instancia atiende cualquier request y un reinicio no rompe a nadie.
  * - **GET responde 405** con una pista, que es lo que el protocolo espera de un servidor que no ofrece
  *   stream por GET. Sin eso, un cliente se queda esperando un stream que nunca abre.
- * - El token se valida contra `ADMIN_API_KEYS` (`Authorization: Bearer …`), el mismo que ya usa
- *   `/api/v1`. Se acepta también `x-api-key` porque muchos clientes MCP mandan el header así.
+ * - El token se valida contra `agent_api_tokens` (una credencial **por producto**, revocable de a una) y,
+ *   si no está ahí, contra `ADMIN_API_KEYS`, el mismo que ya usa `/api/v1`, para no romper a Maasy. Se
+ *   acepta `Authorization: Bearer …` y también `x-api-key` porque muchos clientes MCP lo mandan así.
  */
 import { createFileRoute } from "@tanstack/react-router";
-import { validateApiKeyFromRequest } from "@/lib/auth/policies";
+import { authenticateMcpRequest } from "@/lib/api-tokens";
 import { dispatch, parseMessage } from "@/server/mcp/jsonrpc";
 import { BEAOS_MCP_SERVER, BEAOS_MCP_TOOLS } from "@/server/mcp/tools";
 
@@ -46,14 +47,6 @@ function unauthorized(message: string): Response {
 	});
 }
 
-function hasApiKey(request: Request): boolean {
-	if (validateApiKeyFromRequest(request)) return true;
-	const header = request.headers.get("x-api-key");
-	if (header === null || header.trim().length === 0) return false;
-	// Mismo validador, mismo formato: se reusa el header como si fuera el Bearer.
-	return validateApiKeyFromRequest(new Request(request.url, { headers: { authorization: `Bearer ${header.trim()}` } }));
-}
-
 export const Route = createFileRoute("/mcp")({
 	server: {
 		handlers: {
@@ -69,8 +62,9 @@ export const Route = createFileRoute("/mcp")({
 				),
 
 			POST: async ({ request }) => {
-				if (hasApiKey(request) === false) {
-					return unauthorized("Falta un token válido: Authorization: Bearer <token> o x-api-key.");
+				const auth = await authenticateMcpRequest(request);
+				if (auth.ok === false) {
+					return unauthorized(auth.message);
 				}
 
 				const raw = await request.text();
