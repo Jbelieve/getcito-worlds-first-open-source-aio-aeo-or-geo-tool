@@ -42,6 +42,48 @@ function normalizedName(name: string | null | undefined): string | null {
 }
 
 /**
+ * Normaliza el nombre de una marca o de un reporte para compararlos: minúsculas y sin espacios
+ * sobrantes (los de los bordes, y los repetidos del medio colapsados a uno).
+ */
+export function normalizeBrandName(name: string | null | undefined): string | null {
+	if (typeof name !== "string") return null;
+	const collapsed = name.trim().replace(/\s+/g, " ").toLowerCase();
+	return collapsed.length === 0 ? null : collapsed;
+}
+
+/** Lo mínimo de un reporte para decidir si es de una marca. */
+export interface ReportBrandMatchRow {
+	brandName: string | null | undefined;
+	brandWebsite: string | null | undefined;
+}
+
+export interface ReportBrandMatchTarget {
+	name: string | null | undefined;
+	website: string | null | undefined;
+}
+
+/**
+ * ¿Este reporte es de esta marca?
+ *
+ * La tabla heredada `reports` no tiene `brand_id`, y el nombre no alcanza: un reporte generado como
+ * "Believe Global" no aparecía al listar la marca "Believe". Por eso se matchea por **nombre
+ * normalizado** (minúsculas, sin espacios sobrantes) **o por host de la web**, que es el otro dato que
+ * existe en los dos lados. Gana cualquiera de los dos.
+ *
+ * Límite, y hay que decirlo: un reporte cuyo nombre y cuya web no coincidan con la marca sigue sin
+ * poder vincularse. No se adivina por parecido, porque mostrar los reportes de otra marca es peor que
+ * mostrar de menos. Mientras `reports` no guarde `brand_id`, esto es lo máximo que se puede hacer.
+ */
+export function reportMatchesBrand(report: ReportBrandMatchRow, brand: ReportBrandMatchTarget): boolean {
+	const reportName = normalizeBrandName(report.brandName);
+	const brandName = normalizeBrandName(brand.name);
+	if (reportName !== null && brandName !== null && reportName === brandName) return true;
+	const brandHost = hostOf(brand.website);
+	if (brandHost === null) return false;
+	return hostOf(report.brandWebsite) === brandHost;
+}
+
+/**
  * Encuentra la entidad del reporte.
  *
  * Gana el host exacto; si no, la que comparte el dominio registrable (`felix.com` contra

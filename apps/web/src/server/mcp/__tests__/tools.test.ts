@@ -50,6 +50,7 @@ describe("registro de tools del MCP de BeAOS", () => {
 		const requiredOf = (name: string) => BEAOS_MCP_TOOLS.find((tool) => tool.name === name)?.inputSchema.required;
 		expect(requiredOf("ensure_brand")).toEqual(["name", "website"]);
 		expect(requiredOf("ensure_entity")).toEqual(["brandId", "name", "entityType"]);
+		expect(requiredOf("ensure_prompt_library")).toEqual(["brandId", "entityId"]);
 		expect(requiredOf("start_aps_run")).toEqual(["brandId", "entityId"]);
 		expect(requiredOf("sync_brand_dna")).toEqual(["brandId", "entityId"]);
 	});
@@ -91,6 +92,7 @@ describe("registro de tools del MCP de BeAOS", () => {
 			[
 				"ensure_brand",
 				"ensure_entity",
+				"ensure_prompt_library",
 				"generate_agent_assets",
 				"get_agent_asset",
 				"get_agent_bundle",

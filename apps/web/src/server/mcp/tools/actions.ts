@@ -7,18 +7,18 @@
  * `start_aps_run` llama a `agent-aps-core`, que es lo que corre cuando el operador aprieta el botón, con
  * el mismo guardián de presupuesto. `sync_brand_dna` llama a `agent-maasy-core`.
  *
- * Las herramientas de "asegurar" (`ensure_brand`, `ensure_entity`) son las únicas que crean filas, y son
- * idempotentes a propósito: un consumidor que reintenta no duplica una marca ni rompe una jerarquía.
+ * Las herramientas de "asegurar" (`ensure_brand`, `ensure_entity`, `ensure_prompt_library`) son las
+ * únicas que crean filas, y son idempotentes a propósito: un consumidor que reintenta no duplica una
+ * marca, no rompe una jerarquía ni quema una generación de biblioteca.
  */
 
-import { agentBrandEntities, type NewAgentBrandEntity } from "@workspace/aos-aps/db/schema";
-import { findUmbrellaEntity } from "@workspace/aos-aps/provenance";
 import { db } from "@workspace/lib/db/db";
 import { brands, type NewBrand } from "@workspace/lib/db/schema";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { hostOf } from "@/lib/report-agent";
-import { startApsRunForBrand } from "@/server/agent-aps-core";
+import { ensurePromptLibraryForEntity, PromptLibraryError, startApsRunForBrand } from "@/server/agent-aps-core";
 import { generateAssetsForEntity, setEntityPublished } from "@/server/agent-assets-core";
+import { EnsureEntityError, ensureEntity as ensureEntityCore } from "@/server/agent-entities-core";
 import { syncAgentDnaForEntity } from "@/server/agent-maasy-core";
 import type { McpTool } from "../jsonrpc";
 import {
@@ -52,35 +52,6 @@ function uniqueBrandId(base: string, taken: Set<string>): string {
 	let suffix = 2;
 	while (taken.has(`${base}-${suffix}`)) suffix += 1;
 	return `${base}-${suffix}`;
-}
-
-/**
- * Valida la jerarquía antes de escribir. Un padre de otra marca o un ciclo hacen que la generación de
- * assets falle más tarde, cuando el error ya es caro de rastrear; acá se dice en el momento.
- */
-function assertEntityHierarchy(
-	rows: Array<{ id: string; parentEntityId: string | null }>,
-	entityId: string | null,
-	parentEntityId: string | undefined,
-): void {
-	if (parentEntityId === undefined) return;
-	const parent = rows.find((row) => row.id === parentEntityId);
-	if (parent === undefined) {
-		throw new ToolInputError(`"parentEntityId" ${parentEntityId} no pertenece a esta marca.`);
-	}
-	if (findUmbrellaEntity(rows, parentEntityId) === null) {
-		throw new ToolInputError(
-			`La jerarquía de "${parentEntityId}" ya está rota o tiene un ciclo: hay que repararla antes.`,
-		);
-	}
-	if (entityId === null) return;
-	if (entityId === parentEntityId) throw new ToolInputError("Una entidad no puede ser su propio padre.");
-	const proposed = rows.map((row) => (row.id === entityId ? { ...row, parentEntityId } : row));
-	if (findUmbrellaEntity(proposed, entityId) === null) {
-		throw new ToolInputError(
-			`Ese padre crearía un ciclo: "${parentEntityId}" desciende de la entidad que se está editando.`,
-		);
-	}
 }
 
 const ensureBrand: McpTool = {
@@ -212,54 +183,31 @@ const ensureEntity: McpTool = {
 		const maasyProjectId = optionalString(args, "maasyProjectId");
 		const isPrimary = optionalBoolean(args, "isPrimary");
 
-		const [brand] = await db.select({ id: brands.id }).from(brands).where(eq(brands.id, brandId)).limit(1);
-		if (brand === undefined) {
-			throw new ToolInputError(`No existe la marca "${brandId}". Creala primero con ensure_brand o mirá list_brands.`);
+		// La lógica vive en `agent-entities-core` para que la UI cree entidades por la misma puerta.
+		// El mensaje de error se traduce a `ToolInputError` para no cambiar el contrato del tool.
+		let result: Awaited<ReturnType<typeof ensureEntityCore>>;
+		try {
+			result = await ensureEntityCore({
+				brandId,
+				name,
+				entityType,
+				websiteUrl,
+				parentEntityId,
+				maasyProjectId,
+				isPrimary,
+			});
+		} catch (error) {
+			if (error instanceof EnsureEntityError) throw new ToolInputError(error.message);
+			throw error;
 		}
 
-		const siteHost = websiteUrl === undefined ? null : hostOf(websiteUrl);
-		if (websiteUrl !== undefined && siteHost === null) {
-			throw new ToolInputError(`"websiteUrl" no es una URL usable: ${websiteUrl}`);
-		}
-
-		const rows = await db
-			.select({
-				id: agentBrandEntities.id,
-				parentEntityId: agentBrandEntities.parentEntityId,
-				websiteUrl: agentBrandEntities.websiteUrl,
-				maasyProjectId: agentBrandEntities.maasyProjectId,
-			})
-			.from(agentBrandEntities)
-			.where(eq(agentBrandEntities.brandId, brandId));
-
-		const byProject =
-			maasyProjectId === undefined ? undefined : rows.find((row) => row.maasyProjectId === maasyProjectId);
-		const byHost = siteHost === null ? undefined : rows.find((row) => hostOf(row.websiteUrl) === siteHost);
-		const existing = byProject ?? byHost;
-
-		assertEntityHierarchy(rows, existing?.id ?? null, parentEntityId);
-
-		if (existing !== undefined) {
-			const patch: Partial<NewAgentBrandEntity> = { name, entityType };
-			if (websiteUrl !== undefined) patch.websiteUrl = websiteUrl;
-			if (parentEntityId !== undefined) patch.parentEntityId = parentEntityId;
-			if (maasyProjectId !== undefined) patch.maasyProjectId = maasyProjectId;
-			if (isPrimary !== undefined) patch.isPrimary = isPrimary;
-			await db
-				.update(agentBrandEntities)
-				.set(patch)
-				.where(and(eq(agentBrandEntities.id, existing.id), eq(agentBrandEntities.brandId, brandId)));
-			const payload = { entityId: existing.id, created: false };
-			return textResult(`La entidad "${existing.id}" ya existía; se actualizó.`, payload);
-		}
-
-		const values: NewAgentBrandEntity = { brandId, name, entityType, websiteUrl: websiteUrl ?? null };
-		if (parentEntityId !== undefined) values.parentEntityId = parentEntityId;
-		if (maasyProjectId !== undefined) values.maasyProjectId = maasyProjectId;
-		if (isPrimary !== undefined) values.isPrimary = isPrimary;
-		const [inserted] = await db.insert(agentBrandEntities).values(values).returning({ id: agentBrandEntities.id });
-		const payload = { entityId: inserted.id, created: true };
-		return textResult(`Entidad "${inserted.id}" creada para la marca "${brandId}".`, payload);
+		// El payload sigue siendo `{ entityId, created }`: `updated` es información nueva del núcleo,
+		// no un cambio de contrato para los consumidores que ya están en producción.
+		const payload = { entityId: result.entityId, created: result.created };
+		const text = result.created
+			? `Entidad "${result.entityId}" creada para la marca "${brandId}".`
+			: `La entidad "${result.entityId}" ya existía; se actualizó.`;
+		return textResult(text, payload);
 	},
 };
 
@@ -267,7 +215,7 @@ const startApsRun: McpTool = {
 	name: "start_aps_run",
 	title: "Encolar una corrida APS",
 	description:
-		"Encola una medición APS real para una entidad: los modelos responden la biblioteca de prompts activa y el worker la puntúa. Es la misma corrida que dispara el botón de la UI, con el mismo guardián de presupuesto. NO genera la biblioteca: si la entidad no tiene una activa, la corrida no se encola y el error dice exactamente qué falta, porque crear la biblioteca es una decisión de producto. Usalo solo cuando el consumidor quiera medir de nuevo; para leer una corrida ya hecha está list_aps_runs y get_aps_score_detail.",
+		"Encola una medición APS real para una entidad: los modelos responden la biblioteca de prompts activa y el worker la puntúa. Es la misma corrida que dispara el botón de la UI, con el mismo guardián de presupuesto. Si la entidad **no tiene biblioteca activa, la genera y sigue**: el resultado trae `libraryGenerated: true` para que el consumidor sepa que la medición usa una biblioteca recién creada. Si la generación falla, falla con el motivo y no encola nada. Usalo solo cuando el consumidor quiera medir de nuevo; para leer una corrida ya hecha está list_aps_runs y get_aps_score_detail.",
 	inputSchema: {
 		type: "object",
 		properties: {
@@ -294,14 +242,27 @@ const startApsRun: McpTool = {
 		const models = optionalStringArray(args, "models");
 		const repetitions = optionalInteger(args, "repetitions", { min: 1, max: 5, fallback: 3 });
 
+		// Antes esto trababa la corrida; ahora la biblioteca se asegura acá. La generación no es silenciosa:
+		// si falla, no se encola nada y el motivo viaja en la respuesta.
+		let libraryGenerated = false;
+		try {
+			const library = await ensurePromptLibraryForEntity({ brandId, entityId, force: false });
+			libraryGenerated = library.created;
+		} catch (error) {
+			if (error instanceof PromptLibraryError) {
+				const text = `No se encoló la corrida APS: la biblioteca de prompts no se pudo preparar.\n- ${error.message}`;
+				return errorResult(text, { ok: false, reasons: [error.message], libraryGenerated: false });
+			}
+			throw error;
+		}
+
 		const result = await startApsRunForBrand({ brandId, entityId, models, repetitions });
 		if (result.ok === false) {
-			const missingLibrary = result.libraryVersion === null;
 			const text = [
 				"No se encoló la corrida APS. Motivos:",
 				...result.reasons.map((reason) => `- ${reason}`),
-				missingLibrary
-					? "La entidad no tiene biblioteca de prompts activa: hay que generarla y guardarla desde la pantalla de APS (el MCP no la crea sola)."
+				result.libraryVersion === null
+					? "La entidad quedó sin biblioteca de prompts activa."
 					: `Biblioteca activa v${result.libraryVersion} con ${result.prompts} prompts habilitados.`,
 			].join("\n");
 			return errorResult(text, {
@@ -310,6 +271,7 @@ const startApsRun: McpTool = {
 				libraryVersion: result.libraryVersion,
 				prompts: result.prompts,
 				models: result.models,
+				libraryGenerated,
 			});
 		}
 
@@ -321,8 +283,74 @@ const startApsRun: McpTool = {
 			estimate: result.estimate,
 			libraryVersion: result.libraryVersion,
 			prompts: result.prompts,
+			libraryGenerated,
 		};
 		return textResult(json(payload), payload);
+	},
+};
+
+/**
+ * La biblioteca de prompts APS: se genera sola **y** se puede revisar.
+ *
+ * Es la puerta simétrica de `ensure_entity`: idempotente por entidad y explícita cuando se fuerza. No
+ * marca nada como "aprobada" porque ese concepto no existe en el modelo: una biblioteca nace `active` y
+ * la anterior pasa a `superseded`, que es el mecanismo de versión que ya usa el worker.
+ */
+const ensurePromptLibrary: McpTool = {
+	name: "ensure_prompt_library",
+	title: "Asegurar la biblioteca de prompts APS",
+	description:
+		"Genera la biblioteca de prompts APS de una entidad si no tiene una activa, y devuelve los prompts (id, texto, categoría y etapa de funnel). Si ya tiene una activa y no mandás `force`, devuelve esa tal cual con `created: false`: es idempotente y no gasta una generación. Con `force: true` genera una versión nueva, que supersede a la anterior aunque esté dentro del bloqueo de 90 días —cambiar el instrumento arranca una serie nueva—. No existe el estado 'aprobada': la biblioteca queda `active` y la anterior `superseded`. Usala antes de start_aps_run si querés revisar los prompts primero.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			brandId: { type: "string", description: "Id de la marca dueña de la entidad." },
+			entityId: { type: "string", description: "UUID de la entidad (ver get_brand)." },
+			force: {
+				type: "boolean",
+				description: "true para generar una versión nueva aunque ya haya una activa. Por defecto false.",
+			},
+		},
+		required: ["brandId", "entityId"],
+		additionalProperties: false,
+	},
+	handler: async (args) => {
+		const brandId = requireString(args, "brandId");
+		const entityId = requireUuid(args, "entityId");
+		const force = optionalBoolean(args, "force") ?? false;
+
+		let library: Awaited<ReturnType<typeof ensurePromptLibraryForEntity>>;
+		try {
+			library = await ensurePromptLibraryForEntity({ brandId, entityId, force });
+		} catch (error) {
+			if (error instanceof PromptLibraryError) {
+				return errorResult(`No se pudo asegurar la biblioteca de prompts: ${error.message}`, {
+					ok: false,
+					reasons: [error.message],
+				});
+			}
+			throw error;
+		}
+
+		const payload = {
+			entityId,
+			libraryId: library.libraryId,
+			version: library.version,
+			created: library.created,
+			rejected: library.rejected,
+			promptCount: library.prompts.length,
+			prompts: library.prompts.map((prompt) => ({
+				id: prompt.id,
+				text: prompt.text,
+				category: prompt.kind,
+				funnelStage: prompt.funnelStage,
+				enabled: prompt.enabled,
+			})),
+		};
+		const text = library.created
+			? `Biblioteca v${library.version} generada para la entidad "${entityId}": ${library.prompts.length} prompts (${library.rejected} descartados).`
+			: `La entidad "${entityId}" ya tenía la biblioteca v${library.version} activa: se devuelve tal cual (${library.prompts.length} prompts).`;
+		return textResult(text, payload);
 	},
 };
 
@@ -409,6 +437,7 @@ const publishAgentAssets: McpTool = {
 export const actionTools: McpTool[] = [
 	ensureBrand,
 	ensureEntity,
+	ensurePromptLibrary,
 	startApsRun,
 	syncBrandDna,
 	generateAgentAssetsTool,

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
 	hostOf,
 	matchEntityForReport,
+	normalizeBrandName,
 	type ReportEntityRef,
 	readRequirements,
 	registrableDomain,
+	reportMatchesBrand,
 	summarizeAos,
 	summarizeAps,
 } from "../report-agent";
@@ -73,6 +75,55 @@ describe("matchEntityForReport", () => {
 	it("devuelve null si no hay forma de vincular: mejor nada que el AOS de otra marca", () => {
 		expect(matchEntityForReport(entities, { website: "https://otra.com", name: "Nadie" })).toBeNull();
 		expect(matchEntityForReport([], { website: "https://believe-global.com", name: "Believe" })).toBeNull();
+	});
+});
+
+describe("reportMatchesBrand", () => {
+	const believe = { name: "Believe", website: "https://believe-global.com" };
+
+	it("matchea por nombre normalizado: mayúsculas y espacios sobrantes no importan", () => {
+		expect(reportMatchesBrand({ brandName: "  BELIEVE ", brandWebsite: "https://otra.com" }, believe)).toBe(true);
+	});
+
+	it("'Believe Global' aparece al listar 'Believe' por el host, no por el nombre", () => {
+		expect(
+			reportMatchesBrand({ brandName: "Believe Global", brandWebsite: "https://www.believe-global.com/ruta" }, believe),
+		).toBe(true);
+	});
+
+	it("matchea por host de la web aunque el nombre no coincida", () => {
+		expect(
+			reportMatchesBrand({ brandName: "Otro Nombre", brandWebsite: "https://www.believe-global.com/ruta" }, believe),
+		).toBe(true);
+	});
+
+	it("no vincula un reporte ajeno: ni el nombre ni la web son de la marca", () => {
+		expect(reportMatchesBrand({ brandName: "Felix", brandWebsite: "https://felix.com" }, believe)).toBe(false);
+	});
+
+	it("no adivina por parecido: 'Believe Global' no es 'Believe' si la web tampoco coincide", () => {
+		// Este es el límite documentado: sin `brand_id` en `reports`, un nombre distinto y una web distinta
+		// no se pueden vincular. Preferimos mostrar de menos antes que reportes de otra marca.
+		expect(reportMatchesBrand({ brandName: "Believe Global", brandWebsite: "https://otra.com" }, believe)).toBe(false);
+	});
+
+	it("con la marca sin web usable el único camino es el nombre", () => {
+		expect(
+			reportMatchesBrand({ brandName: "Believe", brandWebsite: "https://x.com" }, { name: "Believe", website: null }),
+		).toBe(true);
+		expect(
+			reportMatchesBrand({ brandName: "Otra", brandWebsite: "https://x.com" }, { name: "Believe", website: null }),
+		).toBe(false);
+	});
+});
+
+describe("normalizeBrandName", () => {
+	it("baja a minúsculas y colapsa los espacios sobrantes", () => {
+		expect(normalizeBrandName("  Believe   Global  ")).toBe("believe global");
+	});
+	it("devuelve null cuando no hay nombre", () => {
+		expect(normalizeBrandName("   ")).toBeNull();
+		expect(normalizeBrandName(null)).toBeNull();
 	});
 });
 
