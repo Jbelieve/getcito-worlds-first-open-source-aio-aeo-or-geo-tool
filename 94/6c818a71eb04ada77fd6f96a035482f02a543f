@@ -1,0 +1,35 @@
+apps/web/src/lib/api-tokens.ts
+  s_7cd164a37b4920::t_eef10bf918e2d2 1-146
+apps/web/src/routes/mcp.ts
+  s_7cd164a37b4920::t_6722af8de2ce7b 15-17,20,65-67
+packages/lib/src/db/migrations/meta/_journal.json
+  s_7cd164a37b4920::t_fee708efd0e92f 165-171
+packages/aos-aps/src/db/schema.ts
+  s_7cd164a37b4920::t_746a402980e089 303-333
+apps/web/src/lib/__tests__/api-tokens.test.ts
+  s_7cd164a37b4920::t_a7cdb6a0eec20d 1-120
+MCP-BEAOS.md
+  s_7cd164a37b4920::t_e24018a44c428b 5,7-9,11-14,18-20,22,26,29-50,54,60-89,118,128,135-136
+packages/lib/src/db/migrations/meta/0023_snapshot.json
+  s_7cd164a37b4920::t_086d3683d50aea 1-3294
+packages/lib/src/db/migrations/0023_broken_stepford_cuckoos.sql
+  s_7cd164a37b4920::t_c80a68892ebfa7 1-11
+apps/web/scripts/beaos-tokens.mjs
+  s_7cd164a37b4920::t_50693ca2cc8a8d 1-165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "946c818a71eb04ada77fd6f96a035482f02a543f",
+  "prompts": {},
+  "sessions": {
+    "s_7cd164a37b4920": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a8297c8b-e542-4c61-9acf-e1f0a454c397",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
