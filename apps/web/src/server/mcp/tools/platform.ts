@@ -10,8 +10,8 @@
  * Dos reglas para todos los tools de este archivo:
  *
  * 1. **Todo se lee por marca.** Ninguno devuelve filas de marcas distintas mezcladas; el `brandId` es la
- *    entrada obligatoria. La única tabla sin `brand_id` es `reports`, y por eso `list_reports` resuelve el
- *    nombre desde la marca y filtra por él.
+ *    entrada obligatoria. La única tabla sin `brand_id` es `reports`, y por eso `list_reports` vincula
+ *    cada reporte por nombre normalizado o por host de la web (ver `reportMatchesBrand`).
  * 2. **Nada pesa cientos de KB.** `prompt_runs.raw_output` y `reports.raw_output` son enormes —hay un
  *    502 en la historia del repo causado por serializarlos— y por eso no se devuelven nunca. Lo que se
  *    devuelve es agregado, acotado, y cuando se recorta se dice.
@@ -27,7 +27,8 @@ import {
 	prompts,
 	reports,
 } from "@workspace/lib/db/schema";
-import { and, count, desc, eq, gte, ilike, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, or, type SQL, sql } from "drizzle-orm";
+import { hostOf, normalizeBrandName, reportMatchesBrand } from "@/lib/report-agent";
 import type { McpTool } from "../jsonrpc";
 import {
 	optionalBoolean,
@@ -645,7 +646,7 @@ const listReports: McpTool = {
 	name: "list_reports",
 	title: "Listar los reportes de una marca",
 	description:
-		"Lista los reportes generados de una marca: id, nombre, estado, cuándo se creó y cuándo terminó. NO devuelve el `rawOutput`, que es el contenido completo del reporte y pesa cientos de KB (en la historia del repo llegó a tumbar la respuesta con un 502): para el contenido, el consumidor usa el id. La tabla heredada `reports` no guarda `brandId`, sólo el nombre, así que el filtro se resuelve desde la marca.",
+		'Lista los reportes generados de una marca: id, nombre, estado, cuándo se creó y cuándo terminó. NO devuelve el `rawOutput`, que es el contenido completo del reporte y pesa cientos de KB (en la historia del repo llegó a tumbar la respuesta con un 502): para el contenido, el consumidor usa el id. La tabla heredada `reports` no guarda `brandId`, así que el vínculo se resuelve por **nombre normalizado** (minúsculas, sin espacios sobrantes) **o por host de la web**: por eso un reporte guardado como "Believe Global" aparece al listar la marca "Believe" cuando comparten la web. Límite: un reporte cuyo nombre y cuya web no coincidan con la marca sigue sin poder vincularse; no se adivina por parecido.',
 	inputSchema: {
 		type: "object",
 		properties: {
@@ -664,7 +665,29 @@ const listReports: McpTool = {
 		const brandId = requireString(args, "brandId");
 		const brand = await loadBrand(brandId);
 		const limit = optionalInteger(args, "limit", { min: 1, max: MAX_LIMIT, fallback: 20 });
-		const rows = await db
+
+		// El prefiltro en SQL tiene que ser un superconjunto barato de `reportMatchesBrand`, porque el
+		// nombre normalizado y el host se terminan de comparar en JS. Alcanza con: nombre normalizado
+		// igual, o la web conteniendo el host (el `LIKE` puede traer de más; el JS lo descarta).
+		const normalizedName = normalizeBrandName(brand.name);
+		const host = hostOf(brand.website);
+		const conditions: SQL[] = [];
+		if (normalizedName !== null) {
+			conditions.push(sql`btrim(regexp_replace(lower(${reports.brandName}), '\\s+', ' ', 'g')) = ${normalizedName}`);
+		}
+		if (host !== null) conditions.push(ilike(reports.brandWebsite, `%${host}%`));
+
+		if (conditions.length === 0) {
+			const payload = {
+				brandId,
+				count: 0,
+				reports: [],
+				note: "Sin `rawOutput` a propósito: es enorme. El contenido se lee por id en la app.",
+			};
+			return textResult(`"${brand.name}" no tiene nombre ni web usables para vincular reportes.`, payload);
+		}
+
+		const candidates = await db
 			.select({
 				id: reports.id,
 				brandName: reports.brandName,
@@ -674,9 +697,11 @@ const listReports: McpTool = {
 				completedAt: reports.completedAt,
 			})
 			.from(reports)
-			.where(ilike(reports.brandName, brand.name))
-			.orderBy(desc(reports.createdAt))
-			.limit(limit);
+			.where(or(...conditions))
+			.orderBy(desc(reports.createdAt));
+		const rows = candidates
+			.filter((row) => reportMatchesBrand({ brandName: row.brandName, brandWebsite: row.brandWebsite }, brand))
+			.slice(0, limit);
 		const payload = {
 			brandId,
 			count: rows.length,
