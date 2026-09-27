@@ -1,0 +1,14 @@
+HANDOFF-BEAOS-PARA-AUTEX.md
+  h_c5ca005a78c880 1-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c8501ecdcecd66aae8748c97c4798c326b9a6034",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
