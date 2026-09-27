@@ -23,6 +23,13 @@ describe("registro de tools del MCP de BeAOS", () => {
 		}
 	});
 
+	it("cada tool declara título, que es lo que lee un cliente MCP", () => {
+		for (const tool of BEAOS_MCP_TOOLS) {
+			expect(tool.title, `${tool.name} sin título`).toBeTypeOf("string");
+			expect(tool.title?.length ?? 0).toBeGreaterThan(3);
+		}
+	});
+
 	it("cada campo obligatorio está declarado en properties", () => {
 		for (const tool of BEAOS_MCP_TOOLS) {
 			const properties = (tool.inputSchema.properties ?? {}) as Record<string, unknown>;
@@ -34,10 +41,17 @@ describe("registro de tools del MCP de BeAOS", () => {
 	});
 
 	it("las herramientas de acción piden marca, entidad y el flag explícito", () => {
-		const generate = BEAOS_MCP_TOOLS.find((tool) => tool.name === "generate_agent_assets");
-		const publish = BEAOS_MCP_TOOLS.find((tool) => tool.name === "publish_agent_assets");
-		expect(generate?.inputSchema.required).toEqual(["brandId", "entityId"]);
-		expect(publish?.inputSchema.required).toEqual(["brandId", "entityId", "published"]);
+		const requiredOf = (name: string) => BEAOS_MCP_TOOLS.find((tool) => tool.name === name)?.inputSchema.required;
+		expect(requiredOf("generate_agent_assets")).toEqual(["brandId", "entityId"]);
+		expect(requiredOf("publish_agent_assets")).toEqual(["brandId", "entityId", "published"]);
+	});
+
+	it("las acciones de alta piden lo mínimo para ser idempotentes y no inventar datos", () => {
+		const requiredOf = (name: string) => BEAOS_MCP_TOOLS.find((tool) => tool.name === name)?.inputSchema.required;
+		expect(requiredOf("ensure_brand")).toEqual(["name", "website"]);
+		expect(requiredOf("ensure_entity")).toEqual(["brandId", "name", "entityType"]);
+		expect(requiredOf("start_aps_run")).toEqual(["brandId", "entityId"]);
+		expect(requiredOf("sync_brand_dna")).toEqual(["brandId", "entityId"]);
 	});
 
 	it("están las lecturas que necesita un producto consumidor", () => {
@@ -47,6 +61,7 @@ describe("registro de tools del MCP de BeAOS", () => {
 			"get_brand",
 			"get_aos_audit",
 			"list_aps_runs",
+			"get_aps_score_detail",
 			"get_agent_bundle",
 			"get_agent_asset",
 		]) {

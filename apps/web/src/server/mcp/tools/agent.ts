@@ -1,32 +1,31 @@
 /**
- * Los tools del MCP de BeAOS.
+ * Los tools de BeAOS: lo que la plataforma mide sobre una marca y sus entidades.
  *
- * Es la puerta que faltaba: hasta ahora lo único que BeAOS exponía para que otro producto lo consumiera
- * era una API REST, y "otro producto" en la práctica es un agente. Acá el mismo trabajo se ofrece como
- * tools, para que Maasy (o BeAds, o el agente de una marca) opere BeAOS sin escribir integraciones.
+ * Es la mitad propia. `list_brands` y `get_brand` son la puerta de entrada (dan el `brandId` y el
+ * `entityId` que piden los demás); `get_aos_audit` y `list_aps_runs` son los dos scores —lo que el sitio
+ * declara y lo que los modelos responden—; `get_agent_bundle` y `get_agent_asset` entregan el bundle
+ * publicado, siempre por el mismo gate que la API de entrega; y `get_aps_score_detail` abre el detalle
+ * competitivo que se medía pero no se exponía.
  *
  * Regla de diseño: **la lectura pasa por el mismo gate que la API de entrega**. `loadAssetBundle`
  * devuelve `null` mientras la entidad no esté publicada, así que el MCP no puede filtrar un bundle que
  * un operador todavía no aprobó. Ningún tool arma el bundle por su cuenta.
- *
- * Las acciones (`generate`, `publish`) delegan en `agent-assets-core`, que es exactamente lo que corre
- * cuando el operador aprieta el botón en la UI. Si el guardián de claims bloquea la publicación, el
- * bloqueo también aparece acá: no hay una puerta más permisiva.
  */
 
-import { agentAosAudits, agentApsRuns, agentApsScores, agentBrandEntities } from "@workspace/aos-aps/db/schema";
+import {
+	agentAosAudits,
+	agentApsObservations,
+	agentApsRuns,
+	agentApsScores,
+	agentBrandEntities,
+} from "@workspace/aos-aps/db/schema";
 import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
-import { desc, eq, inArray } from "drizzle-orm";
-import { generateAssetsForEntity, setEntityPublished } from "@/server/agent-assets-core";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { loadAssetBundle } from "@/server/agent-bundle";
-import { type McpTool, optionalInteger, requireBoolean, requireString, requireUuid, textResult } from "./jsonrpc";
-
-const MAX_LIMIT = 100;
-
-function json(value: unknown): string {
-	return JSON.stringify(value, null, 2);
-}
+import type { McpTool } from "../jsonrpc";
+import { optionalInteger, optionalUuid, requireString, requireUuid, textResult } from "../jsonrpc";
+import { json, MAX_LIMIT, rankCounts, readCompetitorNames } from "./helpers";
 
 const listBrands: McpTool = {
 	name: "list_brands",
@@ -85,6 +84,8 @@ const getBrand: McpTool = {
 				entityType: agentBrandEntities.entityType,
 				websiteUrl: agentBrandEntities.websiteUrl,
 				parentEntityId: agentBrandEntities.parentEntityId,
+				isPrimary: agentBrandEntities.isPrimary,
+				maasyProjectId: agentBrandEntities.maasyProjectId,
 				isPublished: agentBrandEntities.isPublished,
 				publishedAt: agentBrandEntities.publishedAt,
 			})
@@ -228,6 +229,146 @@ const listApsRuns: McpTool = {
 	},
 };
 
+const MAX_OBSERVATIONS = 200;
+
+const getApsScoreDetail: McpTool = {
+	name: "get_aps_score_detail",
+	title: "Leer el detalle competitivo de una corrida APS",
+	description:
+		"Devuelve el detalle completo de una corrida de APS medido, modelo por modelo: las 5 dimensiones (descubribilidad, inteligencia estructurada, capacidad de acción, autoridad de fuente y reputación agéntica), los sub-métricas que las componen, el APS con su banda y su intervalo P10–P90, y cuántas observaciones lo sostienen. Además agrega qué competidores aparecieron en las respuestas y cuántas veces. Usalo cuando el score solo no alcanza y hay que explicar por qué. Pasá `runId` para una corrida concreta; sin él devuelve la última corrida terminada de la entidad.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			entityId: { type: "string", description: "UUID de la entidad (ver get_brand)." },
+			runId: {
+				type: "string",
+				description: "UUID de la corrida (ver list_aps_runs). Si falta, se usa la última corrida `done`.",
+			},
+		},
+		required: ["entityId"],
+		additionalProperties: false,
+	},
+	handler: async (args) => {
+		const entityId = requireUuid(args, "entityId");
+		const runId = optionalUuid(args, "runId");
+
+		const [run] = runId
+			? await db
+					.select()
+					.from(agentApsRuns)
+					.where(and(eq(agentApsRuns.id, runId), eq(agentApsRuns.entityId, entityId)))
+					.limit(1)
+			: await db
+					.select()
+					.from(agentApsRuns)
+					.where(and(eq(agentApsRuns.entityId, entityId), eq(agentApsRuns.status, "done")))
+					.orderBy(desc(agentApsRuns.createdAt))
+					.limit(1);
+
+		if (run === undefined) {
+			const detail = runId === undefined ? "todavía no tiene corridas terminadas" : `no tiene la corrida ${runId}`;
+			return textResult(`La entidad ${entityId} ${detail}.`, { found: false });
+		}
+
+		const scores = await db
+			.select({
+				model: agentApsScores.model,
+				aps: agentApsScores.aps,
+				band: agentApsScores.band,
+				dimensions: agentApsScores.dimensions,
+				subMetrics: agentApsScores.subMetrics,
+				p10: agentApsScores.p10,
+				p50: agentApsScores.p50,
+				p90: agentApsScores.p90,
+				recommendationProbability: agentApsScores.recommendationProbability,
+				observations: agentApsScores.observations,
+				partial: agentApsScores.partial,
+			})
+			.from(agentApsScores)
+			.where(eq(agentApsScores.runId, run.id));
+
+		// Nunca `full_response`: la respuesta cruda pesa cientos de KB y el detalle no la necesita.
+		const observations = await db
+			.select({
+				model: agentApsObservations.model,
+				promptId: agentApsObservations.promptId,
+				promptText: agentApsObservations.promptText,
+				runIndex: agentApsObservations.runIndex,
+				appeared: agentApsObservations.appeared,
+				recommended: agentApsObservations.recommended,
+				position: agentApsObservations.position,
+				sentiment0to100: agentApsObservations.sentiment0to100,
+				competitorsMentioned: agentApsObservations.competitorsMentioned,
+			})
+			.from(agentApsObservations)
+			.where(eq(agentApsObservations.runId, run.id))
+			.orderBy(agentApsObservations.model, agentApsObservations.runIndex);
+
+		const overall = new Map<string, number>();
+		const perModel = new Map<string, Map<string, number>>();
+		for (const observation of observations) {
+			const names = readCompetitorNames(observation.competitorsMentioned);
+			const modelCounts = perModel.get(observation.model) ?? new Map<string, number>();
+			for (const name of names) {
+				overall.set(name, (overall.get(name) ?? 0) + 1);
+				modelCounts.set(name, (modelCounts.get(name) ?? 0) + 1);
+			}
+			perModel.set(observation.model, modelCounts);
+		}
+
+		const payload = {
+			run: {
+				id: run.id,
+				status: run.status,
+				models: run.models,
+				partial: run.partial,
+				partialReason: run.partialReason,
+				plannedCalls: run.plannedCalls,
+				completedCalls: run.completedCalls,
+				promptLibraryVersion: run.promptLibraryVersion,
+				scoringVersion: run.scoringVersion,
+				measurementVersion: run.measurementVersion,
+				judgeModelAlias: run.judgeModelAlias,
+				judgeModelVersion: run.judgeModelVersion,
+				createdAt: run.createdAt.toISOString(),
+				finishedAt: run.finishedAt?.toISOString() ?? null,
+			},
+			scores: scores.map((score) => ({
+				model: score.model,
+				aps: score.aps,
+				band: score.band,
+				p10: score.p10,
+				p50: score.p50,
+				p90: score.p90,
+				recommendationProbability: score.recommendationProbability,
+				observations: score.observations,
+				partial: score.partial,
+				dimensions: score.dimensions,
+				subMetrics: score.subMetrics,
+			})),
+			competitors: {
+				mentionedOverall: rankCounts(overall, 25),
+				byModel: [...perModel.entries()].map(([model, counts]) => ({
+					model,
+					mentioned: rankCounts(counts, 15),
+				})),
+			},
+			observationSummary: {
+				total: observations.length,
+				appeared: observations.filter((row) => row.appeared === true).length,
+				recommended: observations.filter((row) => row.recommended === true).length,
+				withCompetitors: observations.filter((row) => readCompetitorNames(row.competitorsMentioned).length > 0).length,
+			},
+			observations: observations.slice(0, MAX_OBSERVATIONS).map((row) => ({
+				...row,
+				competitorsMentioned: readCompetitorNames(row.competitorsMentioned),
+			})),
+			observationsTruncated: observations.length > MAX_OBSERVATIONS,
+		};
+		return textResult(json(payload), payload);
+	},
+};
+
 const getAgentBundle: McpTool = {
 	name: "get_agent_bundle",
 	title: "Leer el bundle de assets agénticos",
@@ -297,71 +438,12 @@ const getAgentAsset: McpTool = {
 	},
 };
 
-const generateAgentAssetsTool: McpTool = {
-	name: "generate_agent_assets",
-	title: "Generar el bundle de assets agénticos",
-	description:
-		"Genera (o regenera) el bundle de assets agénticos de una entidad a partir de su Brand DNA: llms.txt, AGENTS.md, robots.txt, sitemap.xml y los archivos de /.well-known, firmados. Deja el bundle guardado pero NO lo publica. Es la misma generación que corre desde la UI.",
-	inputSchema: {
-		type: "object",
-		properties: {
-			brandId: { type: "string", description: "Id de la marca dueña de la entidad." },
-			entityId: { type: "string", description: "UUID de la entidad a generar." },
-		},
-		required: ["brandId", "entityId"],
-		additionalProperties: false,
-	},
-	handler: async (args) => {
-		const brandId = requireString(args, "brandId");
-		const entityId = requireUuid(args, "entityId");
-		const assets = await generateAssetsForEntity(brandId, entityId);
-		const payload = {
-			entityId,
-			count: assets.length,
-			assets: assets.map((asset) => ({ path: asset.path, type: asset.type, sha256: asset.hash })),
-		};
-		return textResult(json(payload), payload);
-	},
-};
-
-const publishAgentAssets: McpTool = {
-	name: "publish_agent_assets",
-	title: "Publicar o despublicar el bundle",
-	description:
-		"Abre o cierra el gate de publicación de una entidad. Publicar tiene un guardián: si el bundle declara menos claims que el perfil que el sitio sirve hoy, la publicación se rechaza, porque degradaría en silencio la evidencia verificable de la marca. Un rechazo no es un error del tool: es la respuesta.",
-	inputSchema: {
-		type: "object",
-		properties: {
-			brandId: { type: "string", description: "Id de la marca dueña de la entidad." },
-			entityId: { type: "string", description: "UUID de la entidad." },
-			published: { type: "boolean", description: "true para publicar, false para despublicar." },
-		},
-		required: ["brandId", "entityId", "published"],
-		additionalProperties: false,
-	},
-	handler: async (args) => {
-		const brandId = requireString(args, "brandId");
-		const entityId = requireUuid(args, "entityId");
-		const published = requireBoolean(args, "published");
-		const result = await setEntityPublished(brandId, entityId, published);
-		return textResult(json(result), result);
-	},
-};
-
-export const BEAOS_MCP_TOOLS: McpTool[] = [
+export const agentTools: McpTool[] = [
 	listBrands,
 	getBrand,
 	getAosAudit,
 	listApsRuns,
+	getApsScoreDetail,
 	getAgentBundle,
 	getAgentAsset,
-	generateAgentAssetsTool,
-	publishAgentAssets,
 ];
-
-export const BEAOS_MCP_SERVER = {
-	name: "beaos",
-	version: "1.0.0",
-	instructions:
-		"BeAOS mide si una marca y sus webs son operables y preferibles para agentes. AOS es el score de la web (qué declara y qué puede hacer un agente); APS medido es lo que modelos reales responden sobre la marca; APS declarado sale de los Claims & Proofs que el sitio firma. Para empezar: list_brands, después get_brand para obtener el entityId, y desde ahí get_aos_audit, list_aps_runs o get_agent_bundle.",
-} as const;

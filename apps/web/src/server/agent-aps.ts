@@ -6,31 +6,21 @@
  * Nothing here spends money by itself.
  */
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
-import { db } from "@workspace/lib/db/db";
-import { brands } from "@workspace/lib/db/schema";
 import {
-	agentAosAudits,
-	agentApsPromptLibraries,
-	agentApsPrompts,
-	agentApsRuns,
-	agentApsScores,
-	agentBrandEntities,
-} from "@workspace/aos-aps/db/schema";
-import {
-	GATEWAY_JUDGE_PIPELINE_VERSION,
-	apsBudgetConfigFromEnv,
-	apsPricesFromEnv,
 	canRegenerateLibrary,
 	generateLibraryWithGateway,
 	judgeConfigFromEnv,
 	libraryConfigFromEnv,
-	prepareApsRun,
 	readGatewayBudget,
 } from "@workspace/aos-aps/aps";
+import { agentApsPromptLibraries, agentApsPrompts, agentApsRuns, agentApsScores } from "@workspace/aos-aps/db/schema";
+import { db } from "@workspace/lib/db/db";
+import { brands } from "@workspace/lib/db/schema";
+import { and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { getBoss } from "@/lib/boss-client";
+import { estimateApsRunForBrand, startApsRunForBrand } from "@/server/agent-aps-core";
 
 const runInput = z.object({
 	brandId: z.string().min(1),
@@ -76,73 +66,21 @@ export const saveApsLibraryFn = createServerFn({ method: "POST" })
  * reads them instead of asking the operator for a number. The ceiling is shared with whatever else
  * uses that key today, which is exactly why the remaining headroom is the right thing to compare.
  */
-export const getGatewayBudgetFn = createServerFn({ method: "POST" })
-	.handler(async () => {
-		const session = await requireAuthSession();
-		if (session.user.id.length === 0) throw new Error("Sesion invalida");
-		const config = judgeConfigFromEnv();
-		if (config === null) return { configured: false as const, budget: null, remainingUsd: null };
-		const budget = await readGatewayBudget(config);
-		if (budget === null) return { configured: true as const, budget: null, remainingUsd: null };
-		return {
-			configured: true as const,
-			budget,
-			remainingUsd: budget.maxBudget === null ? null : Math.max(0, budget.maxBudget - budget.spend),
-		};
-	});
-
-/** Everything a run needs, read once and handed to the pure preparation step. */
-async function loadRunContext(data: z.infer<typeof runInput>) {
-	const [entity] = await db
-		.select({
-			id: agentBrandEntities.id,
-			name: agentBrandEntities.name,
-			websiteUrl: agentBrandEntities.websiteUrl,
-		})
-		.from(agentBrandEntities)
-		.where(and(eq(agentBrandEntities.id, data.entityId), eq(agentBrandEntities.brandId, data.brandId)))
-		.limit(1);
-	if (entity === undefined) throw new Error("Entity not found");
-
-	const [library] = await db
-		.select({ id: agentApsPromptLibraries.id, version: agentApsPromptLibraries.version })
-		.from(agentApsPromptLibraries)
-		.where(and(eq(agentApsPromptLibraries.entityId, data.entityId), eq(agentApsPromptLibraries.status, "active")))
-		.orderBy(desc(agentApsPromptLibraries.version))
-		.limit(1);
-
-	const prompts =
-		library === undefined
-			? []
-			: await db
-					.select({ id: agentApsPrompts.id, text: agentApsPrompts.text })
-					.from(agentApsPrompts)
-					.where(and(eq(agentApsPrompts.libraryId, library.id), eq(agentApsPrompts.enabled, true)));
-
-	// The AOS audit of the same site feeds the capacidad_accion dimension.
-	const [audit] = await db
-		.select({ score: agentAosAudits.score })
-		.from(agentAosAudits)
-		.where(eq(agentAosAudits.brandId, data.brandId))
-		.orderBy(desc(agentAosAudits.createdAt))
-		.limit(1);
-
-	const judgeConfig = judgeConfigFromEnv();
-	const models = data.models ?? (process.env.SCRAPE_TARGETS ?? "").split(",").map((entry) => entry.split(":")[0]?.trim() ?? "").filter((model) => model.length > 0);
-
+export const getGatewayBudgetFn = createServerFn({ method: "POST" }).handler(async () => {
+	const session = await requireAuthSession();
+	if (session.user.id.length === 0) throw new Error("Sesion invalida");
+	const config = judgeConfigFromEnv();
+	if (config === null) return { configured: false as const, budget: null, remainingUsd: null };
+	const budget = await readGatewayBudget(config);
+	if (budget === null) return { configured: true as const, budget: null, remainingUsd: null };
 	return {
-		entity,
-		library: library ?? null,
-		prompts,
-		capacidadAccion: audit?.score ?? null,
-		judge: {
-			alias: judgeConfig?.model ?? process.env.APS_JUDGE_MODEL?.trim() ?? "believe-deep",
-			version: judgeConfig?.version ?? "unpinned",
-			pipelineVersion: GATEWAY_JUDGE_PIPELINE_VERSION,
-		},
-		models,
+		configured: true as const,
+		budget,
+		remainingUsd: budget.maxBudget === null ? null : Math.max(0, budget.maxBudget - budget.spend),
 	};
-}
+});
+
+/** Everything a run needs lives in `agent-aps-core`, shared with el MCP. */
 
 /** What the operator sees before confirming: calls and dollars, with nothing written. */
 export const estimateApsRunFn = createServerFn({ method: "POST" })
@@ -150,32 +88,7 @@ export const estimateApsRunFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
-		const context = await loadRunContext(data);
-		// `spentThisMonthUsd` defaults to what the gateway reports, not to a guess or a manual input.
-		const gatewayConfig = judgeConfigFromEnv();
-		const gatewayBudget = gatewayConfig === null ? null : await readGatewayBudget(gatewayConfig);
-		const spentThisMonthUsd = data.spentThisMonthUsd ?? gatewayBudget?.spend ?? null;
-		const prepared = prepareApsRun({
-			entity: context.entity,
-			library: context.library,
-			prompts: context.prompts,
-			models: context.models,
-			repetitions: data.repetitions ?? 3,
-			capacidadAccion: context.capacidadAccion,
-			judge: context.judge,
-			prices: apsPricesFromEnv(),
-			budgetConfig: apsBudgetConfigFromEnv(),
-			spentThisMonthUsd,
-		});
-		return {
-			status: prepared.status,
-			estimate: prepared.estimate,
-			reasons: prepared.reasons,
-			libraryVersion: context.library?.version ?? null,
-			prompts: context.prompts.length,
-			models: context.models,
-			capacidadAccion: context.capacidadAccion,
-		};
+		return estimateApsRunForBrand(data);
 	});
 
 export const startApsRunFn = createServerFn({ method: "POST" })
@@ -183,31 +96,14 @@ export const startApsRunFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
-		const context = await loadRunContext(data);
-		const prepared = prepareApsRun({
-			entity: context.entity,
-			library: context.library,
-			prompts: context.prompts,
-			models: context.models,
-			repetitions: data.repetitions ?? 3,
-			capacidadAccion: context.capacidadAccion,
-			judge: context.judge,
-			prices: apsPricesFromEnv(),
-			budgetConfig: apsBudgetConfigFromEnv(),
-			spentThisMonthUsd: data.spentThisMonthUsd ?? null,
-		});
-		if (prepared.status === "blocked" || prepared.run === null) {
-			return { ok: false as const, reasons: prepared.reasons };
-		}
-
-		const [run] = await db
-			.insert(agentApsRuns)
-			.values({ brandId: data.brandId, status: "planned", ...prepared.run })
-			.returning({ id: agentApsRuns.id });
-
-		const boss = await getBoss();
-		await boss.send("aps-query", { runId: run.id });
-		return { ok: true as const, runId: run.id, plannedCalls: prepared.run.plannedCalls, estimate: prepared.estimate };
+		const result = await startApsRunForBrand(data);
+		if (result.ok === false) return { ok: false as const, reasons: result.reasons };
+		return {
+			ok: true as const,
+			runId: result.runId,
+			plannedCalls: result.plannedCalls,
+			estimate: result.estimate,
+		};
 	});
 
 export const getApsRunsFn = createServerFn({ method: "POST" })
@@ -323,7 +219,11 @@ export const generateApsLibraryFn = createServerFn({ method: "POST" })
 		const [brand] = await db.select().from(brands).where(eq(brands.id, data.brandId)).limit(1);
 		if (brand === undefined) throw new Error("Brand not found");
 
-		const brief = [brand.shortDescription, (brand.productsAndServices ?? []).join(", "), (brand.keywords ?? []).join(", ")]
+		const brief = [
+			brand.shortDescription,
+			(brand.productsAndServices ?? []).join(", "),
+			(brand.keywords ?? []).join(", "),
+		]
 			.filter((part) => typeof part === "string" && part.length > 0)
 			.join(" | ");
 
