@@ -218,10 +218,11 @@ export function requireString(args: Record<string, unknown>, key: string): strin
 	return value.trim();
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function requireUuid(args: Record<string, unknown>, key: string): string {
 	const value = requireString(args, key);
-	const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-	if (uuid.test(value) === false) throw new ToolInputError(`"${key}" debe ser un UUID. Recibido: ${value}`);
+	if (UUID_RE.test(value) === false) throw new ToolInputError(`"${key}" debe ser un UUID. Recibido: ${value}`);
 	return value;
 }
 
@@ -245,4 +246,52 @@ export function optionalInteger(
 		throw new ToolInputError(`"${key}" debe estar entre ${options.min} y ${options.max}.`);
 	}
 	return value;
+}
+
+/** Un texto opcional. Un texto vacío cuenta como ausente; nunca se devuelve `""`. */
+export function optionalString(args: Record<string, unknown>, key: string): string | undefined {
+	const value = args[key];
+	if (value === undefined || value === null) return undefined;
+	if (typeof value !== "string") throw new ToolInputError(`"${key}" debe ser un texto.`);
+	const trimmed = value.trim();
+	return trimmed.length === 0 ? undefined : trimmed;
+}
+
+/** Un UUID opcional: si viene, tiene que tener forma de UUID. */
+export function optionalUuid(args: Record<string, unknown>, key: string): string | undefined {
+	const value = optionalString(args, key);
+	if (value === undefined) return undefined;
+	if (UUID_RE.test(value) === false) throw new ToolInputError(`"${key}" debe ser un UUID. Recibido: ${value}`);
+	return value;
+}
+
+/** Un booleano opcional. No confunde el texto `"true"` con `true`. */
+export function optionalBoolean(args: Record<string, unknown>, key: string): boolean | undefined {
+	const value = args[key];
+	if (value === undefined || value === null) return undefined;
+	if (typeof value !== "boolean") throw new ToolInputError(`"${key}" debe ser true o false.`);
+	return value;
+}
+
+/** Una lista de textos opcional. Los elementos vacíos se descartan, no se convierten en `""`. */
+export function optionalStringArray(args: Record<string, unknown>, key: string): string[] | undefined {
+	const value = args[key];
+	if (value === undefined || value === null) return undefined;
+	if (Array.isArray(value) === false) throw new ToolInputError(`"${key}" debe ser una lista de textos.`);
+	const result: string[] = [];
+	for (const entry of value) {
+		if (typeof entry !== "string") throw new ToolInputError(`"${key}" debe ser una lista de textos.`);
+		const trimmed = entry.trim();
+		if (trimmed.length > 0) result.push(trimmed);
+	}
+	return result;
+}
+
+/** Un valor de un conjunto cerrado. El mensaje lista las opciones, que es lo que el modelo necesita. */
+export function requireEnum<T extends string>(args: Record<string, unknown>, key: string, values: readonly T[]): T {
+	const value = requireString(args, key);
+	if ((values as readonly string[]).includes(value) === false) {
+		throw new ToolInputError(`"${key}" debe ser uno de: ${values.join(", ")}. Recibido: ${value}`);
+	}
+	return value as T;
 }

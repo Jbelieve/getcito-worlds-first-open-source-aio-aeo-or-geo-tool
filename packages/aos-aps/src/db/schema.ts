@@ -300,6 +300,37 @@ export const agentApsScores = pgTable("agent_aps_scores", {
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * Credencial por producto para el MCP.
+ *
+ * Hasta ahora todos los consumidores compartían `ADMIN_API_KEYS`: no había identidad por producto ni
+ * forma de revocarle la clave a uno solo sin cambiársela a todos. Acá vive un token **por producto**,
+ * guardado como **sha256** —el token en claro no se persiste nunca— y con su `prefix` de 8 caracteres
+ * para poder identificarlo en un listado sin revelarlo.
+ *
+ * `lastUsedAt` se actualiza cuando el token autentica, así que un token viejo se puede detectar por uso
+ * y no sólo por fecha de creación. `revokedAt` no borra la fila: una revocación se audita.
+ */
+export const agentApiTokens = pgTable(
+	"agent_api_tokens",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		/** El producto dueño del token: "autex", "maasy". */
+		name: text("name").notNull(),
+		/** sha256 en hex del token. El token en claro nunca se guarda. */
+		tokenHash: text("token_hash").notNull(),
+		/** Los primeros 8 caracteres, para reconocerlo en un listado. */
+		prefix: text("prefix").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+		revokedAt: timestamp("revoked_at", { withTimezone: true }),
+	},
+	(table) => [uniqueIndex("agent_api_tokens_token_hash_uidx").on(table.tokenHash)],
+);
+
+export type AgentApiToken = typeof agentApiTokens.$inferSelect;
+export type NewAgentApiToken = typeof agentApiTokens.$inferInsert;
+
 export type AgentApsPromptLibrary = typeof agentApsPromptLibraries.$inferSelect;
 export type NewAgentApsPromptLibrary = typeof agentApsPromptLibraries.$inferInsert;
 export type AgentApsPrompt = typeof agentApsPrompts.$inferSelect;
