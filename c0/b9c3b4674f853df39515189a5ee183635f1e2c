@@ -1,0 +1,23 @@
+apps/web/src/server/mcp/__tests__/tools.test.ts
+  s_7cd164a37b4920::t_c91ae79f95694c 26-32,44-54,64
+apps/web/src/server/mcp/tools/actions.ts
+  s_7cd164a37b4920::t_40b76b694d4d3e 1-416
+apps/web/src/server/mcp/tools/platform.ts
+  s_7cd164a37b4920::t_6c90d3648c0878 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c0b9c3b4674f853df39515189a5ee183635f1e2c",
+  "prompts": {},
+  "sessions": {
+    "s_7cd164a37b4920": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a8297c8b-e542-4c61-9acf-e1f0a454c397",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
