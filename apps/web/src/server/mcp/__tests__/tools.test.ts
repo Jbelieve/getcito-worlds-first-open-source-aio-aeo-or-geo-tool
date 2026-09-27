@@ -69,6 +69,51 @@ describe("registro de tools del MCP de BeAOS", () => {
 		}
 	});
 
+	it("están las lecturas heredadas de Getcito, y todas exigen una marca", () => {
+		const requiredOf = (name: string) => BEAOS_MCP_TOOLS.find((tool) => tool.name === name)?.inputSchema.required;
+		const heredadas = [
+			"list_prompts",
+			"list_competitors",
+			"get_visibility",
+			"get_share_of_voice",
+			"list_citations",
+			"get_query_fanout",
+			"get_opportunities",
+			"list_reports",
+		];
+		for (const name of heredadas) {
+			expect(requiredOf(name), `${name} no existe`).toContain("brandId");
+		}
+	});
+
+	it("el registro completo es el esperado: nada se cae por accidente", () => {
+		expect(BEAOS_MCP_TOOLS.map((tool) => tool.name).sort()).toEqual(
+			[
+				"ensure_brand",
+				"ensure_entity",
+				"generate_agent_assets",
+				"get_agent_asset",
+				"get_agent_bundle",
+				"get_aos_audit",
+				"get_aps_score_detail",
+				"get_brand",
+				"get_opportunities",
+				"get_query_fanout",
+				"get_share_of_voice",
+				"get_visibility",
+				"list_aps_runs",
+				"list_brands",
+				"list_citations",
+				"list_competitors",
+				"list_prompts",
+				"list_reports",
+				"publish_agent_assets",
+				"start_aps_run",
+				"sync_brand_dna",
+			].sort(),
+		);
+	});
+
 	it("el servidor se identifica y explica por dónde empezar", () => {
 		expect(BEAOS_MCP_SERVER.name).toBe("beaos");
 		expect(BEAOS_MCP_SERVER.instructions).toContain("list_brands");
