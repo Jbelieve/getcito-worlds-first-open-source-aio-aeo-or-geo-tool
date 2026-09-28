@@ -15,7 +15,10 @@ el MCP vive en el mismo dominio de la app.
 
 ## Los tools
 
-### Lo propio: AOS, APS medido y el bundle
+Hay **27 herramientas**: nueve de lectura propia (AOS, APS medido, pruebas y bundle), ocho heredadas de
+Getcito y diez de acción.
+
+### Lo propio: AOS, APS medido, pruebas y el bundle
 
 | Tool | Qué devuelve |
 |---|---|
@@ -25,6 +28,7 @@ el MCP vive en el mismo dominio de la app.
 | `list_aps_runs` | Corridas de **APS medido**: score por modelo, banda, observaciones, P10–P90 y si la corrida salió parcial. |
 | `get_aps_score_detail` | El detalle competitivo de una corrida: las 5 dimensiones, los sub-métricas, el APS con banda y P10/P50/P90, las observaciones y el ranking de competidores mencionados. |
 | `list_claims` | Las pruebas guardadas de una entidad (id, afirmación, número, estado, `inheritable` y de qué entidad es copia) y las heredables del paraguas que efectivamente hereda, si la entidad no es el paraguas. |
+| `get_claim` | **Una** prueba de una entidad por su `claimId`, con el mismo serializador que `list_claims`. Solo mira las filas propias: lo heredado del paraguas se ve en `list_claims`. |
 | `get_agent_bundle` | Manifiesto del bundle agéntico publicado: cada ruta con su `sha256` y su tamaño. Sin el contenido. |
 | `get_agent_asset` | El contenido **exacto** de un archivo del bundle (por ejemplo `/.well-known/brand.json`), con su hash. |
 
@@ -47,11 +51,34 @@ el MCP vive en el mismo dominio de la app.
 |---|---|
 | `ensure_brand` | Crea o actualiza una marca, idempotente por host de la web. Devuelve `{ brandId, created }`. |
 | `ensure_entity` | Crea o actualiza una entidad, idempotente por `maasyProjectId` o por host. Valida la jerarquía. |
-| `start_aps_run` | Encola una corrida APS con el mismo guardián de presupuesto que la UI. **No** genera la biblioteca de prompts. |
+| `ensure_prompt_library` | Genera la biblioteca de prompts APS si la entidad no tiene una activa y devuelve los prompts. Idempotente salvo `force: true`. |
+| `start_aps_run` | Encola una corrida APS con el mismo guardián de presupuesto que la UI. Asegura la biblioteca de prompts antes de encolar y lo informa en `libraryGenerated`. |
 | `sync_brand_dna` | Sincroniza el Brand DNA desde Maasy y dice si trajo `claims`. |
-| `generate_agent_assets` | Genera o regenera el bundle desde el Brand DNA. Lo deja guardado, **no** lo publica. |
+| `upsert_claim` | **Crea o actualiza una prueba** (afirmación, número, límites y su documento). El id es del operador: el mismo `claimId` en la misma entidad se actualiza, no se duplica. Devuelve el claim guardado y los avisos del estándar. **La prueba nace en BeAOS**: Maasy manda la evidencia en prosa. |
+| `delete_claim` | Borra una prueba de una entidad. No toca lo heredado del paraguas ni lo de otra entidad, y no despublica el bundle. |
+| `generate_agent_assets` | Genera o regenera el bundle desde el Brand DNA y las pruebas confirmadas. Lo deja guardado, **no** lo publica. |
 | `publish_agent_assets` | Abre o cierra el gate de publicación de una entidad. |
 | `set_claim_inheritable` | Marca si las sub-entidades pueden heredar una prueba. Pide `claimId` y el valor; **no** crea pruebas. |
+
+### El ciclo completo, en orden
+
+Es lo que dicen las `instructions` del servidor, porque es lo que lee un agente que llega sin contexto:
+
+1. `ensure_brand` — la marca.
+2. `ensure_entity` — la entidad (paraguas o producto); devuelve el `entityId` que piden los demás tools.
+3. `sync_brand_dna` — el contexto que Maasy tiene del proyecto: la evidencia **en prosa**.
+4. `upsert_claim` — la prueba estructurada: afirmación, número, límites y con qué documento se verifica.
+   **La prueba nace en BeAOS**, no en Maasy: Maasy manda la prosa, la estructura la pone BeAOS con lo que
+   confirma el operador.
+5. `generate_agent_assets` — el bundle, desde el DNA y las pruebas `confirmed`.
+6. `publish_agent_assets` — la publicación.
+
+Dos reglas que no se doblan:
+
+- Un perfil que declara **menos pruebas que el sitio** que ya las sirve se **rechaza** al publicar: sería
+  degradar en silencio la evidencia verificable de la marca.
+- BeAOS **no inventa pruebas**. Si no hay una prueba confirmada, el claim no existe: una prueba que no se
+  puede verificar es peor que su ausencia.
 
 ## Cuatro reglas que no se negocian
 
@@ -60,10 +87,12 @@ el MCP vive en el mismo dominio de la app.
    filtrar** un bundle que un operador todavía no aprobó, y ningún tool arma el bundle por su cuenta.
 2. **Las acciones son las mismas de la UI.** `generate_agent_assets` y `publish_agent_assets` llaman a
    `agent-assets-core`; `start_aps_run` y `sync_brand_dna` llaman a `agent-aps-core` y
-   `agent-maasy-core`; `list_claims` y `set_claim_inheritable` llaman a `claims-core`, el mismo núcleo
-   de la pantalla de Pruebas. Si el **guardián de claims** bloquea una publicación o el **guardián de
-   presupuesto** bloquea una corrida, el bloqueo también aparece por acá: no hay una puerta más
-   permisiva para los agentes.
+   `agent-maasy-core`; `list_claims`, `get_claim`, `upsert_claim`, `delete_claim` y
+   `set_claim_inheritable` llaman a `claims-core`, el mismo núcleo de la pantalla de Pruebas —y el alta
+   valida con `normalizeClaimInput`, que es la única puerta: la pantalla y el MCP no pueden aceptar cosas
+   distintas—. Si el **guardián de claims** bloquea una publicación o el **guardián de presupuesto**
+   bloquea una corrida, el bloqueo también aparece por acá: no hay una puerta más permisiva para los
+   agentes.
 3. **Una prueba heredada viaja declarada como heredada.** El operador marca qué es heredable —pruebas de
    marca: metodología, antigüedad, volumen— y las sub-entidades las heredan. La prueba heredada entra al
    perfil de la sub-entidad con el prefijo `[Heredada del paraguas <nombre>]` en su resumen, para que
@@ -141,7 +170,8 @@ Como servidor MCP en un cliente (formato estándar):
 ## Qué se verificó
 
 - `21` pruebas del protocolo (`src/server/mcp/__tests__/jsonrpc.test.ts`): parseo, `initialize`, `ping`, `tools/list`, `tools/call`, notificación sin respuesta, métodos y tools desconocidos, y que un handler que revienta sale como contenido.
-- `11` pruebas del registro (`src/server/mcp/__tests__/tools.test.ts`): nombres únicos, `inputSchema` de objeto, campos obligatorios descritos, el registro completo, y que los handlers no se publican por el protocolo.
+- `14` pruebas del registro (`src/server/mcp/__tests__/tools.test.ts`): nombres únicos, `inputSchema` de objeto, campos obligatorios descritos, el registro completo —**27** tools, con el conteo fijado—, el ciclo de las `instructions` en orden, y que los handlers no se publican por el protocolo.
+- `13` pruebas del alta de una prueba (`packages/aos-aps/src/claims/claim-input.test.ts`): el patrón `CLM-`, los enums de `status`, `verifiableBy`, `category` y `proofType`, y los avisos que no frenan el guardado. Son puras: no necesitan base.
 - `13` pruebas de la credencial por producto (`src/lib/__tests__/api-tokens.test.ts`): token válido, revocado (que no cae al fallback), desconocido, fallback a `ADMIN_API_KEYS`, token ausente y lectura del header.
 
 ## Lo que falta

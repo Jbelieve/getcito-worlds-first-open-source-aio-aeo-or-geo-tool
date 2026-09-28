@@ -4,8 +4,9 @@
  * Es la mitad propia. `list_brands` y `get_brand` son la puerta de entrada (dan el `brandId` y el
  * `entityId` que piden los demás); `get_aos_audit` y `list_aps_runs` son los dos scores —lo que el sitio
  * declara y lo que los modelos responden—; `get_agent_bundle` y `get_agent_asset` entregan el bundle
- * publicado, siempre por el mismo gate que la API de entrega; y `get_aps_score_detail` abre el detalle
- * competitivo que se medía pero no se exponía.
+ * publicado, siempre por el mismo gate que la API de entrega; `get_aps_score_detail` abre el detalle
+ * competitivo que se medía pero no se exponía; y `list_claims` y `get_claim` leen las pruebas, que son la
+ * evidencia que BeAOS firma y que Maasy no manda.
  *
  * Regla de diseño: **la lectura pasa por el mismo gate que la API de entrega**. `loadAssetBundle`
  * devuelve `null` mientras la entidad no esté publicada, así que el MCP no puede filtrar un bundle que
@@ -23,7 +24,13 @@ import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { loadAssetBundle } from "@/server/agent-bundle";
-import { ClaimEntityNotFoundError, inheritedClaimsOf, loadClaimsContext, serializeClaim } from "@/server/claims-core";
+import {
+	ClaimEntityNotFoundError,
+	getClaim as getClaimCore,
+	inheritedClaimsOf,
+	loadClaimsContext,
+	serializeClaim,
+} from "@/server/claims-core";
 import type { McpTool } from "../jsonrpc";
 import { optionalInteger, optionalUuid, requireString, requireUuid, textResult } from "../jsonrpc";
 import { json, MAX_LIMIT, rankCounts, readCompetitorNames } from "./helpers";
@@ -419,6 +426,50 @@ const listClaims: McpTool = {
 	},
 };
 
+/**
+ * Una sola prueba, por su id.
+ *
+ * La lectura puntual que faltaba: `list_claims` trae todo —propias y heredadas—, y para editar hace falta
+ * el estado exacto de una. Es el mismo objeto que `list_claims` devuelve dentro de `claims[]`, así que no
+ * hay dos serializadores que puedan divergir.
+ */
+const getClaim: McpTool = {
+	name: "get_claim",
+	title: "Leer una prueba",
+	description:
+		"Devuelve una prueba de una entidad por su claimId —afirmación, número, categoría, límites, documento, estado, si es heredable y de qué entidad es copia—, o `found: false` si esa entidad no tiene ninguna con ese id. Es el mismo objeto que list_claims devuelve dentro de `claims[]`. Usala para leer el estado actual antes de editar, porque upsert_claim es un alta completa —los campos opcionales que no mandás quedan vacíos—, y para confirmar que una prueba existe antes de borrarla. Solo mira las filas propias de esa entidad: una prueba que la entidad **hereda** del paraguas no es suya y no se devuelve acá; para verla con su origen está list_claims. El claim vive en BeAOS: si lo que buscás es la evidencia en prosa que mandó Maasy, esa está en el snapshot del DNA, no en esta tabla.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			brandId: { type: "string", description: "Id de la marca dueña (ver list_brands)." },
+			entityId: { type: "string", description: "UUID de la entidad dueña de la prueba (ver get_brand)." },
+			claimId: { type: "string", description: "Id de la prueba, por ejemplo CLM-MARCA-100-PROYECTOS." },
+		},
+		required: ["brandId", "entityId", "claimId"],
+		additionalProperties: false,
+	},
+	handler: async (args) => {
+		const brandId = requireString(args, "brandId");
+		const entityId = requireUuid(args, "entityId");
+		const claimId = requireString(args, "claimId");
+		let claim: Awaited<ReturnType<typeof getClaimCore>>;
+		try {
+			claim = await getClaimCore({ brandId, entityId, claimId });
+		} catch (error) {
+			if (error instanceof ClaimEntityNotFoundError) return textResult(error.message, { found: false });
+			throw error;
+		}
+		if (claim === null) {
+			return textResult(
+				`La entidad "${entityId}" no tiene una prueba propia con el id "${claimId}". Puede no existir o venir heredada del paraguas: list_claims dice cuál de las dos.`,
+				{ found: false, entityId, claimId },
+			);
+		}
+		const payload = { found: true, entityId, claim };
+		return textResult(json(payload), payload);
+	},
+};
+
 const getAgentBundle: McpTool = {
 	name: "get_agent_bundle",
 	title: "Leer el bundle de assets agénticos",
@@ -495,6 +546,7 @@ export const agentTools: McpTool[] = [
 	listApsRuns,
 	getApsScoreDetail,
 	listClaims,
+	getClaim,
 	getAgentBundle,
 	getAgentAsset,
 ];
