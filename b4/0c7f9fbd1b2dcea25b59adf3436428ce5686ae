@@ -1,0 +1,18 @@
+apps/web/src/server/agent-assets-core.ts
+  h_c5ca005a78c880 443,460-462,472-485
+apps/web/src/server/claims-core.ts
+  h_c5ca005a78c880 1-138
+apps/web/src/server/claims.ts
+  h_c5ca005a78c880 2,7,12-20,41,61-63,85,89-94,103-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b40c7f9fbd1b2dcea25b59adf3436428ce5686ae",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
