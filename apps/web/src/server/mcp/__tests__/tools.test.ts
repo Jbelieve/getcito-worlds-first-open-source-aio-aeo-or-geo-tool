@@ -162,6 +162,30 @@ describe("registro de tools del MCP de BeAOS", () => {
 		expect(BEAOS_MCP_SERVER.instructions).toContain("list_brands");
 	});
 
+	it("las instrucciones cuentan el ciclo completo, en orden", () => {
+		const instructions = BEAOS_MCP_SERVER.instructions;
+		const cycle = [
+			"ensure_brand",
+			"ensure_entity",
+			"sync_brand_dna",
+			"upsert_claim",
+			"generate_agent_assets",
+			"publish_agent_assets",
+		];
+		let cursor = -1;
+		for (const step of cycle) {
+			const at = instructions.indexOf(step);
+			expect(at, `${step} no está en las instrucciones`).toBeGreaterThan(-1);
+			expect(at, `${step} está fuera de orden`).toBeGreaterThan(cursor);
+			cursor = at;
+		}
+		// Las dos reglas que no se doblan: el perfil con menos pruebas que el sitio se rechaza, y BeAOS no
+		// inventa pruebas. Sin esto, un agente que llega sin contexto no sabe por qué se traba al publicar.
+		expect(instructions).toContain("rechaza");
+		expect(instructions).toContain("no inventa pruebas");
+		expect(instructions).toContain("La prueba nace en BeAOS");
+	});
+
 	it("lo que se publica por el protocolo no expone los handlers", () => {
 		for (const described of describeTools(BEAOS_MCP_TOOLS)) {
 			expect(described).not.toHaveProperty("handler");
