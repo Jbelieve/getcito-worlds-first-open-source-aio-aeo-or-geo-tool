@@ -20,6 +20,7 @@ import { ensurePromptLibraryForEntity, PromptLibraryError, startApsRunForBrand }
 import { generateAssetsForEntity, setEntityPublished } from "@/server/agent-assets-core";
 import { EnsureEntityError, ensureEntity as ensureEntityCore } from "@/server/agent-entities-core";
 import { syncAgentDnaForEntity } from "@/server/agent-maasy-core";
+import { ClaimNotFoundError, setClaimInheritable as setClaimInheritableCore } from "@/server/claims-core";
 import type { McpTool } from "../jsonrpc";
 import {
 	optionalBoolean,
@@ -434,6 +435,54 @@ const publishAgentAssets: McpTool = {
 	},
 };
 
+/**
+ * La marca de heredable, por MCP.
+ *
+ * Es la misma acción de la pantalla de Pruebas, contra el mismo núcleo: si un consumidor marca un caso de
+ * cliente como heredable, cada sub-entidad lo va a firmar como propio. El tool devuelve el estado nuevo
+ * para que el consumidor no tenga que releer, y no crea filas: una prueba que no existe no se inventa.
+ */
+const setClaimInheritable: McpTool = {
+	name: "set_claim_inheritable",
+	title: "Marcar una prueba como heredable",
+	description:
+		"Cambia si las sub-entidades de la marca pueden heredar una prueba. Marcala solo si la prueba es de la marca y no de un cliente: una prueba heredada viaja al perfil de cada sub-entidad como propia en la práctica, y un caso de cliente heredado hace que la sub-entidad afirme algo que no hizo. Es la misma acción de la pantalla de Pruebas. Devuelve el estado nuevo; si la prueba no existe en esa entidad, lo dice y no crea nada.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			brandId: { type: "string", description: "Id de la marca dueña de la entidad." },
+			entityId: { type: "string", description: "UUID de la entidad dueña de la prueba (ver get_brand)." },
+			claimId: { type: "string", description: "Id estable de la prueba, por ejemplo CLM-MARCA-100-PROYECTOS." },
+			inheritable: { type: "boolean", description: "true para que las sub-entidades la hereden; false para que no." },
+		},
+		required: ["brandId", "entityId", "claimId", "inheritable"],
+		additionalProperties: false,
+	},
+	handler: async (args) => {
+		const brandId = requireString(args, "brandId");
+		const entityId = requireUuid(args, "entityId");
+		const claimId = requireString(args, "claimId");
+		const inheritable = requireBoolean(args, "inheritable");
+		try {
+			const claim = await setClaimInheritableCore({ brandId, entityId, claimId, inheritable });
+			const payload = {
+				entityId,
+				claimId: claim.claimId,
+				inheritable: claim.inheritable,
+				status: claim.status,
+				updatedAt: claim.updatedAt,
+			};
+			const text = claim.inheritable
+				? `La prueba "${claim.claimId}" quedó heredable por las sub-entidades. Regenerá los assets de cada una para que su perfil la declare.`
+				: `La prueba "${claim.claimId}" dejó de ser heredable.`;
+			return textResult(text, payload);
+		} catch (error) {
+			if (error instanceof ClaimNotFoundError) return errorResult(error.message, { ok: false, reason: error.message });
+			throw error;
+		}
+	},
+};
+
 export const actionTools: McpTool[] = [
 	ensureBrand,
 	ensureEntity,
@@ -442,4 +491,5 @@ export const actionTools: McpTool[] = [
 	syncBrandDna,
 	generateAgentAssetsTool,
 	publishAgentAssets,
+	setClaimInheritable,
 ];

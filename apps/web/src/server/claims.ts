@@ -1,14 +1,23 @@
 import { createServerFn } from "@tanstack/react-start";
-import { dnaCarriesClaims, proposeClaimCandidates, resolveBundleClaims } from "@workspace/aos-aps/claims";
+import { dnaCarriesClaims, proposeClaimCandidates } from "@workspace/aos-aps/claims";
 import { agentBrandClaims, agentBrandDnaSnapshots, agentBrandEntities } from "@workspace/aos-aps/db/schema";
 import { CLAIM_CATEGORIES, CONFIDENTIALITY, VERIFIABLE_BY } from "@workspace/aos-aps/preference";
 import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { websiteSourcesForClaims } from "@/lib/claims-guard";
 import { liveClaimCountFrom } from "@/server/agent-assets-core";
+import {
+	bundleClaimCountOf,
+	ClaimNotFoundError,
+	inheritedClaimsOf,
+	loadClaimsContext,
+	type SerializedClaim,
+	serializeClaim,
+	setClaimInheritable,
+} from "@/server/claims-core";
 
 /**
  * La puerta de la UI para las pruebas de la marca.
@@ -29,30 +38,7 @@ const optionalText = z
 	.optional()
 	.transform((value) => (value === undefined || value.trim().length === 0 ? null : value.trim()));
 
-function serializeClaim(row: typeof agentBrandClaims.$inferSelect) {
-	return {
-		id: row.id,
-		claimId: row.claimId,
-		statement: row.statement,
-		metric: row.metric,
-		category: row.category,
-		boundaryApplicableFor: row.boundaryApplicableFor,
-		boundaryNotApplicableFor: row.boundaryNotApplicableFor,
-		confidence: row.confidence,
-		proofType: row.proofType,
-		proofTitle: row.proofTitle,
-		proofSummary: row.proofSummary,
-		proofClient: row.proofClient,
-		verifiableBy: row.verifiableBy,
-		confidentiality: row.confidentiality,
-		sourceFragment: row.sourceFragment,
-		status: row.status,
-		createdAt: row.createdAt.toISOString(),
-		updatedAt: row.updatedAt.toISOString(),
-	};
-}
-
-export type SerializedClaim = ReturnType<typeof serializeClaim>;
+export type { SerializedClaim };
 
 export const listClaimsFn = createServerFn({ method: "POST" })
 	.validator(z.object({ brandId: z.string().min(1), entityId: z.string().uuid() }))
@@ -72,11 +58,9 @@ export const listClaimsFn = createServerFn({ method: "POST" })
 		const dna =
 			typeof payload?.dna === "object" && payload.dna !== null ? (payload.dna as Record<string, unknown>) : undefined;
 
-		const rows = await db
-			.select()
-			.from(agentBrandClaims)
-			.where(and(eq(agentBrandClaims.brandId, data.brandId), eq(agentBrandClaims.entityId, data.entityId)))
-			.orderBy(asc(agentBrandClaims.createdAt));
+		// La entidad, su paraguas y las pruebas de los dos. La lista de heredadas sale de la misma regla
+		// pura que usa el generador, no de una segunda interpretación.
+		const context = await loadClaimsContext(data.brandId, data.entityId);
 
 		// Cuántas pruebas sirve el sitio HOY. Se prueban las tres webs de la marca —entidad, DNA y marca—
 		// porque la de la entidad puede estar vacía, y con la web vacía el candado no puede comparar.
@@ -98,19 +82,48 @@ export const listClaimsFn = createServerFn({ method: "POST" })
 			}),
 		);
 
-		// El mismo cálculo que hace el generador, no una copia: lo que muestra la pantalla es lo que va a
-		// quedar en el bundle.
-		const bundleClaimCount = resolveBundleClaims({ dna, saved: rows }).claims.length;
+		const bundleClaimCount = bundleClaimCountOf(context, dna);
 
 		return {
 			candidates: proposeClaimCandidates(payload),
-			claims: rows.map(serializeClaim),
+			claims: context.rows.map(serializeClaim),
+			// Lo que esta entidad hereda, ya filtrado. La pantalla lo muestra como heredado y no lo deja
+			// editar desde acá: se edita en el paraguas.
+			inheritedClaims: inheritedClaimsOf(context).map(serializeClaim),
+			umbrella: { id: context.umbrellaEntity.id, name: context.umbrellaEntity.name },
+			isUmbrella: context.isUmbrella,
 			liveClaimCount,
 			bundleClaimCount,
 			// Si el DNA ya declara claims, los confirmados acá no entran al bundle: la pantalla tiene que
 			// poder decirlo, o el contador miente.
 			claimsSource: dnaCarriesClaims(dna) ? ("maasy" as const) : ("beaos" as const),
 		};
+	});
+
+/**
+ * La marca de heredable: la decisión que no se puede tomar sola.
+ *
+ * Es una server function aparte del guardado porque es otra cosa: no cambia la afirmación, cambia
+ * quiénes pueden firmarla. La explicación de cuándo marcarla vive en la pantalla, al lado del control.
+ */
+export const setClaimInheritableFn = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			brandId: z.string().min(1),
+			entityId: z.string().uuid(),
+			claimId: z.string().min(1).max(120),
+			inheritable: z.boolean(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const session = await requireAuthSession();
+		await requireOrgAccess(session.user.id, data.brandId);
+		try {
+			return await setClaimInheritable(data);
+		} catch (error) {
+			if (error instanceof ClaimNotFoundError) throw new Error(error.message);
+			throw error;
+		}
 	});
 
 export const saveClaimFn = createServerFn({ method: "POST" })

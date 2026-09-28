@@ -440,6 +440,7 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 		.select({
 			id: agentBrandEntities.id,
 			parentEntityId: agentBrandEntities.parentEntityId,
+			name: agentBrandEntities.name,
 			websiteUrl: agentBrandEntities.websiteUrl,
 		})
 		.from(agentBrandEntities)
@@ -456,6 +457,9 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 	 *   2. Si no trae, se usan las **confirmadas en BeAOS** —las que un operador revisó y firmó con su
 	 *      criterio en la pantalla de Pruebas—. Los borradores no entran: un borrador es trabajo en curso,
 	 *      no una declaración.
+	 *   3. Y si la entidad **no es** el paraguas, hereda las pruebas que el operador marcó `inheritable` en
+	 *      la raíz de la jerarquía. Heredar no es copiar en silencio: la prueba viaja marcada como heredada
+	 *      en su `evidence.summary`, porque si no la sub-entidad estaría afirmando algo que no hizo.
 	 *
 	 * BeAOS no convierte la prosa de Maasy en claims por su cuenta. El estándar lo dice —*"AOS links proofs,
 	 * it does not create them"*— y un dato inventado en la capa de confianza es peor que su ausencia.
@@ -465,7 +469,20 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 		.select()
 		.from(agentBrandClaims)
 		.where(and(eq(agentBrandClaims.brandId, brandId), eq(agentBrandClaims.entityId, entityId)));
-	const claimsForBundle = resolveBundleClaims({ dna, saved: savedClaims });
+	// El paraguas no hereda de nadie: heredar de sí mismo duplicaría sus propias pruebas. Los productos
+	// heredan solo lo que esté marcado; el filtro fino lo hace `resolveBundleClaims`.
+	const umbrellaClaims =
+		umbrella.id === entityId
+			? []
+			: await db
+					.select()
+					.from(agentBrandClaims)
+					.where(and(eq(agentBrandClaims.brandId, brandId), eq(agentBrandClaims.entityId, umbrella.id)));
+	const claimsForBundle = resolveBundleClaims({
+		dna,
+		saved: savedClaims,
+		umbrella: umbrella.id === entityId ? undefined : { claims: umbrellaClaims, entityName: umbrella.name },
+	});
 
 	const websiteUrl =
 		typeof dnaPayload?.website_url === "string" ? dnaPayload.website_url : (current.websiteUrl ?? undefined);

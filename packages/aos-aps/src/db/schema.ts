@@ -145,6 +145,25 @@ export const agentBrandClaims = pgTable(
 		/** El texto original de Maasy que el operador confirmó. Copia literal, no un resumen. */
 		sourceFragment: text("source_fragment"),
 		status: text("status").$type<"draft" | "confirmed">().default("draft").notNull(),
+		/**
+		 * Si las sub-entidades de esta marca pueden heredar la prueba.
+		 *
+		 * Lo decide el operador, y es la línea que no se puede cruzar sola: una prueba de marca
+		 * (metodología, antigüedad, "más de 100 proyectos") se puede heredar; un caso de cliente
+		 * **no**, porque la sub-entidad estaría afirmando que hizo algo que no hizo. Por defecto
+		 * `false`: heredar es una decisión explícita, nunca un descuido.
+		 */
+		inheritable: boolean("inheritable").default(false).notNull(),
+		/**
+		 * La entidad de la que salió esta fila cuando es una **copia heredada**. Null en una fila
+		 * propia. Apunta a la entidad de origen para poder auditar de dónde salió una afirmación que
+		 * hoy se firma en otro perfil. La herencia viva se resuelve contra el paraguas en el momento
+		 * de generar (`resolveBundleClaims`); esta columna es la trazabilidad de una copia
+		 * materializada, no la fuente de la regla.
+		 */
+		inheritedFromEntityId: uuid("inherited_from_entity_id").references(() => agentBrandEntities.id, {
+			onDelete: "cascade",
+		}),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true })
 			.defaultNow()

@@ -7,10 +7,13 @@
 import { describe, expect, it } from "vitest";
 import { generateAgentAssets } from "../assets/generate";
 import type { AgentBrandClaim } from "../db/schema";
+import { parseBrandProfile } from "../preference";
 import {
 	claimIdFromCandidateId,
 	claimsFromRows,
 	dnaCarriesClaims,
+	inheritedPrefix,
+	inheritedRowsFor,
 	proofIdForClaim,
 	resolveBundleClaims,
 } from "./mapping";
@@ -35,6 +38,8 @@ function row(overrides: Partial<AgentBrandClaim> = {}): AgentBrandClaim {
 		confidentiality: "anonymized",
 		sourceFragment: "Aumento promedio de 35% en tasa de conversión…",
 		status: "confirmed",
+		inheritable: false,
+		inheritedFromEntityId: null,
 		createdAt: new Date("2026-09-25T00:00:00.000Z"),
 		updatedAt: new Date("2026-09-25T00:00:00.000Z"),
 		...overrides,
@@ -153,6 +158,194 @@ describe("resolveBundleClaims", () => {
 			saved: [row(), row({ claimId: "CLM-X", status: "draft" })],
 		});
 		expect(resolved.claims.map((claim) => claim.claim_id)).toEqual(["CLM-BE-35-CONVERSION"]);
+	});
+});
+
+/**
+ * La herencia. Es la parte que más caro sale si se rompe en silencio: una sub-entidad firmando como
+ * propio un caso de cliente que hizo la marca es una mentira verificable.
+ */
+describe("herencia del paraguas", () => {
+	const UMBRELLA_ENTITY = "00000000-0000-4000-8000-0000000000bb";
+
+	/** Una prueba de marca heredable: metodología, antigüedad o volumen, nunca un caso de cliente. */
+	function brandRow(overrides: Partial<AgentBrandClaim> = {}): AgentBrandClaim {
+		return row({
+			entityId: UMBRELLA_ENTITY,
+			claimId: "CLM-MARCA-100-PROYECTOS",
+			statement: "Más de 100 proyectos entregados desde 2019.",
+			metric: "100",
+			proofType: "aggregate_metric",
+			proofTitle: "Volumen histórico de la marca",
+			proofSummary: "Más de 100 proyectos entregados.",
+			proofClient: null,
+			sourceFragment: "Más de 100 proyectos entregados desde 2019.",
+			inheritable: true,
+			...overrides,
+		});
+	}
+
+	const umbrellaOf = (claims: AgentBrandClaim[], entityName = "Believe") => ({ claims, entityName });
+
+	interface EmittedProof {
+		proof_id?: string;
+		claim_refs?: string[];
+		evidence?: Record<string, unknown>;
+	}
+	interface EmittedClaim {
+		claim_id?: string;
+		statement?: string;
+		linked_proofs?: string[];
+		proofs?: EmittedProof[];
+	}
+
+	/** El `brand.json` real, generado por el mismo camino que firma el bundle. */
+	function brandJson(input: {
+		saved?: AgentBrandClaim[];
+		umbrella?: { claims: AgentBrandClaim[]; entityName: string };
+	}): { claims: EmittedClaim[]; proofs: EmittedProof[] } {
+		const dna = { business_description: "Believe instala sistemas de preferencia." };
+		const resolved = resolveBundleClaims({ dna, ...input });
+		const assets = generateAgentAssets({
+			name: "Believe",
+			websiteUrl: "https://believe-global.com",
+			dna: { ...dna, ...resolved },
+		});
+		const brand = assets.find((asset) => asset.path === "/.well-known/brand.json");
+		return JSON.parse(brand?.content ?? "{}") as { claims: EmittedClaim[]; proofs: EmittedProof[] };
+	}
+
+	it("hereda solo lo marcado heredable", () => {
+		const resolved = resolveBundleClaims({
+			saved: [row({ claimId: "CLM-PROPIA" })],
+			umbrella: umbrellaOf([
+				brandRow(),
+				// Un caso de cliente de la marca: si no está marcado, no se hereda. Es la línea roja.
+				row({
+					entityId: UMBRELLA_ENTITY,
+					claimId: "CLM-CASO-CLIENTE",
+					proofType: "case_study",
+					inheritable: false,
+				}),
+			]),
+		});
+		expect(resolved.claims.map((claim) => claim.claim_id)).toEqual(["CLM-PROPIA", "CLM-MARCA-100-PROYECTOS"]);
+	});
+
+	it("no hereda nada cuando el paraguas no tiene nada marcado", () => {
+		const resolved = resolveBundleClaims({
+			saved: [row({ claimId: "CLM-PROPIA" })],
+			umbrella: umbrellaOf([brandRow({ inheritable: false })]),
+		});
+		expect(resolved.claims.map((claim) => claim.claim_id)).toEqual(["CLM-PROPIA"]);
+		expect(inheritedRowsFor({ saved: [], umbrella: umbrellaOf([brandRow({ inheritable: false })]) })).toEqual([]);
+	});
+
+	it("el propio gana sobre el heredado con el mismo id, y no se duplica el id", () => {
+		const resolved = resolveBundleClaims({
+			saved: [row({ claimId: "CLM-COMPARTIDA", statement: "La afirmación propia de esta entidad." })],
+			umbrella: umbrellaOf([brandRow({ claimId: "CLM-COMPARTIDA" })]),
+		});
+		expect(resolved.claims).toHaveLength(1);
+		expect(resolved.claims[0]?.statement).toBe("La afirmación propia de esta entidad.");
+		expect(resolved.proofs.map((proof) => proof.proof_id)).toEqual(["PRF-CLM-COMPARTIDA"]);
+		// Y la que sobrevive no lleva marca de heredada: es propia.
+		expect(resolved.proofs[0]?.evidence?.summary).toBe("Reporte de resultados del programa de instalación.");
+	});
+
+	it("un borrador propio con el mismo id no le roba el lugar a la heredada confirmada", () => {
+		// El desempate del punto 3 es contra las propias que entran al bundle. Un borrador no emite nada,
+		// así que dejarlo ganar perdería en silencio una prueba que la marca sí confirmó.
+		const resolved = resolveBundleClaims({
+			saved: [row({ claimId: "CLM-MARCA-100-PROYECTOS", status: "draft" })],
+			umbrella: umbrellaOf([brandRow()]),
+		});
+		expect(resolved.claims.map((claim) => claim.claim_id)).toEqual(["CLM-MARCA-100-PROYECTOS"]);
+		expect(resolved.proofs[0]?.evidence?.summary).toBe(
+			"[Heredada del paraguas Believe] Más de 100 proyectos entregados.",
+		);
+	});
+
+	it("los borradores no entran, ni propios ni heredados", () => {
+		const resolved = resolveBundleClaims({
+			saved: [row({ claimId: "CLM-BORRADOR-PROPIO", status: "draft" })],
+			umbrella: umbrellaOf([brandRow({ claimId: "CLM-BORRADOR-HEREDADO", status: "draft" })]),
+		});
+		expect(resolved.claims).toHaveLength(0);
+		expect(resolved.proofs).toHaveLength(0);
+	});
+
+	it("el prefijo de heredada aparece en el summary y en el source_fragment emitidos", () => {
+		const { claims, proofs } = brandJson({ saved: [], umbrella: umbrellaOf([brandRow()]) });
+		expect(claims).toHaveLength(1);
+
+		const proof = proofs[0];
+		expect(proof?.evidence?.summary).toBe("[Heredada del paraguas Believe] Más de 100 proyectos entregados.");
+		expect(proof?.evidence?.source_fragment).toBe(
+			"[Heredada del paraguas Believe] Más de 100 proyectos entregados desde 2019.",
+		);
+		// El vínculo sigue siendo de los dos lados, con el prefijo o sin él.
+		expect(proof?.claim_refs).toEqual(["CLM-MARCA-100-PROYECTOS"]);
+		expect(claims[0]?.linked_proofs).toEqual(["PRF-CLM-MARCA-100-PROYECTOS"]);
+
+		// El prefijo también viaja dentro de la prueba anidada del claim: es el mismo objeto.
+		expect(claims[0]?.proofs?.[0]?.evidence?.summary).toBe(
+			"[Heredada del paraguas Believe] Más de 100 proyectos entregados.",
+		);
+	});
+
+	it("sin resumen el prefijo va igual, y sin fragmento no inventa uno", () => {
+		const { proofs } = brandJson({
+			saved: [],
+			umbrella: umbrellaOf([brandRow({ proofSummary: null, sourceFragment: null })]),
+		});
+		expect(proofs[0]?.evidence?.summary).toBe("[Heredada del paraguas Believe]");
+		expect(proofs[0]?.evidence).not.toHaveProperty("source_fragment");
+	});
+
+	it("sin nombre de paraguas el prefijo igual declara la herencia", () => {
+		expect(inheritedPrefix("  ")).toBe("[Heredada del paraguas]");
+		expect(inheritedPrefix(undefined)).toBe("[Heredada del paraguas]");
+		expect(inheritedPrefix("Autex")).toBe("[Heredada del paraguas Autex]");
+	});
+
+	it("el DNA de Maasy tiene prioridad absoluta, también sobre lo heredado", () => {
+		const dnaClaims = [{ claim_id: "CLM-DEL-DNA", statement: "La marca lo declara." }];
+		const resolved = resolveBundleClaims({
+			dna: { claims: dnaClaims, proofs: [] },
+			saved: [row({ claimId: "CLM-PROPIA" })],
+			umbrella: umbrellaOf([brandRow()]),
+		});
+		expect(resolved.claims).toEqual(dnaClaims);
+		expect(resolved.claims.some((claim) => claim.claim_id === "CLM-MARCA-100-PROYECTOS")).toBe(false);
+		expect(resolved.proofs).toEqual([]);
+	});
+
+	it("una copia heredada con `inheritedFromEntityId` viaja marcada, no como propia", () => {
+		const copy = row({
+			claimId: "CLM-MARCA-100-PROYECTOS",
+			inheritable: true,
+			inheritedFromEntityId: UMBRELLA_ENTITY,
+		});
+		const resolved = resolveBundleClaims({ saved: [copy], umbrella: umbrellaOf([]) });
+		expect(resolved.claims.map((claim) => claim.claim_id)).toEqual(["CLM-MARCA-100-PROYECTOS"]);
+		expect(resolved.proofs[0]?.evidence?.summary).toBe(
+			"[Heredada del paraguas Believe] Reporte de resultados del programa de instalación.",
+		);
+	});
+
+	it("el perfil con heredadas no suma errores del validador del estándar", () => {
+		const errorsOf = (input: {
+			saved?: AgentBrandClaim[];
+			umbrella?: { claims: AgentBrandClaim[]; entityName: string };
+		}) => parseBrandProfile(brandJson(input)).findings.filter((finding) => finding.level === "error");
+
+		const ownOnly = errorsOf({ saved: [row({ claimId: "CLM-PROPIA" })] });
+		const withInherited = errorsOf({ saved: [row({ claimId: "CLM-PROPIA" })], umbrella: umbrellaOf([brandRow()]) });
+		// El prefijo de heredada va al `evidence.summary`, que el validador no evalúa: no agrega findings.
+		expect(withInherited.length).toBeLessThanOrEqual(ownOnly.length);
+		// Y el perfil heredado en sí no suma errores propios.
+		expect(errorsOf({ saved: [], umbrella: umbrellaOf([brandRow()]) })).toEqual([]);
 	});
 });
 

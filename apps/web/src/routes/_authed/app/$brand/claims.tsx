@@ -6,12 +6,13 @@ import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
+import { Switch } from "@workspace/ui/components/switch";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useEffect, useState } from "react";
 import { BandChip, BLOCKING_BLOCK, BLOCKING_TEXT, Eyebrow, MONO_LABEL } from "@/components/status-tone";
 import { useBrand } from "@/hooks/use-brands";
 import { listAgentEntitiesFn } from "@/server/agent-maasy";
-import { deleteClaimFn, listClaimsFn, type SerializedClaim, saveClaimFn } from "@/server/claims";
+import { deleteClaimFn, listClaimsFn, type SerializedClaim, saveClaimFn, setClaimInheritableFn } from "@/server/claims";
 
 export const Route = createFileRoute("/_authed/app/$brand/claims")({
 	component: ClaimsPage,
@@ -245,6 +246,34 @@ function ClaimsPage() {
 		setForm((previous) => (previous === null ? previous : { ...previous, [field]: value }));
 	};
 
+	/**
+	 * La marca de heredable.
+	 *
+	 * Es la decisión más delicada de la pantalla: si se marca un caso de cliente, cada sub-entidad firma
+	 * que hizo ese trabajo. Por eso guarda sola —el operador ve el efecto sin apretar "Guardar"— y por eso
+	 * la advertencia de los casos de estudio no es un cartel que se pueda cerrar sin leer.
+	 */
+	const setInheritable = useMutation({
+		mutationFn: async (input: { claimId: string; inheritable: boolean }) => {
+			if (brandId === undefined) throw new Error("Selecciona una entidad");
+			return setClaimInheritableFn({
+				data: { brandId, entityId, claimId: input.claimId, inheritable: input.inheritable },
+			});
+		},
+		onSuccess: async (updated) => {
+			setError(null);
+			setNotice(
+				updated.inheritable
+					? `"${updated.claimId}" quedó heredable por las sub-entidades. Regenerá los assets para que sus perfiles la declaren.`
+					: `"${updated.claimId}" dejó de ser heredable.`,
+			);
+			await claims.refetch();
+		},
+		onError: (mutationError) => {
+			setError(mutationError instanceof Error ? mutationError.message : "No se pudo cambiar la marca de heredable");
+		},
+	});
+
 	if (isLoading) return <div className="text-sm text-muted-foreground">Cargando brand…</div>;
 	if (brand === undefined) return <div className={`text-sm ${BLOCKING_TEXT}`}>Brand no encontrado.</div>;
 
@@ -253,7 +282,13 @@ function ClaimsPage() {
 	const fromMaasy = claims.data?.claimsSource === "maasy";
 	const candidates = claims.data?.candidates ?? [];
 	const saved = claims.data?.claims ?? [];
-	const confirmedCount = saved.filter((claim) => claim.status === "confirmed").length;
+	// Una fila con `inheritedFromEntityId` no es propia: es una copia heredada, se muestra con las
+	// heredadas y no se edita desde esta entidad.
+	const ownSaved = saved.filter((claim) => claim.inheritedFromEntityId === null);
+	const inherited = claims.data?.inheritedClaims ?? [];
+	const umbrellaName = claims.data?.umbrella.name;
+	const isUmbrella = claims.data?.isUmbrella ?? false;
+	const confirmedOwnCount = ownSaved.filter((claim) => claim.status === "confirmed").length;
 	const missing = liveClaimCount === null ? 0 : Math.max(0, liveClaimCount - bundleClaimCount);
 	const formReady =
 		form !== null &&
@@ -300,8 +335,8 @@ function ClaimsPage() {
 					{liveClaimCount !== null && missing > 0 && (
 						<div className={`rounded-md border p-3 ${BLOCKING_BLOCK}`}>
 							El candado <strong>va a bloquear la publicación</strong> hasta que confirmes al menos {liveClaimCount}{" "}
-							{liveClaimCount === 1 ? "prueba" : "pruebas"}. Hoy tenés {confirmedCount} confirmada
-							{confirmedCount === 1 ? "" : "s"} y el bundle declararía {bundleClaimCount}.
+							{liveClaimCount === 1 ? "prueba" : "pruebas"}. Hoy tenés {confirmedOwnCount} confirmada
+							{confirmedOwnCount === 1 ? "" : "s"} y el bundle declararía {bundleClaimCount}.
 						</div>
 					)}
 					{liveClaimCount !== null && missing === 0 && (
@@ -627,12 +662,14 @@ function ClaimsPage() {
 					<CardDescription>
 						{fromMaasy
 							? "El bundle toma los claims que ya declara Maasy: las pruebas guardadas acá no entran mientras eso siga así."
-							: `${bundleClaimCount} entrarían al bundle (${confirmedCount} confirmada${confirmedCount === 1 ? "" : "s"}). Los borradores no entran.`}
+							: `${bundleClaimCount} entrarían al bundle (${confirmedOwnCount} confirmada${
+									confirmedOwnCount === 1 ? "" : "s"
+								} de esta entidad y ${inherited.length} heredada${inherited.length === 1 ? "" : "s"}). Los borradores no entran.`}
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-2">
-					{saved.map((claim) => (
-						<div key={claim.id} className="space-y-2 border-b border-border py-3 last:border-b-0">
+					{ownSaved.map((claim) => (
+						<div key={claim.id} className="space-y-3 border-b border-border py-3 last:border-b-0">
 							<div className="flex flex-wrap items-center gap-2">
 								<BandChip
 									label={claim.status === "confirmed" ? "Confirmada" : "Borrador"}
@@ -671,11 +708,83 @@ function ClaimsPage() {
 									Borrar
 								</Button>
 							</div>
+
+							{/* La marca de heredable. Es acá donde se puede arruinar todo, así que la explicación
+							    vive pegada al control y no en una ayuda escondida. */}
+							<div className="rounded-md border border-border p-3">
+								<div className="flex items-start gap-3">
+									<Switch
+										id={`inheritable-${claim.id}`}
+										checked={claim.inheritable}
+										disabled={setInheritable.isPending}
+										onCheckedChange={(checked) =>
+											setInheritable.mutate({ claimId: claim.claimId, inheritable: checked })
+										}
+									/>
+									<div className="space-y-1">
+										<Label htmlFor={`inheritable-${claim.id}`}>Heredable por las sub-entidades</Label>
+										<p className="text-xs text-muted-foreground">
+											Marcala solo si la prueba es de la marca y no de un cliente. Un caso de cliente heredado hace que
+											la sub-entidad afirme algo que no hizo. La heredada viaja al perfil marcada como heredada.
+										</p>
+									</div>
+								</div>
+								{claim.inheritable && claim.proofType === "case_study" && (
+									<div className={`mt-3 rounded-md border p-3 text-sm ${BLOCKING_BLOCK}`}>
+										<strong>Ojo: es un caso de estudio.</strong> Si el caso es de un cliente, al marcarlo heredable cada
+										sub-entidad va a firmar que hizo ese trabajo, y no lo hizo. Dejalo sin marcar: sigue siendo prueba
+										de esta entidad.
+									</div>
+								)}
+							</div>
 						</div>
 					))}
-					{saved.length === 0 && <p className="text-sm text-muted-foreground">Todavía no hay pruebas guardadas.</p>}
+					{ownSaved.length === 0 && <p className="text-sm text-muted-foreground">Todavía no hay pruebas guardadas.</p>}
 				</CardContent>
 			</Card>
+
+			{/* Las heredadas no se editan desde acá: se editan en el paraguas, que es donde el operador
+			    puede ver el alcance real de lo que firma. */}
+			{isUmbrella === false && (
+				<Card>
+					<CardHeader>
+						<CardTitle>
+							{umbrellaName === undefined
+								? "Pruebas heredadas del paraguas"
+								: `Pruebas heredadas del paraguas ${umbrellaName}`}
+						</CardTitle>
+						<CardDescription>
+							Las marcó como heredables el operador del paraguas. Entran al perfil de esta entidad declaradas como
+							heredadas —el resumen de la prueba empieza con "[Heredada del paraguas {umbrellaName ?? ""}]"— y no se
+							editan desde acá: se editan en el paraguas.
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-2">
+						{inherited.map((claim) => (
+							<div key={claim.id} className="space-y-2 border-b border-border py-3 last:border-b-0">
+								<div className="flex flex-wrap items-center gap-2">
+									<BandChip label="Heredada" level="mid" />
+									<span className={`${MONO_LABEL} text-believe-900`}>{claim.claimId}</span>
+									{claim.category !== null && <span className="text-xs text-muted-foreground">{claim.category}</span>}
+								</div>
+								<p className="text-sm">{claim.statement}</p>
+								<p className="text-xs text-muted-foreground">
+									{claim.proofType} · {claim.proofTitle}
+									{claim.metric === null ? "" : ` · ${claim.metric}`}
+								</p>
+								<p className="text-xs text-muted-foreground">
+									No editable desde esta entidad: es una prueba del paraguas.
+								</p>
+							</div>
+						))}
+						{inherited.length === 0 && (
+							<p className="text-sm text-muted-foreground">
+								El paraguas no tiene pruebas marcadas como heredables, así que esta entidad no hereda nada.
+							</p>
+						)}
+					</CardContent>
+				</Card>
+			)}
 		</div>
 	);
 }
