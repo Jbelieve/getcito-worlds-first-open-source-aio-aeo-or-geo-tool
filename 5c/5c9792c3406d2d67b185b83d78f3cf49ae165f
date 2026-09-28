@@ -1,0 +1,17 @@
+apps/web/src/lib/__tests__/brand-id.test.ts
+  h_c5ca005a78c880 1-171
+apps/web/src/server/brands.ts
+  h_c5ca005a78c880 25,351-352,375-377,379
+  h_c5ca005a78c880 30,341-347,378
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5c5c9792c3406d2d67b185b83d78f3cf49ae165f",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
