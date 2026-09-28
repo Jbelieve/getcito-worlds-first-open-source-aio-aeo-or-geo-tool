@@ -1,0 +1,26 @@
+apps/web/src/components/new-brand-card.tsx
+  h_c5ca005a78c880 1-183
+apps/web/src/server/brands.ts
+  h_c5ca005a78c880 6-21,23,25-27,30,80,255-399,429-430,433,540
+apps/web/src/lib/__tests__/brand-id.test.ts
+  h_c5ca005a78c880 1-171
+apps/web/src/lib/brand-id.ts
+  h_c5ca005a78c880 1-129
+apps/web/src/routes/_authed/admin/index.tsx
+  h_c5ca005a78c880 4,8-9,20-21,23-29,106-113,143-145,150-152,159-170,173-184,187-198,206-208,215-217,220-225,234-242,294-296,305-307,313,325-326,342-347,393-394,432-437,441-452,497-499,504-519,525-534,548-552,568-570,574-577,579-582,585-590,592-599,601-604,613-618,620-623,626-631,633-640,642-652,660-665,667-673,677-684,687-694,696-729,737-742,748-755,757-760,796-799,805-807,821-839,844-846,854-856,861-866
+apps/web/src/components/app-sidebar.tsx
+  h_c5ca005a78c880 178-186
+apps/web/src/server/mcp/tools/actions.ts
+  h_c5ca005a78c880 18,91-96,98-105,107-112,123-124,127,136-137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c9107148fe83405b14cf051769385d50d78c87d2",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
