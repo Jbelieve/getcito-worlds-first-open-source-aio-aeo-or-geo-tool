@@ -24,6 +24,7 @@ el MCP vive en el mismo dominio de la app.
 | `get_aos_audit` | Última auditoría AOS de una entidad: score, banda, tipo de negocio y el detalle requisito por requisito. Incluye el **APS declarado**. |
 | `list_aps_runs` | Corridas de **APS medido**: score por modelo, banda, observaciones, P10–P90 y si la corrida salió parcial. |
 | `get_aps_score_detail` | El detalle competitivo de una corrida: las 5 dimensiones, los sub-métricas, el APS con banda y P10/P50/P90, las observaciones y el ranking de competidores mencionados. |
+| `list_claims` | Las pruebas guardadas de una entidad (id, afirmación, número, estado, `inheritable` y de qué entidad es copia) y las heredables del paraguas que efectivamente hereda, si la entidad no es el paraguas. |
 | `get_agent_bundle` | Manifiesto del bundle agéntico publicado: cada ruta con su `sha256` y su tamaño. Sin el contenido. |
 | `get_agent_asset` | El contenido **exacto** de un archivo del bundle (por ejemplo `/.well-known/brand.json`), con su hash. |
 
@@ -50,18 +51,26 @@ el MCP vive en el mismo dominio de la app.
 | `sync_brand_dna` | Sincroniza el Brand DNA desde Maasy y dice si trajo `claims`. |
 | `generate_agent_assets` | Genera o regenera el bundle desde el Brand DNA. Lo deja guardado, **no** lo publica. |
 | `publish_agent_assets` | Abre o cierra el gate de publicación de una entidad. |
+| `set_claim_inheritable` | Marca si las sub-entidades pueden heredar una prueba. Pide `claimId` y el valor; **no** crea pruebas. |
 
-## Tres reglas que no se negocian
+## Cuatro reglas que no se negocian
 
 1. **La lectura pasa por el mismo gate que la API de entrega.** `get_agent_bundle` y `get_agent_asset`
    usan `loadAssetBundle`, que devuelve `null` mientras la entidad no esté publicada. El MCP **no puede
    filtrar** un bundle que un operador todavía no aprobó, y ningún tool arma el bundle por su cuenta.
 2. **Las acciones son las mismas de la UI.** `generate_agent_assets` y `publish_agent_assets` llaman a
    `agent-assets-core`; `start_aps_run` y `sync_brand_dna` llaman a `agent-aps-core` y
-   `agent-maasy-core`. Si el **guardián de claims** bloquea una publicación o el **guardián de
+   `agent-maasy-core`; `list_claims` y `set_claim_inheritable` llaman a `claims-core`, el mismo núcleo
+   de la pantalla de Pruebas. Si el **guardián de claims** bloquea una publicación o el **guardián de
    presupuesto** bloquea una corrida, el bloqueo también aparece por acá: no hay una puerta más
    permisiva para los agentes.
-3. **Nada de datos de todas las marcas mezclados.** Toda lectura exige `brandId` (o `entityId`), salvo
+3. **Una prueba heredada viaja declarada como heredada.** El operador marca qué es heredable —pruebas de
+   marca: metodología, antigüedad, volumen— y las sub-entidades las heredan. La prueba heredada entra al
+   perfil de la sub-entidad con el prefijo `[Heredada del paraguas <nombre>]` en su resumen, para que
+   nadie lea como propio un caso que hizo otro. Un caso de cliente heredado sería una mentira
+   verificable, así que la UI lo advierte y `set_claim_inheritable` no lo impide: la decisión es del
+   operador y queda registrada.
+4. **Nada de datos de todas las marcas mezclados.** Toda lectura exige `brandId` (o `entityId`), salvo
    `list_reports`, que resuelve el nombre desde la marca porque la tabla heredada `reports` no guarda
    `brandId`.
 

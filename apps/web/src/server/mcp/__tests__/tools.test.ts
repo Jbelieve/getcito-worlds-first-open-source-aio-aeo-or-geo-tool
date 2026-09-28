@@ -44,6 +44,8 @@ describe("registro de tools del MCP de BeAOS", () => {
 		const requiredOf = (name: string) => BEAOS_MCP_TOOLS.find((tool) => tool.name === name)?.inputSchema.required;
 		expect(requiredOf("generate_agent_assets")).toEqual(["brandId", "entityId"]);
 		expect(requiredOf("publish_agent_assets")).toEqual(["brandId", "entityId", "published"]);
+		// La marca de heredable no se puede aplicar "a lo que haya": pide la prueba y el valor nuevo.
+		expect(requiredOf("set_claim_inheritable")).toEqual(["brandId", "entityId", "claimId", "inheritable"]);
 	});
 
 	it("las acciones de alta piden lo mínimo para ser idempotentes y no inventar datos", () => {
@@ -63,11 +65,17 @@ describe("registro de tools del MCP de BeAOS", () => {
 			"get_aos_audit",
 			"list_aps_runs",
 			"get_aps_score_detail",
+			"list_claims",
 			"get_agent_bundle",
 			"get_agent_asset",
 		]) {
 			expect(names).toContain(expected);
 		}
+	});
+
+	it("la lectura de pruebas y la marca de heredable exigen marca y entidad", () => {
+		const requiredOf = (name: string) => BEAOS_MCP_TOOLS.find((tool) => tool.name === name)?.inputSchema.required;
+		expect(requiredOf("list_claims")).toEqual(["brandId", "entityId"]);
 	});
 
 	it("están las lecturas heredadas de Getcito, y todas exigen una marca", () => {
@@ -106,10 +114,12 @@ describe("registro de tools del MCP de BeAOS", () => {
 				"list_aps_runs",
 				"list_brands",
 				"list_citations",
+				"list_claims",
 				"list_competitors",
 				"list_prompts",
 				"list_reports",
 				"publish_agent_assets",
+				"set_claim_inheritable",
 				"start_aps_run",
 				"sync_brand_dna",
 			].sort(),

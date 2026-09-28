@@ -23,6 +23,7 @@ import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { loadAssetBundle } from "@/server/agent-bundle";
+import { ClaimEntityNotFoundError, inheritedClaimsOf, loadClaimsContext, serializeClaim } from "@/server/claims-core";
 import type { McpTool } from "../jsonrpc";
 import { optionalInteger, optionalUuid, requireString, requireUuid, textResult } from "../jsonrpc";
 import { json, MAX_LIMIT, rankCounts, readCompetitorNames } from "./helpers";
@@ -369,6 +370,55 @@ const getApsScoreDetail: McpTool = {
 	},
 };
 
+/**
+ * Las pruebas de una entidad, con la marca de heredable y las que hereda del paraguas.
+ *
+ * Es la lectura que necesita un consumidor para decidir qué marcar: Autex tiene ~40 dealers bajo un
+ * mismo importador y no puede confirmar 40 veces la misma prueba de marca. La herencia se resuelve con
+ * la misma regla pura que el generador (`inheritedRowsFor`), así que lo que este tool lista es lo que el
+ * bundle va a declarar, ni más ni menos.
+ */
+const listClaims: McpTool = {
+	name: "list_claims",
+	title: "Listar las pruebas de una entidad",
+	description:
+		"Devuelve las pruebas guardadas de una entidad —id, afirmación, número, estado, si es heredable y de qué entidad es copia— y, si la entidad **no es el paraguas**, las pruebas heredables del paraguas que efectivamente hereda. Las heredadas viajan al perfil marcadas como heredadas: la sub-entidad nunca afirma como propio un caso de la marca. Solo las `confirmed` entran al bundle; un borrador se lista con su estado pero no entra. Para marcar una prueba como heredable está set_claim_inheritable.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			brandId: { type: "string", description: "Id de la marca dueña (ver list_brands)." },
+			entityId: { type: "string", description: "UUID de la entidad (ver get_brand)." },
+		},
+		required: ["brandId", "entityId"],
+		additionalProperties: false,
+	},
+	handler: async (args) => {
+		const brandId = requireString(args, "brandId");
+		const entityId = requireUuid(args, "entityId");
+		let context: Awaited<ReturnType<typeof loadClaimsContext>>;
+		try {
+			context = await loadClaimsContext(brandId, entityId);
+		} catch (error) {
+			if (error instanceof ClaimEntityNotFoundError) return textResult(error.message, { found: false });
+			throw error;
+		}
+		const payload = {
+			entityId,
+			isUmbrella: context.isUmbrella,
+			umbrella: context.umbrellaEntity,
+			claims: context.rows.map((row) => serializeClaim(row)),
+			// Las heredadas se declaran con la entidad de la que vienen: en una fila del paraguas la columna
+			// viene null —es propia del paraguas—, así que la fuente se completa con el paraguas mismo.
+			inheritedClaims: inheritedClaimsOf(context).map((row) => ({
+				...serializeClaim(row),
+				inheritedFrom: row.inheritedFromEntityId ?? context.umbrellaEntity.id,
+				inheritedFromName: context.umbrellaEntity.name,
+			})),
+		};
+		return textResult(json(payload), payload);
+	},
+};
+
 const getAgentBundle: McpTool = {
 	name: "get_agent_bundle",
 	title: "Leer el bundle de assets agénticos",
@@ -444,6 +494,7 @@ export const agentTools: McpTool[] = [
 	getAosAudit,
 	listApsRuns,
 	getApsScoreDetail,
+	listClaims,
 	getAgentBundle,
 	getAgentAsset,
 ];

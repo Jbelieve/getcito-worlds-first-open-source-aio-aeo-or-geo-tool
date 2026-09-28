@@ -56,6 +56,9 @@ export interface ClaimsContext {
 	isUmbrella: boolean;
 }
 
+/** La entidad no está en la jerarquía de esa marca. Se distingue de una jerarquía rota a propósito. */
+export class ClaimEntityNotFoundError extends Error {}
+
 /**
  * Lee la entidad con su jerarquía y el paraguas del que hereda.
  *
@@ -72,7 +75,12 @@ export async function loadClaimsContext(brandId: string, entityId: string): Prom
 		.from(agentBrandEntities)
 		.where(eq(agentBrandEntities.brandId, brandId));
 	const umbrellaEntity = findUmbrellaEntity(hierarchy, entityId);
-	if (umbrellaEntity === null) throw new Error("Entity hierarchy is incomplete: no umbrella found");
+	if (umbrellaEntity === null) {
+		if (hierarchy.some((entity) => entity.id === entityId) === false) {
+			throw new ClaimEntityNotFoundError(`La entidad "${entityId}" no existe en la marca "${brandId}".`);
+		}
+		throw new Error("Entity hierarchy is incomplete: no umbrella found");
+	}
 
 	const rows = await readEntityClaims(brandId, entityId);
 	const isUmbrella = umbrellaEntity.id === entityId;
