@@ -1,0 +1,18 @@
+apps/web/src/server/mcp/__tests__/tools.test.ts
+  h_c5ca005a78c880 49-60,81,92-93,116,126,142,145-157
+apps/web/src/server/mcp/tools/actions.ts
+  h_c5ca005a78c880 12-14,17,27-34,440-604,659-660
+apps/web/src/server/mcp/tools/agent.ts
+  h_c5ca005a78c880 7-9,27-33,429-472,549
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a39a6f83fabfeaac00a129cd240b91f44ae83c4e",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
