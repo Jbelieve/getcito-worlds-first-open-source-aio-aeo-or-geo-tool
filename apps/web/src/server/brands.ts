@@ -3,21 +3,32 @@
  * Replaces apps/web/src/app/api/brands/* API routes.
  */
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
-import { requireAuthSession, requireOrgAccess, listUserOrganizations } from "@/lib/auth/helpers";
-import { evaluateRequireCanCreateBrands } from "@/lib/auth/policies";
-import { getDeployment } from "@/lib/config/server";
-import { db } from "@workspace/lib/db/db";
-import { brands, prompts, competitors, type BrandWithPrompts, type Brand } from "@workspace/lib/db/schema";
-import { provisionAdditionalLocalOrg } from "@workspace/lib/db/provisioning";
-import { eq, and, count, sql } from "drizzle-orm";
 import { MAX_COMPETITORS } from "@workspace/lib/constants";
-import { cleanAndValidateDomain } from "@/lib/domain-categories";
-import { validateWebsiteUrl } from "@/lib/brand-website";
-import { normalizeBrandUpdate } from "@/lib/brand-settings";
-import { deleteBrandCascade } from "@/server/brand-cascade";
-import { parseScrapeTargets, selectTargetsForBrand } from "@workspace/lib/providers";
+import { db } from "@workspace/lib/db/db";
+import { provisionAdditionalLocalOrg } from "@workspace/lib/db/provisioning";
+import {
+	type Brand,
+	type BrandWithPrompts,
+	brands,
+	competitors,
+	member,
+	type NewBrand,
+	organization,
+	prompts,
+} from "@workspace/lib/db/schema";
 import type { ModelConfig } from "@workspace/lib/providers";
+import { parseScrapeTargets, selectTargetsForBrand } from "@workspace/lib/providers";
+import { and, count, eq, sql } from "drizzle-orm";
+import { z } from "zod";
+import { listUserOrganizations, requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
+import { evaluateRequireCanCreateBrands } from "@/lib/auth/policies";
+import { brandOwnsHost, type ExistingBrand, resolveBrandIdentity } from "@/lib/brand-id";
+import { normalizeBrandUpdate } from "@/lib/brand-settings";
+import { validateWebsiteUrl } from "@/lib/brand-website";
+import { getDeployment } from "@/lib/config/server";
+import { cleanAndValidateDomain } from "@/lib/domain-categories";
+import { hostOf } from "@/lib/report-agent";
+import { deleteBrandCascade } from "@/server/brand-cascade";
 
 /**
  * Deployment-configured models this brand actually runs, after applying
@@ -66,10 +77,7 @@ function getDefaultBrandDomains(): string[] {
 
 async function getBrandWithPromptsFromDb(
 	brandId: string,
-): Promise<
-	| (BrandWithPrompts & { effectiveModels: string[]; effectiveModelConfigs: ModelConfig[] })
-	| undefined
-> {
+): Promise<(BrandWithPrompts & { effectiveModels: string[]; effectiveModelConfigs: ModelConfig[] }) | undefined> {
 	try {
 		const brand = await db.query.brands.findFirst({
 			where: eq(brands.id, brandId),
@@ -244,6 +252,151 @@ export const createBrandWithOrgFn = createServerFn({ method: "POST" })
 		return { brandId: orgId };
 	});
 
+/** Lo que devuelve `createBrandForCurrentUserFn`: la marca, si nació ahora, y si no, por qué se reusó. */
+export interface CreateBrandForCurrentUserResult {
+	brandId: string;
+	name: string;
+	website: string;
+	created: boolean;
+	/** Presente solo cuando `created` es `false`: si la marca se reusó por web o por id. */
+	matchedBy?: "host" | "id";
+	message?: string;
+}
+
+/**
+ * Create a brand for the current user, from just its name and web.
+ *
+ * `createBrandFn` can't do this: it requires `requireOrgAccess` on a brand id
+ * the user already has, so it only fills in a brand that auth already granted.
+ * This is the entry point for a user who has no brand at all, and it is the
+ * only place where the missing link is made explicitly: a `brands` row alone
+ * is invisible to its creator, because `requireOrgAccess` only ever looks at
+ * `member.organization_id` against the brand id.
+ *
+ * Idempotent like the MCP's `ensure_brand`: the id is derived from the host
+ * (`acme.com` → `acme-com`, the same criterion as the MCP, shared in
+ * `@/lib/brand-id`) and if a brand already owns that host — or already has
+ * that id — this returns it with `created: false` instead of failing or
+ * duplicating.
+ */
+export const createBrandForCurrentUserFn = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			name: z.string().trim().min(1).max(100),
+			website: z.string().min(1),
+			targetMarket: z.string().optional(),
+			targetLanguage: z.string().optional(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const session = await requireAuthSession();
+
+		if (evaluateRequireCanCreateBrands(getDeployment().features.canCreateBrands) === "deny") {
+			throw new Error("Brand creation is not allowed in this deployment");
+		}
+
+		const urlValidation = validateWebsiteUrl(data.website);
+		if (!urlValidation.isValid) {
+			throw new Error(urlValidation.error);
+		}
+
+		const name = data.name.trim();
+		const defaultDomains = getDefaultBrandDomains();
+		const brandValues: Omit<NewBrand, "id"> = {
+			name,
+			website: urlValidation.formattedUrl,
+			targetMarket: data.targetMarket,
+			targetLanguage: data.targetLanguage,
+			enabled: true,
+		};
+
+		return db.transaction(async (tx): Promise<CreateBrandForCurrentUserResult> => {
+			const existingBrands = (await tx
+				.select({
+					id: brands.id,
+					name: brands.name,
+					website: brands.website,
+					additionalDomains: brands.additionalDomains,
+				})
+				.from(brands)) satisfies ExistingBrand[];
+
+			const identity = resolveBrandIdentity({ website: urlValidation.formattedUrl, existing: existingBrands });
+			if ("error" in identity) throw new Error(identity.error);
+
+			if (identity.action === "reuse") {
+				const reusedName = identity.name ?? name;
+				return {
+					brandId: identity.brandId,
+					name: reusedName,
+					website: identity.website ?? urlValidation.formattedUrl,
+					created: false,
+					matchedBy: identity.matchedBy,
+					message:
+						identity.matchedBy === "host"
+							? `Ya existía una marca con esa web: «${reusedName}». Te llevo a esa.`
+							: `Ya existía una marca con el id «${identity.brandId}»: «${reusedName}». Te llevo a esa.`,
+				};
+			}
+
+			// Los dominios por defecto del deployment son un atajo, no una decisión: si uno ya es de otra
+			// marca, esta alta lo dejaría declarado por dos y el próximo match por host sería ambiguo.
+			const inheritableDomains = defaultDomains.filter((domain) => {
+				const host = hostOf(domain);
+				return host !== null && !existingBrands.some((existing) => brandOwnsHost(existing, host));
+			});
+
+			// El vínculo que hace visible la marca: `requireOrgAccess` compara `member.organization_id`
+			// contra el id de la marca, así que la organización tiene que nacer con ese mismo id — y en
+			// esta misma transacción, o el alta deja una marca huérfana si el proceso muere en el medio.
+			// Es la misma fila que crea `provisionAdditionalLocalOrg` en local; se escribe acá y no se
+			// delega porque el helper abre su propia transacción, y dos transacciones no son una.
+			await tx
+				.insert(organization)
+				.values({ id: identity.brandId, name, slug: identity.brandId, createdAt: new Date() })
+				.onConflictDoNothing({ target: organization.id });
+
+			const [existingMember] = await tx
+				.select({ id: member.id })
+				.from(member)
+				.where(and(eq(member.organizationId, identity.brandId), eq(member.userId, session.user.id)))
+				.limit(1);
+			if (existingMember === undefined) {
+				await tx.insert(member).values({
+					id: crypto.randomUUID(),
+					organizationId: identity.brandId,
+					userId: session.user.id,
+					role: "admin",
+					createdAt: new Date(),
+				});
+			}
+
+			const inserted = await tx
+				.insert(brands)
+				.values({
+					...brandValues,
+					id: identity.brandId,
+					...(inheritableDomains.length > 0 && { additionalDomains: inheritableDomains }),
+				})
+				.onConflictDoNothing()
+				.returning();
+
+			const brand =
+				inserted[0] ??
+				(await tx.query.brands.findFirst({
+					where: eq(brands.id, identity.brandId),
+				}));
+
+			if (!brand) throw new Error("Failed to create brand");
+
+			return {
+				brandId: brand.id,
+				name: brand.name,
+				website: brand.website,
+				created: inserted.length > 0,
+			};
+		});
+	});
+
 /**
  * Update a brand
  */
@@ -273,11 +426,11 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 		if (!normalized.ok) {
 			throw new Error(normalized.error);
 		}
-		const updateData = { 
-			...normalized.updates, 
+		const updateData = {
+			...normalized.updates,
 			...(data.targetMarket !== undefined && { targetMarket: data.targetMarket }),
 			...(data.targetLanguage !== undefined && { targetLanguage: data.targetLanguage }),
-			...(data.shortDescription !== undefined && { shortDescription: data.shortDescription })
+			...(data.shortDescription !== undefined && { shortDescription: data.shortDescription }),
 		};
 
 		const result = await db
@@ -384,12 +537,7 @@ export const addDomainToBrandFn = createServerFn({ method: "POST" })
 				additionalDomains: sql`array_append(${brands.additionalDomains}, ${domain})`,
 				updatedAt: new Date(),
 			})
-			.where(
-				and(
-					eq(brands.id, data.brandId),
-					sql`NOT (${domain} = ANY(${brands.additionalDomains}))`,
-				),
-			)
+			.where(and(eq(brands.id, data.brandId), sql`NOT (${domain} = ANY(${brands.additionalDomains}))`))
 			.returning();
 
 		if (result) return result;

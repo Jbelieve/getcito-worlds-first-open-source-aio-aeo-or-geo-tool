@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
 import { formatDateStr, formatDateTime } from "@/lib/app-locale";
+import { NewBrandCard } from "@/components/new-brand-card";
 import { getAppName } from "@/lib/route-head";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table";
@@ -456,6 +457,9 @@ function AdminDashboard() {
 					<p className="text-muted-foreground">Monitor and manage brands, prompts, and job scheduling</p>
 				</div>
 			</div>
+
+			{/* Alta de marca: la pagina lista y ajusta marcas, y antes no tenia como dar una de alta. */}
+			<NewBrandCard onCreated={fetchBrandStats} />
 
 			{/* Summary Cards with Charts */}
 			<div className="grid gap-4 sm:grid-cols-2">
