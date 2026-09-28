@@ -1,0 +1,18 @@
+apps/web/src/server/mcp/tools/actions.ts
+  h_c5ca005a78c880 18,91-96,98-105,107-112,123-124,127,136-137
+apps/web/src/server/brands.ts
+  h_c5ca005a78c880 6-21,23,25-27,30,80,255-399,429-430,433,540
+apps/web/src/lib/brand-id.ts
+  h_c5ca005a78c880 1-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "222a477ff75ed308d71fa0f79b49ba7c3c5f25a8",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
