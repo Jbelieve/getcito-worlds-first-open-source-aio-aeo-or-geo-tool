@@ -1,0 +1,24 @@
+apps/web/src/routes/_authed/app/$brand/claims.tsx
+  h_c5ca005a78c880 3-8,30-32,34,45-48
+apps/web/src/server/claims-core.ts
+  h_c5ca005a78c880 2-3,5-9,11-13,16-23,29-30,159-298
+apps/web/src/server/claims.ts
+  h_c5ca005a78c880 3,13-14,16,22,29-34,39-72,160,164-171,175,179-183
+packages/aos-aps/src/claims/claim-input.test.ts
+  h_c5ca005a78c880 1-123
+packages/aos-aps/src/claims/claim-input.ts
+  h_c5ca005a78c880 1-231
+packages/aos-aps/src/claims/index.ts
+  h_c5ca005a78c880 4-9,12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fb23e61929f284b5a9421546c14c1c911e9da491",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
