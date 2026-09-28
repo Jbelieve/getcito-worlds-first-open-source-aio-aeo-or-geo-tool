@@ -9,9 +9,12 @@
  *
  * Las herramientas de "asegurar" (`ensure_brand`, `ensure_entity`, `ensure_prompt_library`) son las
  * únicas que crean filas, y son idempotentes a propósito: un consumidor que reintenta no duplica una
- * marca, no rompe una jerarquía ni quema una generación de biblioteca.
+ * marca, no rompe una jerarquía ni quema una generación de biblioteca. `upsert_claim` y `delete_claim`
+ * escriben la capa de pruebas con el mismo núcleo de la pantalla (`claims-core`), que es la única puerta
+ * del alta: si el MCP validara por su cuenta, podría guardar lo que la pantalla rechaza.
  */
 
+import { CONFIDENTIALITY, VERIFIABLE_BY } from "@workspace/aos-aps/preference";
 import { db } from "@workspace/lib/db/db";
 import { brands, type NewBrand } from "@workspace/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -21,7 +24,14 @@ import { ensurePromptLibraryForEntity, PromptLibraryError, startApsRunForBrand }
 import { generateAssetsForEntity, setEntityPublished } from "@/server/agent-assets-core";
 import { EnsureEntityError, ensureEntity as ensureEntityCore } from "@/server/agent-entities-core";
 import { syncAgentDnaForEntity } from "@/server/agent-maasy-core";
-import { ClaimNotFoundError, setClaimInheritable as setClaimInheritableCore } from "@/server/claims-core";
+import {
+	ClaimEntityNotFoundError,
+	ClaimInputError,
+	ClaimNotFoundError,
+	deleteClaim as deleteClaimCore,
+	setClaimInheritable as setClaimInheritableCore,
+	upsertClaim as upsertClaimCore,
+} from "@/server/claims-core";
 import type { McpTool } from "../jsonrpc";
 import {
 	optionalBoolean,
@@ -428,6 +438,171 @@ const publishAgentAssets: McpTool = {
 };
 
 /**
+ * El alta de una prueba, por MCP.
+ *
+ * Es la pieza que faltaba: por acá se podía crear la marca y la entidad, pero no la prueba, que es lo que
+ * decide si la marca puede publicar. Sin esto, un producto como Autex creaba la marca y se trababa en la
+ * capa que BeAOS tiene y Maasy no.
+ *
+ * El claim **nace en BeAOS**: Maasy manda la evidencia en prosa y la estructura (id, límites, con qué
+ * documento se verifica) la pone quien la afirma. El tool no deduce nada de un texto libre —no inventa
+ * pruebas—, solo guarda lo que el consumidor ya decidió afirmar.
+ */
+const upsertClaim: McpTool = {
+	name: "upsert_claim",
+	title: "Dar de alta o editar una prueba",
+	description:
+		"Crea o actualiza una prueba de la marca —afirmación, número, límites y el documento que la prueba— y devuelve el claim guardado con el mismo serializador que list_claims, así el consumidor no tiene que volver a leerlo. Usala cuando haya evidencia concreta que ya se puede afirmar: un resultado medido, un testimonio, una metodología, un volumen de trabajo. **La prueba nace en BeAOS, no en Maasy**: Maasy manda la evidencia en prosa (client_results, testimonials, social_proof_count) y la estructura la pone acá quien la afirma, con el fragmento original en `sourceFragment` para que se lea qué se confirmó; BeAOS no convierte un texto en una prueba por su cuenta. El `claimId` es del operador y tiene que cumplir CLM-[A-Z0-9-]+: guardar dos veces el mismo id en la misma entidad **actualiza** esa prueba, no la duplica. Es un alta completa, no un parche: los campos opcionales que no mandás quedan vacíos, así que para editar leé primero con get_claim. Con `status: draft` la prueba se guarda pero **no entra al bundle**; recién con `status: confirmed` entra al perfil, y hay que regenerar los assets para que el bundle la declare. Devuelve si se creó o se actualizó, el claim entero y los avisos del estándar (por ejemplo, una prueba sin `verifiableBy` queda declarada como no verificable).",
+	inputSchema: {
+		type: "object",
+		properties: {
+			brandId: { type: "string", description: "Id de la marca dueña de la entidad." },
+			entityId: { type: "string", description: "UUID de la entidad que firma la prueba (ver get_brand)." },
+			claimId: {
+				type: "string",
+				description: "Id estable de la prueba, con el formato CLM-[A-Z0-9-]+ (ej. CLM-MARCA-100-PROYECTOS).",
+			},
+			statement: { type: "string", description: "La afirmación, redactada por el humano que la confirma." },
+			status: {
+				type: "string",
+				enum: ["draft", "confirmed"],
+				description: "`draft` no entra al bundle; `confirmed` sí, y es lo que el sitio va a firmar.",
+			},
+			proofType: {
+				type: "string",
+				description:
+					"Tipo de prueba. El del estándar (case_study, testimonial, aggregate_metric, third_party_review, publication, credential) no genera avisos; los propios de BeAOS (document, audit, other) se guardan y el perfil los marca con un aviso APS-CLAIM-01.",
+			},
+			proofTitle: { type: "string", description: "Título del documento o de la fuente que prueba el claim." },
+			metric: { type: "string", description: "El número tal como está en la evidencia (ej. `35%`). No se normaliza." },
+			category: {
+				type: "string",
+				enum: ["outcome", "methodology", "experience", "scope", "performance"],
+				description: "Categoría del claim, si el operador la declaró.",
+			},
+			boundaryApplicableFor: { type: "string", description: "Cuándo SÍ aplica el claim. El estándar lo exige." },
+			boundaryNotApplicableFor: { type: "string", description: "Cuándo NO aplica el claim. El estándar lo exige." },
+			proofSummary: { type: "string", description: "Resumen de la prueba, tal como se lee en el perfil." },
+			proofClient: { type: "string", description: "Cliente de la prueba, si se puede nombrar." },
+			verifiableBy: {
+				type: "string",
+				enum: VERIFIABLE_BY,
+				description:
+					"Cómo lo comprueba un agente: public_url, third_party_platform, signed_client o internal. Si no viene, la prueba queda declarada como no verificable.",
+			},
+			confidentiality: {
+				type: "string",
+				enum: CONFIDENTIALITY,
+				description: "Nivel de confidencialidad de la evidencia: public, anonymized o nda.",
+			},
+			sourceFragment: {
+				type: "string",
+				description:
+					"El texto original de Maasy que el operador confirmó. Copia literal, no un resumen: es la trazabilidad de la prueba.",
+			},
+			inheritable: {
+				type: "boolean",
+				description:
+					"Si las sub-entidades pueden heredarla. Si no lo mandás, no se toca: heredar es una decisión del operador y editarlo una prueba no puede borrarla de rebote.",
+			},
+		},
+		required: ["brandId", "entityId", "claimId", "statement", "status", "proofType", "proofTitle"],
+		additionalProperties: false,
+	},
+	handler: async (args) => {
+		const brandId = requireString(args, "brandId");
+		const entityId = requireUuid(args, "entityId");
+		const inheritable = optionalBoolean(args, "inheritable");
+		try {
+			const result = await upsertClaimCore({
+				brandId,
+				entityId,
+				claimId: requireString(args, "claimId"),
+				statement: requireString(args, "statement"),
+				status: requireString(args, "status"),
+				proofType: requireString(args, "proofType"),
+				proofTitle: requireString(args, "proofTitle"),
+				metric: optionalString(args, "metric"),
+				category: optionalString(args, "category"),
+				boundaryApplicableFor: optionalString(args, "boundaryApplicableFor"),
+				boundaryNotApplicableFor: optionalString(args, "boundaryNotApplicableFor"),
+				proofSummary: optionalString(args, "proofSummary"),
+				proofClient: optionalString(args, "proofClient"),
+				verifiableBy: optionalString(args, "verifiableBy"),
+				confidentiality: optionalString(args, "confidentiality"),
+				sourceFragment: optionalString(args, "sourceFragment"),
+				...(inheritable === undefined ? {} : { inheritable }),
+			});
+			const payload = {
+				entityId,
+				created: result.created,
+				claim: result.claim,
+				warnings: result.warnings,
+			};
+			const text = [
+				result.created
+					? `Prueba "${result.claim.claimId}" creada en la entidad "${entityId}".`
+					: `La prueba "${result.claim.claimId}" ya existía en esa entidad; se actualizó.`,
+				result.claim.status === "draft"
+					? "Quedó como borrador: no entra al bundle hasta que se confirme."
+					: "Quedó confirmada: regenerá los assets para que el bundle la declare.",
+				...(result.warnings.length === 0 ? [] : ["Avisos del estándar:", ...result.warnings.map((w) => `- ${w}`)]),
+			].join("\n");
+			return textResult(text, payload);
+		} catch (error) {
+			// Un formulario inválido o una entidad de otra marca son errores que el llamador puede corregir:
+			// el mensaje viaja tal cual, con el formato esperado.
+			if (error instanceof ClaimInputError || error instanceof ClaimEntityNotFoundError) {
+				throw new ToolInputError(error.message);
+			}
+			throw error;
+		}
+	},
+};
+
+/**
+ * La contracara de `upsert_claim`, y con la misma puerta.
+ *
+ * Borra **de BeAOS**. Un bundle ya publicado sigue sirviendo la prueba hasta que se regenere y se vuelva a
+ * publicar: no hay borrado en el sitio por este camino, y decirlo evita que un consumidor crea que
+ * despublicó algo.
+ */
+const deleteClaim: McpTool = {
+	name: "delete_claim",
+	title: "Borrar una prueba",
+	description:
+		"Borra una prueba de una entidad por su claimId. Usala cuando la prueba ya no se puede sostener —el cliente retiró el permiso, el número quedó viejo, la afirmación era incorrecta—: una prueba que no se puede verificar es peor que su ausencia. Solo borra filas propias de esa entidad: una prueba que la entidad hereda del paraguas se edita o se borra en el paraguas, y una prueba de otra entidad no se toca. Borrar dos veces no es un error: devuelve `deleted: false` cuando ya no estaba. No despublica nada: si el bundle ya estaba publicado, sigue sirviendo la prueba hasta que regeneres los assets y vuelvas a publicar.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			brandId: { type: "string", description: "Id de la marca dueña de la entidad." },
+			entityId: { type: "string", description: "UUID de la entidad dueña de la prueba (ver get_brand)." },
+			claimId: { type: "string", description: "Id de la prueba a borrar, por ejemplo CLM-MARCA-100-PROYECTOS." },
+		},
+		required: ["brandId", "entityId", "claimId"],
+		additionalProperties: false,
+	},
+	handler: async (args) => {
+		const brandId = requireString(args, "brandId");
+		const entityId = requireUuid(args, "entityId");
+		const claimId = requireString(args, "claimId");
+		try {
+			const result = await deleteClaimCore({ brandId, entityId, claimId });
+			const payload = { entityId, claimId: result.claimId, deleted: result.deleted };
+			const text = result.deleted
+				? `Prueba "${result.claimId}" borrada de la entidad "${entityId}". Regenerá los assets para que el bundle deje de declararla.`
+				: `No existía la prueba "${result.claimId}" en esa entidad: no había nada que borrar.`;
+			return textResult(text, payload);
+		} catch (error) {
+			if (error instanceof ClaimInputError || error instanceof ClaimEntityNotFoundError) {
+				throw new ToolInputError(error.message);
+			}
+			throw error;
+		}
+	},
+};
+
+/**
  * La marca de heredable, por MCP.
  *
  * Es la misma acción de la pantalla de Pruebas, contra el mismo núcleo: si un consumidor marca un caso de
@@ -481,6 +656,8 @@ export const actionTools: McpTool[] = [
 	ensurePromptLibrary,
 	startApsRun,
 	syncBrandDna,
+	upsertClaim,
+	deleteClaim,
 	generateAgentAssetsTool,
 	publishAgentAssets,
 	setClaimInheritable,

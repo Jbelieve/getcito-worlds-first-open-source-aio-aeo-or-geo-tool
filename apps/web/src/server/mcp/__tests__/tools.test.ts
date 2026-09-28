@@ -46,6 +46,18 @@ describe("registro de tools del MCP de BeAOS", () => {
 		expect(requiredOf("publish_agent_assets")).toEqual(["brandId", "entityId", "published"]);
 		// La marca de heredable no se puede aplicar "a lo que haya": pide la prueba y el valor nuevo.
 		expect(requiredOf("set_claim_inheritable")).toEqual(["brandId", "entityId", "claimId", "inheritable"]);
+		// El alta de una prueba pide lo mínimo para que sea una prueba y no un texto suelto: la afirmación,
+		// el estado, con qué se prueba y cómo se identifica. Lo demás es del operador y es opcional.
+		expect(requiredOf("upsert_claim")).toEqual([
+			"brandId",
+			"entityId",
+			"claimId",
+			"statement",
+			"status",
+			"proofType",
+			"proofTitle",
+		]);
+		expect(requiredOf("delete_claim")).toEqual(["brandId", "entityId", "claimId"]);
 	});
 
 	it("las acciones de alta piden lo mínimo para ser idempotentes y no inventar datos", () => {
@@ -66,6 +78,7 @@ describe("registro de tools del MCP de BeAOS", () => {
 			"list_aps_runs",
 			"get_aps_score_detail",
 			"list_claims",
+			"get_claim",
 			"get_agent_bundle",
 			"get_agent_asset",
 		]) {
@@ -76,6 +89,8 @@ describe("registro de tools del MCP de BeAOS", () => {
 	it("la lectura de pruebas y la marca de heredable exigen marca y entidad", () => {
 		const requiredOf = (name: string) => BEAOS_MCP_TOOLS.find((tool) => tool.name === name)?.inputSchema.required;
 		expect(requiredOf("list_claims")).toEqual(["brandId", "entityId"]);
+		// Una prueba no se puede leer ni marcar "por id suelto": el id es único por entidad, no global.
+		expect(requiredOf("get_claim")).toEqual(["brandId", "entityId", "claimId"]);
 	});
 
 	it("están las lecturas heredadas de Getcito, y todas exigen una marca", () => {
@@ -98,6 +113,7 @@ describe("registro de tools del MCP de BeAOS", () => {
 	it("el registro completo es el esperado: nada se cae por accidente", () => {
 		expect(BEAOS_MCP_TOOLS.map((tool) => tool.name).sort()).toEqual(
 			[
+				"delete_claim",
 				"ensure_brand",
 				"ensure_entity",
 				"ensure_prompt_library",
@@ -107,6 +123,7 @@ describe("registro de tools del MCP de BeAOS", () => {
 				"get_aos_audit",
 				"get_aps_score_detail",
 				"get_brand",
+				"get_claim",
 				"get_opportunities",
 				"get_query_fanout",
 				"get_share_of_voice",
@@ -122,8 +139,22 @@ describe("registro de tools del MCP de BeAOS", () => {
 				"set_claim_inheritable",
 				"start_aps_run",
 				"sync_brand_dna",
+				"upsert_claim",
 			].sort(),
 		);
+		// El conteo es parte del contrato con quien audita el MCP: si alguien agrega o saca un tool, este
+		// número y la tabla de MCP-BEAOS.md tienen que moverse juntos.
+		expect(BEAOS_MCP_TOOLS).toHaveLength(27);
+	});
+
+	it("las herramientas de prueba escriben por el núcleo, no por una puerta propia", () => {
+		// La descripción tiene que decir que la prueba nace en BeAOS: es lo que un agente que llega sin
+		// contexto necesita saber para no esperar que Maasy se la mande hecha.
+		const upsert = BEAOS_MCP_TOOLS.find((tool) => tool.name === "upsert_claim");
+		expect(upsert?.description).toContain("nace en BeAOS");
+		expect(upsert?.description).toContain("CLM-[A-Z0-9-]+");
+		// Y que un borrador no entra al bundle, que es la regla que decide si la marca puede publicar.
+		expect(upsert?.description).toContain("no entra al bundle");
 	});
 
 	it("el servidor se identifica y explica por dónde empezar", () => {
