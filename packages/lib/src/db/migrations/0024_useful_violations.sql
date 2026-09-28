@@ -1,0 +1,3 @@
+ALTER TABLE "agent_brand_claims" ADD COLUMN "inheritable" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_brand_claims" ADD COLUMN "inherited_from_entity_id" uuid;--> statement-breakpoint
+ALTER TABLE "agent_brand_claims" ADD CONSTRAINT "agent_brand_claims_inherited_from_entity_id_agent_brand_entities_id_fk" FOREIGN KEY ("inherited_from_entity_id") REFERENCES "public"."agent_brand_entities"("id") ON DELETE cascade ON UPDATE no action;

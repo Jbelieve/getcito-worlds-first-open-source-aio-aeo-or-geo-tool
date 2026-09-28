@@ -35,6 +35,8 @@ function row(overrides: Partial<AgentBrandClaim> = {}): AgentBrandClaim {
 		confidentiality: "anonymized",
 		sourceFragment: "Aumento promedio de 35% en tasa de conversión…",
 		status: "confirmed",
+		inheritable: false,
+		inheritedFromEntityId: null,
 		createdAt: new Date("2026-09-25T00:00:00.000Z"),
 		updatedAt: new Date("2026-09-25T00:00:00.000Z"),
 		...overrides,

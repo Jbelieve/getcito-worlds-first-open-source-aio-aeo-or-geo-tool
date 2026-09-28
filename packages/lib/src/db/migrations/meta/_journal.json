@@ -169,6 +169,13 @@
       "when": 1790548188539,
       "tag": "0023_broken_stepford_cuckoos",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790553648195,
+      "tag": "0024_useful_violations",
+      "breakpoints": true
     }
   ]
 }
