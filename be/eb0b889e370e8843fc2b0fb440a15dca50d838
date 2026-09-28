@@ -1,0 +1,16 @@
+packages/aos-aps/src/claims/mapping.test.ts
+  h_c5ca005a78c880 256-268,345,347-348
+packages/aos-aps/src/claims/mapping.ts
+  h_c5ca005a78c880 64-68,79,81-84,91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "beeb0b889e370e8843fc2b0fb440a15dca50d838",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
