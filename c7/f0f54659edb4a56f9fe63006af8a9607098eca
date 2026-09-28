@@ -1,0 +1,16 @@
+apps/web/src/server/mcp/__tests__/tools.test.ts
+  h_c5ca005a78c880 165-188
+apps/web/src/server/mcp/tools/index.ts
+  h_c5ca005a78c880 4,6-7,24-30,32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c7f0f54659edb4a56f9fe63006af8a9607098eca",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
