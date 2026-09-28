@@ -15,6 +15,7 @@
 import { db } from "@workspace/lib/db/db";
 import { brands, type NewBrand } from "@workspace/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { resolveBrandIdentity } from "@/lib/brand-id";
 import { hostOf } from "@/lib/report-agent";
 import { ensurePromptLibraryForEntity, PromptLibraryError, startApsRunForBrand } from "@/server/agent-aps-core";
 import { generateAssetsForEntity, setEntityPublished } from "@/server/agent-assets-core";
@@ -38,22 +39,6 @@ import {
 import { errorResult, json } from "./helpers";
 
 const ENTITY_TYPES = ["umbrella", "product"] as const;
-
-/** Un id legible a partir del host: `autex.porsche.com` → `autex-porsche-com`. Nunca un uuid. */
-function brandIdFromHost(host: string): string {
-	const slug = host
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "");
-	return slug.length > 0 ? slug : "brand";
-}
-
-function uniqueBrandId(base: string, taken: Set<string>): string {
-	if (taken.has(base) === false) return base;
-	let suffix = 2;
-	while (taken.has(`${base}-${suffix}`)) suffix += 1;
-	return `${base}-${suffix}`;
-}
 
 const ensureBrand: McpTool = {
 	name: "ensure_brand",
@@ -103,21 +88,28 @@ const ensureBrand: McpTool = {
 		const keywords = optionalStringArray(args, "keywords");
 
 		const existing = await db
-			.select({ id: brands.id, website: brands.website, additionalDomains: brands.additionalDomains })
+			.select({
+				id: brands.id,
+				name: brands.name,
+				website: brands.website,
+				additionalDomains: brands.additionalDomains,
+			})
 			.from(brands);
-		const byHost = existing.find(
-			(row) => hostOf(row.website) === host || row.additionalDomains.some((domain) => hostOf(domain) === host),
-		);
-		const byId = providedId === undefined ? undefined : existing.find((row) => row.id === providedId);
+		// El criterio vive en `@/lib/brand-id` y es el mismo que usa la UI
+		// (`createBrandForCurrentUserFn`): un alta por MCP y un alta por `/admin` no pueden divergir.
+		const identity = resolveBrandIdentity({
+			website,
+			existing,
+			...(providedId === undefined ? {} : { providedId }),
+		});
+		if ("error" in identity) throw new ToolInputError(identity.error);
 
-		if (byId !== undefined && byHost !== undefined && byId.id !== byHost.id) {
-			throw new ToolInputError(
-				`El host "${host}" ya pertenece a la marca "${byHost.id}"; no se reasigna a "${byId.id}".`,
-			);
-		}
-
-		const target = byId ?? byHost;
-		if (target !== undefined) {
+		if (identity.action === "reuse") {
+			const target = existing.find((row) => row.id === identity.brandId);
+			if (target === undefined) throw new ToolInputError(`No se pudo resolver la marca "${identity.brandId}".`);
+			const byHost = identity.matchedBy === "host";
+			// Un reuso por host actualiza la marca con lo que mandó el consumidor; un reuso por id
+			// explícito también, porque el consumidor declaró que quiere escribir sobre esa marca.
 			const patch: Partial<NewBrand> = { name, website };
 			if (additionalDomains !== undefined) patch.additionalDomains = additionalDomains;
 			if (aliases !== undefined) patch.aliases = aliases;
@@ -128,11 +120,11 @@ const ensureBrand: McpTool = {
 			if (keywords !== undefined) patch.keywords = keywords;
 			await db.update(brands).set(patch).where(eq(brands.id, target.id));
 			const payload = { brandId: target.id, created: false };
-			return textResult(`La marca "${target.id}" ya existía para el host ${host}; se actualizó.`, payload);
+			const reason = byHost ? `ya existía para el host ${host}` : `ya existía con el id "${target.id}"`;
+			return textResult(`La marca "${target.id}" ${reason}; se actualizó.`, payload);
 		}
 
-		const brandId = providedId ?? uniqueBrandId(brandIdFromHost(host), new Set(existing.map((row) => row.id)));
-		const values: NewBrand = { id: brandId, name, website };
+		const values: NewBrand = { id: identity.brandId, name, website };
 		if (additionalDomains !== undefined) values.additionalDomains = additionalDomains;
 		if (aliases !== undefined) values.aliases = aliases;
 		if (targetMarket !== undefined) values.targetMarket = targetMarket;
@@ -141,8 +133,8 @@ const ensureBrand: McpTool = {
 		if (productsAndServices !== undefined) values.productsAndServices = productsAndServices;
 		if (keywords !== undefined) values.keywords = keywords;
 		await db.insert(brands).values(values);
-		const payload = { brandId, created: true };
-		return textResult(`Marca "${brandId}" creada para el host ${host}.`, payload);
+		const payload = { brandId: identity.brandId, created: true };
+		return textResult(`Marca "${identity.brandId}" creada para el host ${host}.`, payload);
 	},
 };
 
