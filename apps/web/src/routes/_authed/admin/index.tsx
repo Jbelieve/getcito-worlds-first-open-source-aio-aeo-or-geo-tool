@@ -1,16 +1,12 @@
 /**
  * /admin - Admin dashboard with brand statistics and charts
  */
-import { useEffect, useState, type ReactNode } from "react";
+
 import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
-import { formatDateStr, formatDateTime } from "@/lib/app-locale";
-import { getAppName } from "@/lib/route-head";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table";
 import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
-import { Label } from "@workspace/ui/components/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@workspace/ui/components/chart";
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import {
 	Dialog,
@@ -21,10 +17,16 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@workspace/ui/components/dialog";
+import { Input } from "@workspace/ui/components/input";
+import { Label } from "@workspace/ui/components/label";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@workspace/ui/components/chart";
-import { Settings, Trash2, TrendingUp, TrendingDown } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer } from "recharts";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table";
+import { Settings, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
+import { NewBrandCard } from "@/components/new-brand-card";
+import { formatDateStr, formatDateTime } from "@/lib/app-locale";
+import { getAppName } from "@/lib/route-head";
 import { adminDeleteBrandFn, getAdminStatsFn, updateDelayOverrideFn, updateEnabledModelsFn } from "@/server/admin";
 
 interface BrandStats {
@@ -101,8 +103,14 @@ function DelayOverrideDialog({ brand, onUpdate }: { brand: BrandStats; onUpdate:
 	const handleUpdate = async () => {
 		setError(null);
 		const totalHours = timeUnitsToHours(timeUnits);
-		if (totalHours === 0) { setError("Please enter a delay value"); return; }
-		if (totalHours < 1) { setError("Delay must be at least 1 hour"); return; }
+		if (totalHours === 0) {
+			setError("Please enter a delay value");
+			return;
+		}
+		if (totalHours < 1) {
+			setError("Delay must be at least 1 hour");
+			return;
+		}
 		setIsUpdating(true);
 		try {
 			await updateDelayOverrideFn({ data: { brandId: brand.id, delayOverrideHours: totalHours } });
@@ -132,28 +140,62 @@ function DelayOverrideDialog({ brand, onUpdate }: { brand: BrandStats; onUpdate:
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger asChild>
-				<Button variant="outline" size="sm" className="cursor-pointer"><Settings className="h-4 w-4" /></Button>
+				<Button variant="outline" size="sm" className="cursor-pointer">
+					<Settings className="h-4 w-4" />
+				</Button>
 			</DialogTrigger>
 			<DialogContent className="max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>Configure Job Delay for {brand.name}</DialogTitle>
-					<DialogDescription>Set a custom delay for how often prompt jobs run. Default is {formatDelayHours(defaultDelayHours)}.</DialogDescription>
+					<DialogDescription>
+						Set a custom delay for how often prompt jobs run. Default is {formatDelayHours(defaultDelayHours)}.
+					</DialogDescription>
 				</DialogHeader>
 				<div className="space-y-4 py-4">
 					<div className="space-y-3">
 						<Label>Custom Delay</Label>
 						<div className="grid grid-cols-3 gap-4">
 							<div className="space-y-2">
-								<Label htmlFor="weeks" className="text-xs text-muted-foreground">Weeks</Label>
-								<Input id="weeks" type="number" min="0" value={timeUnits.weeks || ""} onChange={(e) => handleUpdateUnit("weeks", e.target.value)} disabled={isUpdating} placeholder="0" />
+								<Label htmlFor="weeks" className="text-xs text-muted-foreground">
+									Weeks
+								</Label>
+								<Input
+									id="weeks"
+									type="number"
+									min="0"
+									value={timeUnits.weeks || ""}
+									onChange={(e) => handleUpdateUnit("weeks", e.target.value)}
+									disabled={isUpdating}
+									placeholder="0"
+								/>
 							</div>
 							<div className="space-y-2">
-								<Label htmlFor="days" className="text-xs text-muted-foreground">Days</Label>
-								<Input id="days" type="number" min="0" value={timeUnits.days || ""} onChange={(e) => handleUpdateUnit("days", e.target.value)} disabled={isUpdating} placeholder="0" />
+								<Label htmlFor="days" className="text-xs text-muted-foreground">
+									Days
+								</Label>
+								<Input
+									id="days"
+									type="number"
+									min="0"
+									value={timeUnits.days || ""}
+									onChange={(e) => handleUpdateUnit("days", e.target.value)}
+									disabled={isUpdating}
+									placeholder="0"
+								/>
 							</div>
 							<div className="space-y-2">
-								<Label htmlFor="hours" className="text-xs text-muted-foreground">Hours</Label>
-								<Input id="hours" type="number" min="0" value={timeUnits.hours || ""} onChange={(e) => handleUpdateUnit("hours", e.target.value)} disabled={isUpdating} placeholder="0" />
+								<Label htmlFor="hours" className="text-xs text-muted-foreground">
+									Hours
+								</Label>
+								<Input
+									id="hours"
+									type="number"
+									min="0"
+									value={timeUnits.hours || ""}
+									onChange={(e) => handleUpdateUnit("hours", e.target.value)}
+									disabled={isUpdating}
+									placeholder="0"
+								/>
 							</div>
 						</div>
 						<p className="text-sm text-muted-foreground">
@@ -161,18 +203,26 @@ function DelayOverrideDialog({ brand, onUpdate }: { brand: BrandStats; onUpdate:
 							{brand.delayOverrideHours !== null && " (custom)"}
 							{brand.delayOverrideHours === null && " (default)"}
 						</p>
-						<p className="text-sm text-muted-foreground">Total: <strong>{formatDelayHours(timeUnitsToHours(timeUnits))}</strong></p>
+						<p className="text-sm text-muted-foreground">
+							Total: <strong>{formatDelayHours(timeUnitsToHours(timeUnits))}</strong>
+						</p>
 					</div>
 					{error && <p className="text-sm text-destructive">{error}</p>}
 				</div>
 				<DialogFooter>
 					<div className="flex justify-between w-full">
 						{brand.delayOverrideHours !== null && (
-							<Button variant="outline" onClick={handleClearOverride} disabled={isUpdating} className="cursor-pointer">Clear Override</Button>
+							<Button variant="outline" onClick={handleClearOverride} disabled={isUpdating} className="cursor-pointer">
+								Clear Override
+							</Button>
 						)}
 						<div className="flex gap-2 ml-auto">
-							<Button variant="outline" onClick={() => setOpen(false)} disabled={isUpdating} className="cursor-pointer">Cancel</Button>
-							<Button onClick={handleUpdate} disabled={isUpdating} className="cursor-pointer">{isUpdating ? "Updating..." : "Update"}</Button>
+							<Button variant="outline" onClick={() => setOpen(false)} disabled={isUpdating} className="cursor-pointer">
+								Cancel
+							</Button>
+							<Button onClick={handleUpdate} disabled={isUpdating} className="cursor-pointer">
+								{isUpdating ? "Updating..." : "Update"}
+							</Button>
 						</div>
 					</div>
 				</DialogFooter>
@@ -181,7 +231,15 @@ function DelayOverrideDialog({ brand, onUpdate }: { brand: BrandStats; onUpdate:
 	);
 }
 
-function EnabledModelsDialog({ brand, availableModels, onUpdate }: { brand: BrandStats, availableModels: string[], onUpdate: () => void }) {
+function EnabledModelsDialog({
+	brand,
+	availableModels,
+	onUpdate,
+}: {
+	brand: BrandStats;
+	availableModels: string[];
+	onUpdate: () => void;
+}) {
 	const [open, setOpen] = useState(false);
 	const [isUpdating, setIsUpdating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -233,7 +291,9 @@ function EnabledModelsDialog({ brand, availableModels, onUpdate }: { brand: Bran
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger asChild>
-				<Button variant="outline" size="sm" className="cursor-pointer">LLMs</Button>
+				<Button variant="outline" size="sm" className="cursor-pointer">
+					LLMs
+				</Button>
 			</DialogTrigger>
 			<DialogContent className="max-w-md">
 				<DialogHeader>
@@ -242,15 +302,15 @@ function EnabledModelsDialog({ brand, availableModels, onUpdate }: { brand: Bran
 				</DialogHeader>
 				<div className="space-y-4 py-4">
 					<div className="flex items-center space-x-2">
-						<Checkbox 
-							id="use-global" 
-							checked={useGlobal} 
+						<Checkbox
+							id="use-global"
+							checked={useGlobal}
 							onCheckedChange={(c) => {
 								setUseGlobal(!!c);
 								if (c) {
 									setSelectedModels(new Set(availableModels));
 								}
-							}} 
+							}}
 						/>
 						<Label htmlFor="use-global">Use global default ({availableModels.length} models)</Label>
 					</div>
@@ -262,8 +322,8 @@ function EnabledModelsDialog({ brand, availableModels, onUpdate }: { brand: Bran
 						) : (
 							availableModels.map((model) => (
 								<div key={model} className="flex items-center space-x-2">
-									<Checkbox 
-										id={`model-${model}`} 
+									<Checkbox
+										id={`model-${model}`}
 										checked={useGlobal ? true : selectedModels.has(model)}
 										disabled={useGlobal}
 										onCheckedChange={() => handleToggleModel(model)}
@@ -279,8 +339,12 @@ function EnabledModelsDialog({ brand, availableModels, onUpdate }: { brand: Bran
 				</div>
 				<DialogFooter>
 					<div className="flex gap-2 ml-auto">
-						<Button variant="outline" onClick={() => setOpen(false)} disabled={isUpdating} className="cursor-pointer">Cancel</Button>
-						<Button onClick={handleUpdate} disabled={isUpdating} className="cursor-pointer">{isUpdating ? "Saving..." : "Save"}</Button>
+						<Button variant="outline" onClick={() => setOpen(false)} disabled={isUpdating} className="cursor-pointer">
+							Cancel
+						</Button>
+						<Button onClick={handleUpdate} disabled={isUpdating} className="cursor-pointer">
+							{isUpdating ? "Saving..." : "Save"}
+						</Button>
 					</div>
 				</DialogFooter>
 			</DialogContent>
@@ -326,8 +390,8 @@ function DeleteBrandDialog({ brand, onUpdate }: { brand: BrandStats; onUpdate: (
 				<DialogHeader>
 					<DialogTitle>Delete {brand.name}?</DialogTitle>
 					<DialogDescription>
-						This permanently deletes the brand along with its prompts, runs, citations, competitors and
-						opportunities. It cannot be undone.
+						This permanently deletes the brand along with its prompts, runs, citations, competitors and opportunities.
+						It cannot be undone.
 					</DialogDescription>
 				</DialogHeader>
 				<div className="space-y-2 py-4">
@@ -365,12 +429,27 @@ function DeleteBrandDialog({ brand, onUpdate }: { brand: BrandStats; onUpdate: (
 
 function ActivityIndicator({ added, removed }: { added: number; removed: number }) {
 	if (added === 0 && removed === 0) {
-		return <div className="flex items-center text-muted-foreground"><span className="w-4 mr-1" /><span>0</span></div>;
+		return (
+			<div className="flex items-center text-muted-foreground">
+				<span className="w-4 mr-1" />
+				<span>0</span>
+			</div>
+		);
 	}
 	return (
 		<div className="flex items-center gap-2">
-			{added > 0 && <div className="flex items-center text-green-600"><TrendingUp className="h-4 w-4 mr-1" /><span>+{added}</span></div>}
-			{removed > 0 && <div className="flex items-center text-red-600"><TrendingDown className="h-4 w-4 mr-1" /><span>-{removed}</span></div>}
+			{added > 0 && (
+				<div className="flex items-center text-green-600">
+					<TrendingUp className="h-4 w-4 mr-1" />
+					<span>+{added}</span>
+				</div>
+			)}
+			{removed > 0 && (
+				<div className="flex items-center text-red-600">
+					<TrendingDown className="h-4 w-4 mr-1" />
+					<span>-{removed}</span>
+				</div>
+			)}
 		</div>
 	);
 }
@@ -415,19 +494,44 @@ function AdminDashboard() {
 		}
 	};
 
-	useEffect(() => { fetchBrandStats(); }, []);
+	useEffect(() => {
+		fetchBrandStats();
+	}, []);
 
 	if (loading) {
 		return (
 			<div className="space-y-8">
-				<div className="space-y-2"><Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-96" /></div>
-				<Card><CardHeader><Skeleton className="h-6 w-48" /></CardHeader><CardContent><div className="space-y-4">{[0, 1, 2, 3, 4].map((n) => <Skeleton key={n} className="h-16 w-full" />)}</div></CardContent></Card>
+				<div className="space-y-2">
+					<Skeleton className="h-8 w-64" />
+					<Skeleton className="h-4 w-96" />
+				</div>
+				<Card>
+					<CardHeader>
+						<Skeleton className="h-6 w-48" />
+					</CardHeader>
+					<CardContent>
+						<div className="space-y-4">
+							{[0, 1, 2, 3, 4].map((n) => (
+								<Skeleton key={n} className="h-16 w-full" />
+							))}
+						</div>
+					</CardContent>
+				</Card>
 			</div>
 		);
 	}
 
 	if (error) {
-		return <Card><CardHeader><CardTitle className="text-destructive">Error</CardTitle></CardHeader><CardContent><p>{error}</p></CardContent></Card>;
+		return (
+			<Card>
+				<CardHeader>
+					<CardTitle className="text-destructive">Error</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<p>{error}</p>
+				</CardContent>
+			</Card>
+		);
 	}
 
 	const totals = brands.reduce(
@@ -441,7 +545,11 @@ function AdminDashboard() {
 		{ totalBrands: 0, totalPrompts: 0, activePrompts: 0, promptRuns7Days: 0, promptRuns30Days: 0 },
 	);
 
-	const brandsYAxisMax = Math.max(...brandsOverTime.map((d) => d.count), ...activeBrandsOverTime.map((d) => d.count), 0);
+	const brandsYAxisMax = Math.max(
+		...brandsOverTime.map((d) => d.count),
+		...activeBrandsOverTime.map((d) => d.count),
+		0,
+	);
 
 	const dateFormatter = (value: string) => formatDateStr(value, { month: "short", day: "numeric" });
 
@@ -457,19 +565,43 @@ function AdminDashboard() {
 				</div>
 			</div>
 
+			{/* Alta de marca: la página lista y ajusta marcas, y antes no tenía cómo dar una de alta. */}
+			<NewBrandCard onCreated={fetchBrandStats} />
+
 			{/* Summary Cards with Charts */}
 			<div className="grid gap-4 sm:grid-cols-2">
 				<Card>
-					<CardHeader><CardTitle>All Brands</CardTitle><CardDescription>Total: {totals.totalBrands} brands</CardDescription></CardHeader>
+					<CardHeader>
+						<CardTitle>All Brands</CardTitle>
+						<CardDescription>Total: {totals.totalBrands} brands</CardDescription>
+					</CardHeader>
 					<CardContent className="p-0 pb-4">
-						<ChartContainer config={{ count: { label: "Total Brands", color: "#3b82f6" } }} className="h-[120px] w-full px-4">
+						<ChartContainer
+							config={{ count: { label: "Total Brands", color: "#3b82f6" } }}
+							className="h-[120px] w-full px-4"
+						>
 							<ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
 								<AreaChart data={brandsOverTime}>
-									<defs><linearGradient id="fillBrands" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1} /></linearGradient></defs>
+									<defs>
+										<linearGradient id="fillBrands" x1="0" y1="0" x2="0" y2="1">
+											<stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
+											<stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1} />
+										</linearGradient>
+									</defs>
 									<CartesianGrid strokeDasharray="3 3" vertical={false} />
-									<XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} minTickGap={30} tickFormatter={dateFormatter} />
+									<XAxis
+										dataKey="date"
+										tickLine={false}
+										axisLine={false}
+										tickMargin={8}
+										minTickGap={30}
+										tickFormatter={dateFormatter}
+									/>
 									<YAxis tickLine={false} axisLine={false} tickMargin={8} width={40} domain={[0, brandsYAxisMax]} />
-									<ChartTooltip isAnimationActive={false} content={<ChartTooltipContent className="min-w-[180px]" labelFormatter={tooltipLabelFormatter} />} />
+									<ChartTooltip
+										isAnimationActive={false}
+										content={<ChartTooltipContent className="min-w-[180px]" labelFormatter={tooltipLabelFormatter} />}
+									/>
 									<Area type="monotone" dataKey="count" stroke="#3b82f6" fill="url(#fillBrands)" strokeWidth={2} />
 								</AreaChart>
 							</ResponsiveContainer>
@@ -478,17 +610,46 @@ function AdminDashboard() {
 				</Card>
 
 				<Card>
-					<CardHeader><CardTitle>Active Brands</CardTitle><CardDescription>With runs in last 30 days: {activeBrandsOverTime[activeBrandsOverTime.length - 1]?.count ?? 0}</CardDescription></CardHeader>
+					<CardHeader>
+						<CardTitle>Active Brands</CardTitle>
+						<CardDescription>
+							With runs in last 30 days: {activeBrandsOverTime[activeBrandsOverTime.length - 1]?.count ?? 0}
+						</CardDescription>
+					</CardHeader>
 					<CardContent className="p-0 pb-4">
-						<ChartContainer config={{ count: { label: "Active Brands", color: "#22c55e" } }} className="h-[120px] w-full px-4">
+						<ChartContainer
+							config={{ count: { label: "Active Brands", color: "#22c55e" } }}
+							className="h-[120px] w-full px-4"
+						>
 							<ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
 								<AreaChart data={activeBrandsOverTime}>
-									<defs><linearGradient id="fillActiveBrands" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.8} /><stop offset="95%" stopColor="#22c55e" stopOpacity={0.1} /></linearGradient></defs>
+									<defs>
+										<linearGradient id="fillActiveBrands" x1="0" y1="0" x2="0" y2="1">
+											<stop offset="5%" stopColor="#22c55e" stopOpacity={0.8} />
+											<stop offset="95%" stopColor="#22c55e" stopOpacity={0.1} />
+										</linearGradient>
+									</defs>
 									<CartesianGrid strokeDasharray="3 3" vertical={false} />
-									<XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} minTickGap={30} tickFormatter={dateFormatter} />
+									<XAxis
+										dataKey="date"
+										tickLine={false}
+										axisLine={false}
+										tickMargin={8}
+										minTickGap={30}
+										tickFormatter={dateFormatter}
+									/>
 									<YAxis tickLine={false} axisLine={false} tickMargin={8} width={40} domain={[0, brandsYAxisMax]} />
-									<ChartTooltip isAnimationActive={false} content={<ChartTooltipContent className="min-w-[180px]" labelFormatter={tooltipLabelFormatter} />} />
-									<Area type="monotone" dataKey="count" stroke="#22c55e" fill="url(#fillActiveBrands)" strokeWidth={2} />
+									<ChartTooltip
+										isAnimationActive={false}
+										content={<ChartTooltipContent className="min-w-[180px]" labelFormatter={tooltipLabelFormatter} />}
+									/>
+									<Area
+										type="monotone"
+										dataKey="count"
+										stroke="#22c55e"
+										fill="url(#fillActiveBrands)"
+										strokeWidth={2}
+									/>
 								</AreaChart>
 							</ResponsiveContainer>
 						</ChartContainer>
@@ -496,25 +657,76 @@ function AdminDashboard() {
 				</Card>
 
 				<Card>
-					<CardHeader><CardTitle>Prompts</CardTitle><CardDescription>Active: {totals.activePrompts} | Total: {totals.totalPrompts}</CardDescription></CardHeader>
+					<CardHeader>
+						<CardTitle>Prompts</CardTitle>
+						<CardDescription>
+							Active: {totals.activePrompts} | Total: {totals.totalPrompts}
+						</CardDescription>
+					</CardHeader>
 					<CardContent className="p-0 pb-4">
-						<ChartContainer config={{ enabled: { label: "Enabled", color: "#10b981" }, disabled: { label: "Disabled", color: "#ef4444" } }} className="h-[120px] w-full px-4">
+						<ChartContainer
+							config={{
+								enabled: { label: "Enabled", color: "#10b981" },
+								disabled: { label: "Disabled", color: "#ef4444" },
+							}}
+							className="h-[120px] w-full px-4"
+						>
 							<ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
 								<AreaChart data={promptsOverTime}>
 									<defs>
-										<linearGradient id="fillEnabled" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.8} /><stop offset="95%" stopColor="#10b981" stopOpacity={0.1} /></linearGradient>
-										<linearGradient id="fillDisabled" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} /><stop offset="95%" stopColor="#ef4444" stopOpacity={0.1} /></linearGradient>
+										<linearGradient id="fillEnabled" x1="0" y1="0" x2="0" y2="1">
+											<stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+											<stop offset="95%" stopColor="#10b981" stopOpacity={0.1} />
+										</linearGradient>
+										<linearGradient id="fillDisabled" x1="0" y1="0" x2="0" y2="1">
+											<stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} />
+											<stop offset="95%" stopColor="#ef4444" stopOpacity={0.1} />
+										</linearGradient>
 									</defs>
 									<CartesianGrid strokeDasharray="3 3" vertical={false} />
-									<XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} minTickGap={30} tickFormatter={dateFormatter} />
+									<XAxis
+										dataKey="date"
+										tickLine={false}
+										axisLine={false}
+										tickMargin={8}
+										minTickGap={30}
+										tickFormatter={dateFormatter}
+									/>
 									<YAxis tickLine={false} axisLine={false} tickMargin={8} width={40} />
-									<ChartTooltip isAnimationActive={false} content={(props) => {
-										if (!props.active || !props.payload) return null;
-										const reversedPayload = [...props.payload].reverse();
-										return <ChartTooltipContent className="min-w-[180px]" active={props.active} payload={reversedPayload} label={props.label} labelFormatter={tooltipLabelFormatter} />;
-									}} />
-									<Area type="monotone" dataKey="disabled" stackId="a" stroke="#ef4444" fill="#ef4444" fillOpacity={0.6} strokeWidth={2} />
-									<Area type="monotone" dataKey="enabled" stackId="a" stroke="#10b981" fill="#10b981" fillOpacity={0.6} strokeWidth={2} />
+									<ChartTooltip
+										isAnimationActive={false}
+										content={(props) => {
+											if (!props.active || !props.payload) return null;
+											const reversedPayload = [...props.payload].reverse();
+											return (
+												<ChartTooltipContent
+													className="min-w-[180px]"
+													active={props.active}
+													payload={reversedPayload}
+													label={props.label}
+													labelFormatter={tooltipLabelFormatter}
+												/>
+											);
+										}}
+									/>
+									<Area
+										type="monotone"
+										dataKey="disabled"
+										stackId="a"
+										stroke="#ef4444"
+										fill="#ef4444"
+										fillOpacity={0.6}
+										strokeWidth={2}
+									/>
+									<Area
+										type="monotone"
+										dataKey="enabled"
+										stackId="a"
+										stroke="#10b981"
+										fill="#10b981"
+										fillOpacity={0.6}
+										strokeWidth={2}
+									/>
 								</AreaChart>
 							</ResponsiveContainer>
 						</ChartContainer>
@@ -522,15 +734,30 @@ function AdminDashboard() {
 				</Card>
 
 				<Card>
-					<CardHeader><CardTitle>Runs</CardTitle><CardDescription>7d: {totals.promptRuns7Days.toLocaleString()} | 30d: {totals.promptRuns30Days.toLocaleString()}</CardDescription></CardHeader>
+					<CardHeader>
+						<CardTitle>Runs</CardTitle>
+						<CardDescription>
+							7d: {totals.promptRuns7Days.toLocaleString()} | 30d: {totals.promptRuns30Days.toLocaleString()}
+						</CardDescription>
+					</CardHeader>
 					<CardContent className="p-0 pb-4">
 						<ChartContainer config={{ count: { label: "Runs", color: "#8b5cf6" } }} className="h-[120px] w-full px-4">
 							<ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
 								<BarChart data={runsOverTime}>
 									<CartesianGrid strokeDasharray="3 3" vertical={false} />
-									<XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} minTickGap={30} tickFormatter={dateFormatter} />
+									<XAxis
+										dataKey="date"
+										tickLine={false}
+										axisLine={false}
+										tickMargin={8}
+										minTickGap={30}
+										tickFormatter={dateFormatter}
+									/>
 									<YAxis tickLine={false} axisLine={false} tickMargin={8} width={40} />
-									<ChartTooltip isAnimationActive={false} content={<ChartTooltipContent className="min-w-[180px]" labelFormatter={tooltipLabelFormatter} />} />
+									<ChartTooltip
+										isAnimationActive={false}
+										content={<ChartTooltipContent className="min-w-[180px]" labelFormatter={tooltipLabelFormatter} />}
+									/>
 									<Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
 								</BarChart>
 							</ResponsiveContainer>
@@ -566,15 +793,18 @@ function AdminDashboard() {
 								{brands.map((brand) => {
 									const currentDelayHours = brand.delayOverrideHours ?? defaultDelayHours;
 									const currentDelayMs = currentDelayHours * 60 * 60 * 1000;
-									const isOverdue = brand.lastPromptRunAt && brand.activePrompts > 0
-										? new Date().getTime() - new Date(brand.lastPromptRunAt).getTime() > currentDelayMs
-										: false;
+									const isOverdue =
+										brand.lastPromptRunAt && brand.activePrompts > 0
+											? new Date().getTime() - new Date(brand.lastPromptRunAt).getTime() > currentDelayMs
+											: false;
 
 									return (
 										<TableRow key={brand.id}>
 											<TableCell className="font-medium">
 												<div className="space-y-1">
-													<Link to="/app/$brand" params={{ brand: brand.id }} className="hover:underline text-primary">{brand.name}</Link>
+													<Link to="/app/$brand" params={{ brand: brand.id }} className="hover:underline text-primary">
+														{brand.name}
+													</Link>
 													<div className="text-xs text-muted-foreground">{brand.website}</div>
 												</div>
 											</TableCell>
@@ -588,14 +818,32 @@ function AdminDashboard() {
 													<span className="text-xs text-muted-foreground">None</span>
 												)}
 											</TableCell>
-											<TableCell className="text-right"><div className="font-medium">{brand.activePrompts}</div></TableCell>
-											<TableCell><div className="flex justify-end"><ActivityIndicator added={brand.promptsAddedLast7Days || 0} removed={brand.promptsRemovedLast7Days || 0} /></div></TableCell>
-											<TableCell><div className="flex justify-end"><ActivityIndicator added={brand.promptsAddedLast30Days || 0} removed={brand.promptsRemovedLast30Days || 0} /></div></TableCell>
+											<TableCell className="text-right">
+												<div className="font-medium">{brand.activePrompts}</div>
+											</TableCell>
+											<TableCell>
+												<div className="flex justify-end">
+													<ActivityIndicator
+														added={brand.promptsAddedLast7Days || 0}
+														removed={brand.promptsRemovedLast7Days || 0}
+													/>
+												</div>
+											</TableCell>
+											<TableCell>
+												<div className="flex justify-end">
+													<ActivityIndicator
+														added={brand.promptsAddedLast30Days || 0}
+														removed={brand.promptsRemovedLast30Days || 0}
+													/>
+												</div>
+											</TableCell>
 											<TableCell className="text-right">{brand.promptRuns7Days?.toLocaleString() || 0}</TableCell>
 											<TableCell className="text-right">{brand.promptRuns30Days?.toLocaleString() || 0}</TableCell>
 											<TableCell>
 												{brand.lastPromptRunAt ? (
-													<span className={`text-sm ${isOverdue ? "text-red-600 font-semibold" : ""}`}>{formatDateTime(brand.lastPromptRunAt, { dateStyle: "medium" })}</span>
+													<span className={`text-sm ${isOverdue ? "text-red-600 font-semibold" : ""}`}>
+														{formatDateTime(brand.lastPromptRunAt, { dateStyle: "medium" })}
+													</span>
 												) : (
 													<span className="text-muted-foreground">Never</span>
 												)}
@@ -603,13 +851,19 @@ function AdminDashboard() {
 											<TableCell>
 												<div className="space-y-1">
 													<div className="font-medium">{formatDelayHours(currentDelayHours)}</div>
-													<span className="text-xs text-muted-foreground">{brand.delayOverrideHours !== null ? "Custom" : "Default"}</span>
+													<span className="text-xs text-muted-foreground">
+														{brand.delayOverrideHours !== null ? "Custom" : "Default"}
+													</span>
 												</div>
 											</TableCell>
 											<TableCell>
 												<div className="flex gap-2">
-															<DelayOverrideDialog brand={brand} onUpdate={fetchBrandStats} />
-													<EnabledModelsDialog brand={brand} availableModels={availableModels} onUpdate={fetchBrandStats} />
+													<DelayOverrideDialog brand={brand} onUpdate={fetchBrandStats} />
+													<EnabledModelsDialog
+														brand={brand}
+														availableModels={availableModels}
+														onUpdate={fetchBrandStats}
+													/>
 													<DeleteBrandDialog brand={brand} onUpdate={fetchBrandStats} />
 												</div>
 											</TableCell>

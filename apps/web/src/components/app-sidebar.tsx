@@ -176,6 +176,15 @@ export function AppSidebar({
 						absolute: true,
 					},
 					{
+						// El alta de marca vive arriba de la página de marcas del Admin, que es la lista que se
+						// acaba de abrir. Es un acceso directo, no una pantalla nueva: por eso comparte la URL
+						// con "Brands" y las dos quedan marcadas cuando estás en `/admin`.
+						title: "Nueva marca",
+						url: "/admin",
+						icon: IconBuilding,
+						absolute: true,
+					},
+					{
 						title: "Reports",
 						url: "/reports",
 						icon: IconReport,
