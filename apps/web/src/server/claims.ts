@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { dnaCarriesClaims, proposeClaimCandidates } from "@workspace/aos-aps/claims";
-import { agentBrandClaims, agentBrandDnaSnapshots, agentBrandEntities } from "@workspace/aos-aps/db/schema";
-import { CLAIM_CATEGORIES, CONFIDENTIALITY, VERIFIABLE_BY } from "@workspace/aos-aps/preference";
+import { agentBrandDnaSnapshots, agentBrandEntities } from "@workspace/aos-aps/db/schema";
 import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
@@ -11,34 +10,65 @@ import { websiteSourcesForClaims } from "@/lib/claims-guard";
 import { liveClaimCountFrom } from "@/server/agent-assets-core";
 import {
 	bundleClaimCountOf,
+	ClaimEntityNotFoundError,
+	ClaimInputError,
 	ClaimNotFoundError,
+	deleteClaim,
 	inheritedClaimsOf,
 	loadClaimsContext,
 	type SerializedClaim,
 	serializeClaim,
 	setClaimInheritable,
+	upsertClaim,
 } from "@/server/claims-core";
 
 /**
  * La puerta de la UI para las pruebas de la marca.
  *
  * La decisión de qué entra al bundle no vive acá: vive en `@workspace/aos-aps/claims`, que es puro y se
- * prueba sin base ni red. Esta server function solo autoriza, lee y escribe. Si la regla de precedencia
- * estuviera escrita dos veces —una para la pantalla y otra para el generador—, la pantalla podría decir
- * que el bundle declara 6 cuando el bundle declara 0, que es exactamente el error que hay que evitar.
+ * prueba sin base ni red. Esta server function solo autoriza y delega en `claims-core`, que es el mismo
+ * núcleo que usa el MCP. Si la regla de precedencia estuviera escrita dos veces —una para la pantalla y
+ * otra para el generador—, la pantalla podría decir que el bundle declara 6 cuando el bundle declara 0,
+ * que es exactamente el error que hay que evitar. Y lo mismo vale para el formulario: las reglas de
+ * `claimId`, `verifiableBy`, `status` y `proofType` viven en el núcleo, no en un validador paralelo que
+ * se separa al primer cambio.
  */
 
-/** Los cinco tipos de prueba que el operador puede elegir. */
-const PROOF_TYPE = z.enum(["case_study", "document", "testimonial", "audit", "other"]);
-
-/** Un campo de texto opcional: vacío y ausente son lo mismo —nada declarado—, y así se guarda. */
-const optionalText = z
-	.string()
-	.max(4000)
-	.optional()
-	.transform((value) => (value === undefined || value.trim().length === 0 ? null : value.trim()));
-
 export type { SerializedClaim };
+
+/**
+ * La forma del formulario, sin las reglas.
+ *
+ * El `zod` declara tipos y deja pasar: los enums, el patrón del `CLM-` y los topes de largo se validan en
+ * `normalizeClaimInput`, que es la puerta única. Un segundo validador acá sería la copia que este trabajo
+ * vino a borrar. Solo `entityId` se valida en el transporte, porque un id que no es UUID no llega ni a la
+ * consulta.
+ */
+const claimPayload = z.object({
+	brandId: z.string().min(1),
+	entityId: z.string().uuid(),
+	claimId: z.string(),
+	statement: z.string(),
+	metric: z.string().nullish(),
+	category: z.string().nullish(),
+	boundaryApplicableFor: z.string().nullish(),
+	boundaryNotApplicableFor: z.string().nullish(),
+	confidence: z.string().nullish(),
+	proofType: z.string(),
+	proofTitle: z.string(),
+	proofSummary: z.string().nullish(),
+	proofClient: z.string().nullish(),
+	verifiableBy: z.string().nullish(),
+	confidentiality: z.string().nullish(),
+	sourceFragment: z.string().nullish(),
+	status: z.string(),
+});
+
+/** Un error que el operador puede corregir se muestra tal cual; lo demás es un fallo de verdad. */
+function asUserFacingError(error: unknown): unknown {
+	if (error instanceof ClaimInputError || error instanceof ClaimEntityNotFoundError) return new Error(error.message);
+	return error;
+}
 
 export const listClaimsFn = createServerFn({ method: "POST" })
 	.validator(z.object({ brandId: z.string().min(1), entityId: z.string().uuid() }))
@@ -127,84 +157,28 @@ export const setClaimInheritableFn = createServerFn({ method: "POST" })
 	});
 
 export const saveClaimFn = createServerFn({ method: "POST" })
-	.validator(
-		z.object({
-			brandId: z.string().min(1),
-			entityId: z.string().uuid(),
-			claimId: z.string().min(1).max(120),
-			statement: z.string().min(1).max(4000),
-			metric: optionalText,
-			category: z.enum(CLAIM_CATEGORIES).optional(),
-			boundaryApplicableFor: optionalText,
-			boundaryNotApplicableFor: optionalText,
-			confidence: optionalText,
-			proofType: PROOF_TYPE,
-			proofTitle: z.string().min(1).max(400),
-			proofSummary: optionalText,
-			proofClient: optionalText,
-			// El enum es el del estándar: un `verifiable_by` fuera de la lista es un error del validador, y
-			// el perfil que BeAOS firma no debería salir con errores que ya sabemos cómo evitar.
-			verifiableBy: z.enum(VERIFIABLE_BY).optional(),
-			confidentiality: z.enum(CONFIDENTIALITY).optional(),
-			sourceFragment: optionalText,
-			status: z.enum(["draft", "confirmed"]),
-		}),
-	)
+	.validator(claimPayload)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
-
-		const claimId = data.claimId.trim();
-		const statement = data.statement.trim();
-
-		// Lo editable es todo menos la identidad: marca, entidad y claim id son la clave de la fila, no un
-		// campo de este formulario.
-		const editable = {
-			statement,
-			metric: data.metric,
-			category: data.category ?? null,
-			boundaryApplicableFor: data.boundaryApplicableFor,
-			boundaryNotApplicableFor: data.boundaryNotApplicableFor,
-			confidence: data.confidence,
-			proofType: data.proofType,
-			proofTitle: data.proofTitle.trim(),
-			proofSummary: data.proofSummary,
-			proofClient: data.proofClient,
-			verifiableBy: data.verifiableBy ?? null,
-			confidentiality: data.confidentiality ?? null,
-			sourceFragment: data.sourceFragment,
-			status: data.status,
-		};
-		const values = { brandId: data.brandId, entityId: data.entityId, claimId, ...editable };
-
-		// Un solo camino: crear y editar son la misma operación, porque el id del claim es del operador y
-		// guardar dos veces lo que ya existe no puede duplicar la prueba.
-		const [saved] = await db
-			.insert(agentBrandClaims)
-			.values(values)
-			.onConflictDoUpdate({
-				target: [agentBrandClaims.entityId, agentBrandClaims.claimId],
-				set: { ...editable, updatedAt: new Date() },
-			})
-			.returning();
-
-		if (saved === undefined) throw new Error("No se pudo guardar la prueba");
-		return serializeClaim(saved);
+		try {
+			// El alta entera —validación, entidad de la marca, insert-or-update— vive en el núcleo: es la
+			// misma operación que expone el MCP, no una parecida.
+			const { claim } = await upsertClaim(data);
+			return claim;
+		} catch (error) {
+			throw asUserFacingError(error);
+		}
 	});
 
 export const deleteClaimFn = createServerFn({ method: "POST" })
-	.validator(z.object({ brandId: z.string().min(1), entityId: z.string().uuid(), claimId: z.string().min(1) }))
+	.validator(z.object({ brandId: z.string().min(1), entityId: z.string().uuid(), claimId: z.string() }))
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
-		await db
-			.delete(agentBrandClaims)
-			.where(
-				and(
-					eq(agentBrandClaims.brandId, data.brandId),
-					eq(agentBrandClaims.entityId, data.entityId),
-					eq(agentBrandClaims.claimId, data.claimId.trim()),
-				),
-			);
-		return { ok: true };
+		try {
+			return await deleteClaim(data);
+		} catch (error) {
+			throw asUserFacingError(error);
+		}
 	});

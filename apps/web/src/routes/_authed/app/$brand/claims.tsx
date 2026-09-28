@@ -1,6 +1,11 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { type ClaimCandidate, claimIdFromCandidateId } from "@workspace/aos-aps/claims";
+import {
+	CLAIM_PROOF_TYPES,
+	type ClaimCandidate,
+	type ClaimProofType,
+	claimIdFromCandidateId,
+} from "@workspace/aos-aps/claims";
 import { CLAIM_CATEGORIES, CONFIDENTIALITY, VERIFIABLE_BY } from "@workspace/aos-aps/preference";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
@@ -22,14 +27,14 @@ export const Route = createFileRoute("/_authed/app/$brand/claims")({
  * El tipo de prueba que el operador declara.
  *
  * El valor guardado es el que viaja al `brand.json`, así que se muestra en español y se guarda en el
- * idioma del estándar.
+ * idioma del estándar. La lista **no** se declara acá: sale de `@workspace/aos-aps/claims`, que es el
+ * mismo núcleo que valida el alta del MCP. Si la pantalla tuviera su propia copia, un tipo que el MCP
+ * acepta podría no existir en este `<select>` y el guardado siguiente lo reescribiría en silencio.
  */
-type ProofTypeValue = "case_study" | "document" | "testimonial" | "audit" | "other";
+type ProofTypeValue = ClaimProofType;
 type CategoryValue = (typeof CLAIM_CATEGORIES)[number];
 type VerifiableByValue = (typeof VERIFIABLE_BY)[number];
 type ConfidentialityValue = (typeof CONFIDENTIALITY)[number];
-
-const CLAIM_PROOF_TYPES: ProofTypeValue[] = ["case_study", "document", "testimonial", "audit", "other"];
 
 const PROOF_TYPE_LABELS: Record<ProofTypeValue, string> = {
 	case_study: "Caso de estudio",
@@ -37,6 +42,10 @@ const PROOF_TYPE_LABELS: Record<ProofTypeValue, string> = {
 	testimonial: "Testimonio",
 	audit: "Auditoría",
 	other: "Otro",
+	aggregate_metric: "Métrica agregada",
+	third_party_review: "Reseña de terceros",
+	publication: "Publicación",
+	credential: "Credencial",
 };
 
 const CATEGORY_LABELS: Record<CategoryValue, string> = {
