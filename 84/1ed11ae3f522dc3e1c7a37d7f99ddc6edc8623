@@ -1,0 +1,22 @@
+MCP-BEAOS.md
+  h_c5ca005a78c880 27,54,56,63-64,67-73
+apps/web/src/server/claims-core.ts
+  h_c5ca005a78c880 59-61,78-83
+apps/web/src/server/mcp/__tests__/tools.test.ts
+  h_c5ca005a78c880 47-48,68,76-80,117,122
+apps/web/src/server/mcp/tools/actions.ts
+  h_c5ca005a78c880 23,438-485,494
+apps/web/src/server/mcp/tools/agent.ts
+  h_c5ca005a78c880 26,373-421,497
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "841ed11ae3f522dc3e1c7a37d7f99ddc6edc8623",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
