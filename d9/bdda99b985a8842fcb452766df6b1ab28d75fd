@@ -1,0 +1,27 @@
+packages/aos-aps/src/claims/mapping.test.ts
+  s_73f5d4a74a1340::t_4fd21affc7f78a 38-39
+packages/aos-aps/src/db/schema.ts
+  s_73f5d4a74a1340::t_e94f7bf3de98d4 148-166
+packages/lib/src/db/migrations/0024_useful_violations.sql
+  s_73f5d4a74a1340::t_3d6bbe980643cc 1-3
+packages/lib/src/db/migrations/meta/0024_snapshot.json
+  s_73f5d4a74a1340::t_2eb35828935abf 1-3320
+packages/lib/src/db/migrations/meta/_journal.json
+  s_73f5d4a74a1340::t_78363aa3536ea3 172-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d9bdda99b985a8842fcb452766df6b1ab28d75fd",
+  "prompts": {},
+  "sessions": {
+    "s_73f5d4a74a1340": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fe916588-22ca-4f6f-a6db-2a5ef595415e",
+        "model": "deepseek-flash"
+      },
+      "human_author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
