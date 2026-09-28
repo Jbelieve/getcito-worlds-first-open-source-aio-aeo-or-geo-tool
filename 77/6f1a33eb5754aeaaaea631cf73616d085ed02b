@@ -1,0 +1,14 @@
+apps/web/src/routes/_authed/app/$brand/claims.tsx
+  h_c5ca005a78c880 9,15,249-276,285-291,338-339,665-667,671-672,711-739,742,745-787
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "776f1a33eb5754aeaaaea631cf73616d085ed02b",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
