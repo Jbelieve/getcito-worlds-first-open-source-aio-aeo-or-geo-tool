@@ -20,7 +20,7 @@ import {
 	type StandardsResult,
 } from "./requirements";
 import { verifyBrandSignature } from "./signature";
-import { type LookupFn, assertSafeAuditUrl } from "./ssrf";
+import { assertSafeAuditUrl, type LookupFn } from "./ssrf";
 
 export interface AosAuditInput {
 	url: string;
@@ -154,7 +154,13 @@ async function findMcpOrOpenApi(
 		const hostname = base.hostname.replace(/^www\./, "");
 		const mcpUrl = `https://mcp.${hostname}`;
 		if (await isSafeTarget(mcpUrl, fetchOptions)) {
-			const response = await probe(mcpUrl, timeoutMs, "POST", { jsonrpc: "2.0", id: 1, method: "tools/list" }, fetchOptions);
+			const response = await probe(
+				mcpUrl,
+				timeoutMs,
+				"POST",
+				{ jsonrpc: "2.0", id: 1, method: "tools/list" },
+				fetchOptions,
+			);
 			if (response !== null && isMcpJsonRpcPayload(safeJson(response.body))) return true;
 		}
 	} catch {
@@ -207,7 +213,11 @@ function safeJson(body: string | undefined): unknown {
 	}
 }
 
-async function probeMarkdownNegotiation(base: URL, timeoutMs: number, fetchOptions: FetchOptions = {}): Promise<boolean> {
+async function probeMarkdownNegotiation(
+	base: URL,
+	timeoutMs: number,
+	fetchOptions: FetchOptions = {},
+): Promise<boolean> {
 	try {
 		// Este probe es el único que sigue redirects (así lo hace el audit de Maasy). Ahora sigue
 		// `safeFetch`: cada salto se valida otra vez, hasta cinco, y un `Location` interno se rechaza.
@@ -247,7 +257,13 @@ export async function runAosAudit(input: AosAuditInput): Promise<AosAuditResult>
 	const robots = await probe(at("/robots.txt"), timeoutMs, "GET", undefined, fetchOptions);
 	const sitemap = await probe(at("/sitemap.xml"), timeoutMs, "GET", undefined, fetchOptions);
 	const agentCard = await probe(at("/.well-known/agent-card.json"), timeoutMs, "GET", undefined, fetchOptions);
-	const agentPermissions = await probe(at("/.well-known/agent-permissions.json"), timeoutMs, "GET", undefined, fetchOptions);
+	const agentPermissions = await probe(
+		at("/.well-known/agent-permissions.json"),
+		timeoutMs,
+		"GET",
+		undefined,
+		fetchOptions,
+	);
 	const mcpServerCard = await probe(at("/.well-known/mcp/server-card.json"), timeoutMs, "GET", undefined, fetchOptions);
 	const brandJsonResponse = await probe(at("/.well-known/brand.json"), timeoutMs, "GET", undefined, fetchOptions);
 	const keysJson = await probe(at("/.well-known/keys.json"), timeoutMs, "GET", undefined, fetchOptions);

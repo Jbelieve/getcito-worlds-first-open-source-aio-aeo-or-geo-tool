@@ -1,5 +1,5 @@
-import { createServer, type Server } from "node:http";
 import { generateKeyPairSync } from "node:crypto";
+import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { generateAgentAssets } from "../assets";
@@ -109,7 +109,9 @@ describe("verifyBrandSignatureDetailed", () => {
 		delete files["/.well-known/brand.json.sig"];
 		const { base, close } = await serve(files);
 		try {
-			expect((await verifyBrandSignatureDetailed(base, 2000, undefined, INJECTED)).reason).toBe("brand.json.sig not served");
+			expect((await verifyBrandSignatureDetailed(base, 2000, undefined, INJECTED)).reason).toBe(
+				"brand.json.sig not served",
+			);
 		} finally {
 			await close();
 		}
@@ -119,7 +121,9 @@ describe("verifyBrandSignatureDetailed", () => {
 		withoutBrand["/x"] = "";
 		const second = await serve(withoutBrand);
 		try {
-			expect((await verifyBrandSignatureDetailed(second.base, 2000, undefined, INJECTED)).reason).toBe("brand.json not served");
+			expect((await verifyBrandSignatureDetailed(second.base, 2000, undefined, INJECTED)).reason).toBe(
+				"brand.json not served",
+			);
 		} finally {
 			await second.close();
 		}

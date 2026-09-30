@@ -1,8 +1,8 @@
-import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
-import { type AddressInfo, isIP } from "node:net";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { MAX_REDIRECTS, SafeFetchError, type SafeFetchTestHooks, safeFetch } from "./guarded-http";
-import { type LookupFn, assertSafeAuditUrl } from "./ssrf";
+import { assertSafeAuditUrl, type LookupFn } from "./ssrf";
 
 /**
  * Los dos agujeros que este conector cierra, probados de verdad y no por lo que dice el código.
@@ -119,15 +119,19 @@ describe("DNS rebinding — la conexión va a la IP validada, no a una segunda r
 			// corto a propósito —lo que importa es a quién se conectó, no cuánto tardó en fallar—, y esta
 			// IP pública no responde desde este entorno, así que el fallo es un timeout y no un rechazo.
 			await expect(
-				safeFetch(`http://rebind.example:${port}/robame`, {
-					lookup: rebinding,
-					timeoutMs: 900,
-					connectionLookup: async () => {
-						socketLookups += 1;
-						// La segunda resolución: la que el atacante contesta con la IP interna.
-						return [{ address: internalAddress, family: IPV4 }];
+				safeFetch(
+					`http://rebind.example:${port}/robame`,
+					{
+						lookup: rebinding,
+						timeoutMs: 900,
+						connectionLookup: async () => {
+							socketLookups += 1;
+							// La segunda resolución: la que el atacante contesta con la IP interna.
+							return [{ address: internalAddress, family: IPV4 }];
+						},
 					},
-				}, loopbackAllowed),
+					loopbackAllowed,
+				),
 			).rejects.toThrow();
 
 			// La validación resolvió (y el ataque existe: el DNS ya apuntaba a la IP interna)…
@@ -177,7 +181,9 @@ describe("redirects — cada salto se valida antes de seguirlo", () => {
 		const internal = await listen((_request, response) => sendJson(response, { secreto: "metadatos" }));
 		const attacker = await listen(redirecting(`${internal.ipUrl}/latest/meta-data/`));
 		try {
-			const error = await safeFetch(attacker.url, { timeoutMs: 3000, followRedirects: true }, loopbackAllowed).catch((e) => e);
+			const error = await safeFetch(attacker.url, { timeoutMs: 3000, followRedirects: true }, loopbackAllowed).catch(
+				(e) => e,
+			);
 			expect(error).toBeInstanceOf(SafeFetchError);
 			expect((error as SafeFetchError).kind).toBe("unsafe_target");
 			// El motivo nombra el rango, no la IP exacta (no le contamos al cliente qué resolvimos).
@@ -195,7 +201,9 @@ describe("redirects — cada salto se valida antes de seguirlo", () => {
 	it("rechaza un redirect a los metadatos de la nube", async () => {
 		const attacker = await listen(redirecting("http://169.254.169.254/latest/meta-data/iam/"));
 		try {
-			const error = await safeFetch(attacker.url, { timeoutMs: 3000, followRedirects: true }, loopbackAllowed).catch((e) => e);
+			const error = await safeFetch(attacker.url, { timeoutMs: 3000, followRedirects: true }, loopbackAllowed).catch(
+				(e) => e,
+			);
 			expect(error).toBeInstanceOf(SafeFetchError);
 			// El motivo nombra el rango (a propósito: no le contamos al cliente qué resolvió nuestro DNS).
 			expect((error as SafeFetchError).message).toContain("169.254.0.0/16");
@@ -208,7 +216,9 @@ describe("redirects — cada salto se valida antes de seguirlo", () => {
 		for (const location of ["file:///etc/passwd", "ftp://example.com/x", "gopher://example.com/"]) {
 			const attacker = await listen(redirecting(location));
 			try {
-				const error = await safeFetch(attacker.url, { timeoutMs: 3000, followRedirects: true }, loopbackAllowed).catch((e) => e);
+				const error = await safeFetch(attacker.url, { timeoutMs: 3000, followRedirects: true }, loopbackAllowed).catch(
+					(e) => e,
+				);
 				expect(error, location).toBeInstanceOf(SafeFetchError);
 				expect((error as SafeFetchError).kind, location).toBe("redirect_scheme");
 			} finally {
@@ -284,11 +294,51 @@ describe("el contrato del conector", () => {
 		}
 	});
 
+	it("manda método, cabeceras y cuerpo: el audit hace POST /ask y MCP con payload JSON", async () => {
+		let seen: { method?: string; headers?: Record<string, unknown>; body: string } | null = null;
+		const server = await listen((request, response) => {
+			const chunks: Buffer[] = [];
+			request.on("data", (chunk: Buffer) => chunks.push(chunk));
+			request.on("end", () => {
+				seen = { method: request.method, headers: request.headers, body: Buffer.concat(chunks).toString("utf8") };
+				response.writeHead(200, { "content-type": "application/json" });
+				response.end('{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}');
+			});
+		});
+		try {
+			const payload = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+			const response = await safeFetch(
+				server.url,
+				{
+					method: "POST",
+					timeoutMs: 3000,
+					headers: { "content-type": "application/json", "user-agent": "BeAOS-AOS-Audit/0.1" },
+					body: payload,
+				},
+				loopbackAllowed,
+			);
+			expect(response.status).toBe(200);
+			const captured = seen as { method?: string; headers?: Record<string, unknown>; body: string } | null;
+			expect(captured?.method).toBe("POST");
+			expect(captured?.headers?.["content-type"]).toBe("application/json");
+			expect(captured?.headers?.["user-agent"]).toBe("BeAOS-AOS-Audit/0.1");
+			// El `Host` viaja con el puerto: así el vhost del sitio auditado sigue resolviendo bien.
+			expect(String(captured?.headers?.host)).toContain("localhost");
+			expect(captured?.body).toBe(payload);
+		} finally {
+			await server.close();
+		}
+	});
+
 	it("rechaza un host que resuelve a una IP privada", async () => {
-		const error = await safeFetch("http://privado.example/", {
-			timeoutMs: 3000,
-			lookup: async () => [{ address: "10.0.0.7", family: IPV4 }],
-		}, loopbackAllowed).catch((e) => e);
+		const error = await safeFetch(
+			"http://privado.example/",
+			{
+				timeoutMs: 3000,
+				lookup: async () => [{ address: "10.0.0.7", family: IPV4 }],
+			},
+			loopbackAllowed,
+		).catch((e) => e);
 		expect(error).toBeInstanceOf(SafeFetchError);
 		expect((error as SafeFetchError).kind).toBe("unsafe_target");
 	});

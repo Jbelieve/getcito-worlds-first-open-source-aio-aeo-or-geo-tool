@@ -24,10 +24,10 @@
  * redirect, que es exactamente el segundo agujero, en vez de depender de la política del cliente. El
  * motor no se reescribe: cambia la función que pide, no qué se pide ni cómo se puntúa.
  */
-import { type IncomingMessage, type LookupFunction, request as httpRequest } from "node:http";
+import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { isIP } from "node:net";
-import { type LookupFn, assertSafeAuditUrl } from "./ssrf";
+import { isIP, type LookupFunction } from "node:net";
+import { assertSafeAuditUrl, type LookupFn, type UrlGuardOptions, type UrlGuardResult } from "./ssrf";
 
 /** Tope de saltos. Cinco es lo que hace cualquier cliente serio; más que eso es un loop. */
 export const MAX_REDIRECTS = 5;
@@ -86,6 +86,21 @@ export interface SafeFetchOptions {
 }
 
 /**
+ * Opciones que solo existen para los tests y **nunca** viajan desde producción.
+ *
+ * `assertSafe` existe porque este conector se prueba contra servidores locales en `127.0.0.1`, y el
+ * guardián —con razón— no deja pedir la loopback. La salida no es relajar el guardián ni abrir una
+ * excepción de producción: es inyectar el paso de validación, que por defecto es el guardián real.
+ * Producción no pasa este parámetro, así que no hay forma de apagarlo desde el código que audita.
+ */
+export interface SafeFetchTestHooks {
+	assertSafe?: (url: string, options: UrlGuardOptions) => Promise<UrlGuardResult>;
+}
+
+/** `assertSafeAuditUrl` con el tipo exacto que consume el conector. */
+export type AssertSafe = NonNullable<SafeFetchTestHooks["assertSafe"]>;
+
+/**
  * `lookup` de socket que solo puede devolver direcciones ya validadas.
  *
  * Esta es la pieza que cierra el rebinding: Node llama a este `lookup` en el momento de conectar, y
@@ -97,7 +112,10 @@ export function createPinnedLookup(pinned: string[], connectionLookup?: LookupFn
 	if (pinned.length === 0) throw new Error("createPinnedLookup necesita al menos una dirección validada");
 
 	return (hostname, options, callback) => {
-		const wants = (options ?? {}) as { family?: number };
+		// `all: true` no es un detalle: con esa opción el callback recibe un **array** de direcciones en
+		// vez de (address, family). Node la usa, así que si se contestara con los parámetros sueltos el
+		// socket leería `undefined` y no habría a dónde conectarse.
+		const wants = (options ?? {}) as { family?: number; all?: boolean };
 		const family = wants.family ?? 0;
 		const reply = (): void => {
 			const matching = family === 0 ? pinned : pinned.filter((address) => isIP(address) === family);
@@ -108,6 +126,13 @@ export function createPinnedLookup(pinned: string[], connectionLookup?: LookupFn
 					Object.assign(new Error(`no hay dirección validada para "${hostname}"`), { code: "EAI_ADDRFAMILY" }),
 					"",
 					0,
+				);
+				return;
+			}
+			if (wants.all === true) {
+				callback(
+					null,
+					matching.map((address) => ({ address, family: isIP(address) })),
 				);
 				return;
 			}
@@ -209,8 +234,13 @@ function requestOnce(url: URL, addresses: string[], options: SafeFetchOptions): 
  * esquema no http/https en un `Location`, o más de `MAX_REDIRECTS` saltos). Los errores de red —sitio
  * caído, TLS roto, timeout— suben como están: el audit los trata igual que antes, "no respondió".
  */
-export async function safeFetch(rawUrl: string, options: SafeFetchOptions = {}): Promise<GuardedResponse> {
+export async function safeFetch(
+	rawUrl: string,
+	options: SafeFetchOptions = {},
+	hooks: SafeFetchTestHooks = {},
+): Promise<GuardedResponse> {
 	const maxRedirects = options.followRedirects === true ? MAX_REDIRECTS : 0;
+	const assertSafe = hooks.assertSafe ?? assertSafeAuditUrl;
 	let current = rawUrl;
 
 	for (let hop = 0; hop <= maxRedirects; hop += 1) {
@@ -229,7 +259,7 @@ export async function safeFetch(rawUrl: string, options: SafeFetchOptions = {}):
 
 		// Cada salto vuelve a pasar por el guardián completo: texto, hostname y DNS. Es lo que hace que
 		// un redirect a una dirección interna se rechace aunque el primer destino fuera público.
-		const safe = await assertSafeAuditUrl(target.toString(), { lookup: options.lookup });
+		const safe = await assertSafe(target.toString(), { lookup: options.lookup });
 		if (safe.ok === false) {
 			throw new SafeFetchError(safe.kind === "unresolved" ? "unresolved" : "unsafe_target", safe.reason);
 		}
