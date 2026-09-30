@@ -15,6 +15,11 @@
  *
  * No depende del código TypeScript a propósito: un script de operación tiene que poder correr aunque la
  * app no compile. Habla SQL contra la tabla y nada más.
+ *
+ * En el servidor (`contabo-believe`) este script **no corre**: el host no tiene `node`. Ahí el camino es
+ * `scripts/beaos-token.sh`, que hace lo mismo con bash + openssl + el psql del contenedor de la base.
+ * Los dos tienen que producir el mismo token; lo compara
+ * `apps/web/src/lib/__tests__/beaos-token-scripts.test.ts`.
  */
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -30,6 +35,10 @@ const USAGE = `Uso:
   beaos-tokens.mjs list              Lista los tokens con su prefijo, uso y estado
   beaos-tokens.mjs revoke <prefijo>  Revoca un token por su prefijo
   beaos-tokens.mjs --help
+
+Diagnóstico (no toca la base):
+  beaos-tokens.mjs new-token         Imprime un token con el formato exacto, sin guardarlo
+  beaos-tokens.mjs hash <token>      Imprime "prefijo sha256" de un token
 
 Variables: DATABASE_URL (si falta, se lee de apps/web/.env o .env del repo).`;
 
@@ -65,6 +74,14 @@ function hashToken(token) {
 	return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
+/**
+ * El token que se imprime una sola vez: `beaos_` + base64url de 24 bytes, sin padding (32 caracteres).
+ * El mismo formato está en `scripts/beaos-token.sh`; si cambia acá, tiene que cambiar allá.
+ */
+function newToken() {
+	return `beaos_${randomBytes(24).toString("base64url")}`;
+}
+
 function formatDate(value) {
 	return value === null || value === undefined ? "—" : new Date(value).toISOString();
 }
@@ -84,7 +101,7 @@ async function create(name) {
 		console.error("create necesita el nombre del producto, por ejemplo: create autex");
 		process.exit(1);
 	}
-	const token = `beaos_${randomBytes(24).toString("base64url")}`;
+	const token = newToken();
 	const tokenHash = hashToken(token);
 	const prefix = token.slice(0, 8);
 	await withClient(async (client) => {
@@ -141,6 +158,18 @@ async function revoke(prefix) {
 	for (const row of rows) console.log(`Revocado: ${row.prefix} (${row.name}).`);
 }
 
+/**
+ * Diagnóstico para el test de equivalencia de formato con `scripts/beaos-token.sh`: imprime el prefijo
+ * y el sha256 de un token dado. No lee `DATABASE_URL` ni toca la base.
+ */
+function hashCommand(token) {
+	if (typeof token !== "string" || token.length === 0) {
+		console.error("hash necesita el token, por ejemplo: hash beaos_ab");
+		process.exit(1);
+	}
+	console.log(`${token.slice(0, 8)} ${hashToken(token)}`);
+}
+
 const [command, argument] = process.argv.slice(2);
 
 switch (command) {
@@ -152,6 +181,12 @@ switch (command) {
 		break;
 	case "revoke":
 		await revoke(argument);
+		break;
+	case "hash":
+		hashCommand(argument);
+		break;
+	case "new-token":
+		console.log(newToken());
 		break;
 	case "--help":
 	case "-h":

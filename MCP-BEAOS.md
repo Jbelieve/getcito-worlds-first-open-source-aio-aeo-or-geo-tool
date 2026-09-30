@@ -110,21 +110,44 @@ primeros 8 caracteres como `prefix` para reconocerlo en un listado; `lastUsedAt`
 token autentica y `revokedAt` marca la revocación sin borrar la fila. Un token revocado responde `401` y
 **no** cae al fallback de `ADMIN_API_KEYS`.
 
-Administración:
+Administración. **En el servidor, el script de bash** —es el que funciona ahí—; el de node sirve en una
+máquina con node.
+
+El de node **no corre en `contabo-believe`**: ese host no tiene `node` ni `psql`, y el contenedor
+`beaos-web-1`, que sí tiene node, es un build (`/app/.output`) sin `apps/web/scripts`. El de bash hace lo
+mismo con bash + openssl + el `psql` que vive **dentro** del contenedor de la base.
 
 ```bash
+cd /root/BeAos
+
 # Crear. El token se imprime UNA sola vez y no se puede recuperar.
-node apps/web/scripts/beaos-tokens.mjs create autex
+scripts/beaos-token.sh create autex
 
 # Listar con prefijo, último uso y estado (activo / revocado).
-node apps/web/scripts/beaos-tokens.mjs list
+scripts/beaos-token.sh list
 
-# Revocar por prefijo.
-node apps/web/scripts/beaos-tokens.mjs revoke beaos_ab
+# Revocar por prefijo. Si ya estaba revocado, lo dice.
+scripts/beaos-token.sh revoke beaos_ab
 ```
 
-El script lee `DATABASE_URL` del entorno o de `apps/web/.env` / `.env`. La tabla la crea la migración
+En una máquina con node el equivalente es `node apps/web/scripts/beaos-tokens.mjs create autex`. Los dos
+escriben el **mismo** formato —`beaos_` + base64url de 24 bytes sin padding, `prefix` de 8 caracteres y
+sha256 en hex—, así que la credencial no depende de con cuál se creó; y
+`apps/web/src/lib/__tests__/beaos-token-scripts.test.ts` corre las dos implementaciones y compara: si una
+se desvía, el test se cae.
+
+Cómo llega a la base el script de bash: `docker exec -i <contenedor> psql "$DATABASE_URL"`, con el nombre
+del contenedor sacado del host de la propia URL —en el servidor, `…@beaos-postgres:5432/getcito`—. El
+primer intento es esa cadena tal cual, la misma que usa la app, porque en la red de compose el nombre del
+contenedor se resuelve desde adentro del contenedor; si no conecta, reintenta con el host apuntado al
+loopback del contenedor (`127.0.0.1:5432`) y avisa por stderr. Si el host de la URL no es un contenedor en
+ejecución pero hay `psql` local, usa ése; si no, falla diciendo qué pasa. Los dos scripts leen
+`DATABASE_URL` del entorno o de `apps/web/.env` / `.env`, en ese orden. La tabla la crea la migración
 `packages/lib/src/db/migrations/0023_broken_stepford_cuckoos.sql` (generada con `drizzle-kit generate`).
+
+Verificado en `contabo-believe`: `which node` y `which psql` salen vacíos, `docker` y `openssl` 3.0.13
+están en el host, y `psql` 18.6 vive dentro de `beaos-postgres`. Con eso, `scripts/beaos-token.sh list`
+lee el `.env` del despliegue y lista los tokens por `docker exec` —sin node—.
 
 ## Cómo se conecta
 
@@ -173,6 +196,7 @@ Como servidor MCP en un cliente (formato estándar):
 - `14` pruebas del registro (`src/server/mcp/__tests__/tools.test.ts`): nombres únicos, `inputSchema` de objeto, campos obligatorios descritos, el registro completo —**27** tools, con el conteo fijado—, el ciclo de las `instructions` en orden, y que los handlers no se publican por el protocolo.
 - `13` pruebas del alta de una prueba (`packages/aos-aps/src/claims/claim-input.test.ts`): el patrón `CLM-`, los enums de `status`, `verifiableBy`, `category` y `proofType`, y los avisos que no frenan el guardado. Son puras: no necesitan base.
 - `13` pruebas de la credencial por producto (`src/lib/__tests__/api-tokens.test.ts`): token válido, revocado (que no cae al fallback), desconocido, fallback a `ADMIN_API_KEYS`, token ausente y lectura del header.
+- `8` pruebas de que el script de bash y el de node producen **el mismo** token (`src/lib/__tests__/beaos-token-scripts.test.ts`): el prefijo y el sha256 del token de ejemplo, la forma del token nuevo (24 bytes, alfabeto base64url, sin padding) en las dos vías, tokens cruzados entre los dos generadores, y el script de bash corriendo con el `PATH` sin node. Ninguna toca la base.
 
 ## Lo que falta
 
