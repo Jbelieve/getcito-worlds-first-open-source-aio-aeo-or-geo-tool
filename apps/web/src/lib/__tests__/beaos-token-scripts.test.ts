@@ -18,11 +18,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../../../", import.meta.url));
 const BASH_SCRIPT = `${REPO_ROOT}scripts/beaos-token.sh`;
 const NODE_SCRIPT = `${REPO_ROOT}apps/web/scripts/beaos-tokens.mjs`;
+
+// Este archivo SPAWNEA node y manipula el PATH, asi que sus pruebas tardan mas que el default de
+// 5 s (el wrapper de Electron del harness tarda ~2,6 s por llamada). Esa demora no es una falla del
+// codigo que se prueba; el timeout default la convertia en un fallo intermitente.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 const GOLDEN_TOKEN = "beaos_test_token";
 const GOLDEN_PREFIX = "beaos_te";
