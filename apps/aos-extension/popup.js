@@ -42,7 +42,21 @@ const show = (id) => {
 	$(id).classList.remove("hidden");
 };
 
+/**
+ * El dominio de la pestaña activa. Se usa para **dos cosas y solo dos**: el encabezado que lee el
+ * usuario y la clave del caché (una entrada por sitio, que es lo que se quiere).
+ *
+ * Lo que NO se usa es para pedir el audit. Ver `currentUrl`.
+ */
 let currentDomain = null;
+/**
+ * La URL COMPLETA de la pestaña activa, que es lo que se audita.
+ *
+ * Antes se auditaba `currentDomain` —el dominio pelado, sin esquema y sin path— y el endpoint lo
+ * rechazaba con un 400 *siempre*: la extensión no funcionaba contra ninguna web. Además, el path
+ * importa: parado en `https://sitio.com/precios` hay que auditar esa página, no la home.
+ */
+let currentUrl = null;
 /** La respuesta CRUDA del endpoint. El overlay lee `score` y `band` de acá, tal como los manda
  * el servidor: el objeto mapeado tiene la banda como objeto y el overlay la espera como string. */
 let rawAudit = null;
@@ -306,8 +320,8 @@ function renderResult(audit) {
 	show("result");
 }
 
-function renderError(status, retryAfterSeconds) {
-	const text = auditErrorText(status, retryAfterSeconds);
+function renderError(status, { code = null, retryAfterSeconds = null } = {}) {
+	const text = auditErrorText(status, { code, retryAfterSeconds });
 	$("error-title").textContent = text.title;
 	$("error-msg").textContent = text.detail;
 	show("error");
@@ -324,21 +338,26 @@ async function runAudit(force) {
 			return renderResult(mapAuditResponse(cached));
 		}
 	}
+	// Se audita la URL COMPLETA de la pestaña (con esquema y con path), no el dominio pelado: el
+	// endpoint exige una URL parseable y el path es parte de lo que se mide.
 	// Medir es gratis y no pide mail: el lead se captura aparte, y es opcional.
-	const res = await auditUrl(currentDomain);
+	const res = await auditUrl(currentUrl);
 	if (res.ok) {
 		rawAudit = res.data;
 		await setCachedAudit(currentDomain, res.data);
 		return renderResult(mapAuditResponse(res.data));
 	}
-	console.warn("[BeAOS] audit no exitoso:", res.status, res.error);
-	renderError(res.status, res.retryAfterSeconds);
+	console.warn("[BeAOS] audit no exitoso:", res.status, res.code, res.error);
+	renderError(res.status, { code: res.code, retryAfterSeconds: res.retryAfterSeconds });
 }
 
 async function init() {
 	const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 	currentDomain = domainFromUrl(tab?.url);
 	if (currentDomain === null) return show("notweb");
+	// La pestaña ya pasó el filtro de `domainFromUrl`, que solo acepta http(s): la URL completa es
+	// segura de mandar tal cual, con su path y su query.
+	currentUrl = tab.url ?? null;
 	$("domain").textContent = currentDomain;
 	$("domain").title = tab.url;
 	runAudit(false);
