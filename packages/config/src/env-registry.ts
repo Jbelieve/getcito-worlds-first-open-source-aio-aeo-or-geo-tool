@@ -365,4 +365,36 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		requiredBy: "optional",
 		description: "Set to any value to disable telemetry.",
 	},
+	{
+		name: "AOS_PUBLIC_AUDITS_PER_DAY",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Auditorías públicas de AOS por IP y por día (default 20).",
+	},
+	{
+		name: "AOS_PUBLIC_AUDITS_PER_DAY_GLOBAL",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Tope diario de auditorías públicas de AOS para todo el servicio (default 2000). Es la cota real, porque X-Forwarded-For se puede forjar.",
+	},
+	{
+		name: "AOS_PUBLIC_AUDIT_TOTAL_TIMEOUT_MS",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Techo de tiempo total del pedido de audit público (default 20000).",
+	},
+	{
+		name: "AOS_PUBLIC_AUDIT_REQUEST_TIMEOUT_MS",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Timeout por request dentro del audit público (default 4000).",
+	},
+	{
+		name: "AOS_PUBLIC_IP_SALT",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Sal para hashear la IP en el contador de cuota y en los leads. Sin sal, un IPv4 es enumerable y el hash deja de ser un pseudónimo.",
+	},
 ];

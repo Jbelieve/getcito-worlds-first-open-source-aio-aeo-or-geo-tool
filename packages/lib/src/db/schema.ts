@@ -1,4 +1,16 @@
-import { boolean, index, integer, json, pgEnum, pgTable, smallint, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+	boolean,
+	index,
+	integer,
+	json,
+	pgEnum,
+	pgTable,
+	primaryKey,
+	smallint,
+	text,
+	timestamp,
+	uuid,
+} from "drizzle-orm/pg-core";
 
 // Better-auth tables & relations — re-exported so `import * as schema` sees everything.
 // Source file is auto-generated; run `pnpm run generate:auth-schema` to refresh.
@@ -242,6 +254,60 @@ export const providerCalls = pgTable(
 
 export type ProviderCall = typeof providerCalls.$inferSelect;
 export type NewProviderCall = typeof providerCalls.$inferInsert;
+
+/**
+ * Contador diario del audit público: una fila por cupo y por día.
+ *
+ * Tiene que sobrevivir un reinicio y ser compartido entre instancias, así que vive en Postgres y no
+ * en memoria. `bucket` = `"ip"` (cupo diario de un cliente) o `"global"` (tope del servicio, que es
+ * la única cota real porque `X-Forwarded-For` se puede forjar). `key_hash` es el SHA-256 de la IP
+ * —nunca la IP en claro—: alcanza para contar y no acumula datos personales. `day` es el día UTC en
+ * `YYYY-MM-DD`.
+ *
+ * La clave primaria compuesta es lo que hace atómico el consumo: un solo
+ * `insert ... on conflict do update ... where count < limite` decide y cuenta sin carrera entre
+ * instancias.
+ */
+export const aosPublicUsage = pgTable(
+	"aos_public_usage",
+	{
+		/** "ip" para el cupo por cliente, "global" para el tope del servicio. */
+		bucket: text("bucket").notNull(),
+		/** SHA-256 de la IP (o la clave fija del bucket global), nunca la IP. */
+		keyHash: text("key_hash").notNull(),
+		/** Día UTC, `YYYY-MM-DD`. */
+		day: text("day").notNull(),
+		count: integer("count").default(0).notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [primaryKey({ columns: [table.bucket, table.keyHash, table.day] })],
+).enableRLS();
+
+export type AosPublicUsage = typeof aosPublicUsage.$inferSelect;
+export type NewAosPublicUsage = typeof aosPublicUsage.$inferInsert;
+
+/**
+ * Lead que deja el formulario de la extensión pública ("dejanos tu mail y te contactamos").
+ *
+ * Se guarda para que Believe lo siga; el endpoint solo responde `{ ok: true }`. La IP se guarda
+ * hasheada por el mismo motivo que en `aos_public_usage`.
+ */
+export const aosPublicLeads = pgTable("aos_public_leads", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	email: text("email").notNull(),
+	name: text("name"),
+	company: text("company"),
+	/** URL auditada cuando el lead viene del resultado de un audit. */
+	url: text("url"),
+	/** Score que estaba viendo el usuario, para priorizar el seguimiento. */
+	score: integer("score"),
+	/** SHA-256 de la IP de origen: trazabilidad mínima sin acumular el dato personal. */
+	ipHash: text("ip_hash"),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}).enableRLS();
+
+export type AosPublicLead = typeof aosPublicLeads.$inferSelect;
+export type NewAosPublicLead = typeof aosPublicLeads.$inferInsert;
 
 export type Brand = typeof brands.$inferSelect;
 export type NewBrand = typeof brands.$inferInsert;

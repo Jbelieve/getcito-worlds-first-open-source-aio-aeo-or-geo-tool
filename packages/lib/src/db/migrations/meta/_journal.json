@@ -176,6 +176,13 @@
       "when": 1790553648195,
       "tag": "0024_useful_violations",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790736072155,
+      "tag": "0025_shocking_lorna_dane",
+      "breakpoints": true
     }
   ]
 }
