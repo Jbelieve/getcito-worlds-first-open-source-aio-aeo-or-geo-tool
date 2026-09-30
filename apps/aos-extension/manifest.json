@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BeAOS by Believe — Agent Operability Score",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "¿Un agente de IA puede OPERAR tu sitio y además preferirlo? Mide el AOS™ y el APS de cualquier web al instante.",
   "action": {
     "default_popup": "popup.html",

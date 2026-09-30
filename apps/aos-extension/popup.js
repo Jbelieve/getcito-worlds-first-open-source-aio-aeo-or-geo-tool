@@ -320,8 +320,14 @@ function renderResult(audit) {
 	show("result");
 }
 
-function renderError(status, { code = null, retryAfterSeconds = null } = {}) {
-	const text = auditErrorText(status, { code, retryAfterSeconds });
+/**
+ * El texto del error sale de `auditErrorText`, que decide por `status` + `code`. El 429 necesita
+ * además lo que dijo el servidor: `retryAfterSeconds` para decir **cuándo** puede volver la persona y
+ * `rateLimitLimit` (la cabecera `RateLimit-Limit`) para decir el cupo **real**. Ese número viaja desde
+ * la respuesta: si la cabecera no vino, el popup dice el cupo sin la cifra en vez de inventarla.
+ */
+function renderError(status, { code = null, retryAfterSeconds = null, rateLimitLimit = null } = {}) {
+	const text = auditErrorText(status, { code, retryAfterSeconds, rateLimitLimit });
 	$("error-title").textContent = text.title;
 	$("error-msg").textContent = text.detail;
 	show("error");
@@ -348,7 +354,11 @@ async function runAudit(force) {
 		return renderResult(mapAuditResponse(res.data));
 	}
 	console.warn("[BeAOS] audit no exitoso:", res.status, res.code, res.error);
-	renderError(res.status, { code: res.code, retryAfterSeconds: res.retryAfterSeconds });
+	renderError(res.status, {
+		code: res.code,
+		retryAfterSeconds: res.retryAfterSeconds,
+		rateLimitLimit: res.rateLimitLimit,
+	});
 }
 
 async function init() {

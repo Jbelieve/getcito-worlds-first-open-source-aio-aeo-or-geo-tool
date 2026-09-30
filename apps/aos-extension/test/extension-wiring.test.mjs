@@ -3,7 +3,7 @@
 // que alguien pidió explícitamente:
 //
 //   · que no quede ninguna credencial ni host de Maasy/Supabase en lo que se publica,
-//   · que el manifest sea 2.1.0 y hable con BeAOS,
+//   · que el manifest sea 2.2.1 y hable con BeAOS,
 //   · que el overlay siga estando y sin dependencias del servidor,
 //   · que el popup no le pida al DOM un id que el HTML no tiene (el clásico error de vanilla JS,
 //     que no lo agarra ningún compilador porque no hay compilador).
@@ -32,9 +32,9 @@ const PUBLICADOS = [
 ];
 
 describe("manifest", () => {
-	it("es la versión 2.2.0 y se llama BeAOS by Believe", () => {
+	it("es la versión 2.2.1 y se llama BeAOS by Believe", () => {
 		assert.equal(MANIFEST.manifest_version, 3);
-		assert.equal(MANIFEST.version, "2.2.0");
+		assert.equal(MANIFEST.version, "2.2.1");
 		// El nombre es el lockup en texto plano: `BeAOS by Believe`. El manifest no renderiza, así que
 		// acá no hay «e» girada ni punto cian — eso vive en el popup. El descriptor que sigue al guion
 		// es lo único que se recortó, para que el nombre entre en el campo de 45 de la store.
@@ -112,6 +112,37 @@ describe("sin credencial y sin rastro de Maasy en lo que se publica", () => {
 
 	it("el audit ya no manda el `source: extension` de la función de Maasy", () => {
 		assert.equal(/source:\s*"extension"/.test(LIB), false);
+	});
+});
+
+/**
+ * Candado estático de los textos que ve el usuario: no pueden decir cosas falsas. Hay defectos que se
+ * pueden reintroducir sin que ningún test de comportamiento chille —una constante con el cupo, una
+ * frase que enumera lo que el guardián bloquea—, así que además del test de cada función queda esto:
+ * lo que se publica no puede volver a decirlo.
+ */
+describe("los textos que ve el usuario no dicen cosas falsas", () => {
+	it("el cupo no está hardcodeado: el número sale de `RateLimit-Limit`", () => {
+		// `AUDITS_PER_DAY = 20` era el **default** del servidor, no el cupo: en el despliegue donde pasó
+		// el incidente el cupo valía 200 y la persona leyó 20. Una constante del cliente acierta sólo
+		// mientras nadie toque la env.
+		assert.equal(
+			/(AUDITS_PER_DAY|AUDITS_PER_IP)\s*[:=]/.test(LIB),
+			false,
+			"el cupo no puede ser una constante del cliente: tiene que salir de RateLimit-Limit",
+		);
+		assert.match(LIB, /RateLimit-Limit/, "y tiene que leer la cabecera que lo publica");
+	});
+
+	it("el texto del bloqueo no enumera lo que el guardián bloquea", () => {
+		for (const name of PUBLICADOS) {
+			assert.equal(
+				/direcciones internas|metadatos de nube|localhost/i.test(read(name)),
+				false,
+				`${name}: nombrar lo que se bloquea le da un mapa a quien prueba y no le sirve a nadie más`,
+			);
+		}
+		assert.match(LIB, /Esa dirección queda afuera por seguridad/, "y el texto canónico sigue ahí");
 	});
 });
 

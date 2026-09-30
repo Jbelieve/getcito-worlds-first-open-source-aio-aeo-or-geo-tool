@@ -11,21 +11,32 @@ humano desde el dev console.
 ## Versión del paquete
 
 ```
-2.2.0
+2.2.1
 ```
 
-La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.2.0.zip`) la
-dice sola. La 2.2.0 es un **arreglo**, no un rediseño: la 2.1.0 le mandaba al endpoint el dominio
-pelado (sin `https://` y sin path), que el endpoint rechaza, así que no auditaba ninguna web. Ahora
-manda la URL completa de la pestaña —con su path, para medir la página que se está viendo— y los
-errores de dirección distinguen "no se pudo interpretar" de "queda afuera por seguridad". No cambia
-nada de lo que el popup muestra.
+La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.2.1.zip`) la
+dice sola.
 
-**Ojo con el número antes de subir.** Este corte le cambia la marca al paquete: el nombre pasa a ser
-el lockup (`BeAOS by Believe — …`) y el header del popup deja de ser texto plano para llevar el
-wordmark de Believe. La 2.2.0 **ya está usada** en el dev console y la store rechaza volver a subir el
-mismo número, así que hay que subir la versión del manifest (2.2.0) antes de publicar. Es una decisión
-de release, no de este cambio: el manifest sigue en 2.2.0 a propósito.
+La 2.2.1 arregla **dos textos que ve el usuario y que decían cosas falsas**, los dos en el popup:
+
+- El **429** decía *"Son 20 auditorías por IP y por día"* con una constante propia. Ese 20 es el
+  default del servidor, no el cupo: el cupo lo define una env y viaja en la cabecera `RateLimit-Limit`
+  de la respuesta. En el despliegue donde pasó el incidente el cupo valía **200** y la persona leyó
+  **20**. Ahora el número sale de la respuesta, y si la cabecera no viene el cupo se dice **sin la
+  cifra** en vez de inventarla. El mensaje sigue diciendo **cuándo** puede volver (leyendo
+  `Retry-After`).
+- El detalle del error **`blocked_url`** enumeraba qué bloquea el guardián (*direcciones internas,
+  localhost, metadatos de nube*). Eso le da un mapa a quien prueba y a un usuario normal no le dice
+  nada. Ahora dice sólo que esa dirección **queda afuera por seguridad**. La distinción con
+  `invalid_url` ("no se pudo interpretar la dirección") se mantiene.
+
+No cambia nada más: ni la marca, ni el pedido al endpoint (la URL completa de la pestaña), ni el
+resto de lo que el popup muestra.
+
+**Ojo con el número antes de subir.** La 2.2.0 ya está usada en el dev console —es el corte que le
+cambia la marca al paquete: el nombre pasa a ser el lockup (`BeAOS by Believe — …`) y el header del
+popup lleva el wordmark de Believe— y la store rechaza volver a subir el mismo número. Por eso este
+arreglo va en **2.2.1**: mismo paquete, un número más adelante.
 
 ---
 

@@ -255,10 +255,30 @@ describe("el texto de cada error", () => {
 
 		assert.match(afuera.title, /seguridad/);
 		assert.match(afuera.detail, /http\(s\)/);
-		assert.match(afuera.detail, /internas/);
+		assert.match(afuera.detail, /queda afuera por seguridad/);
 
 		assert.notEqual(noSePudoLeer.title, afuera.title);
 		assert.notEqual(noSePudoLeer.detail, afuera.detail);
+	});
+
+	/**
+	 * El candado del defecto del `blocked_url`: el texto le enseñaba a quien prueba **qué apuntar**
+	 * (redes internas, `localhost`, metadatos de nube) y a una persona normal no le dice nada —casi
+	 * nadie audita su propio `localhost`—. El criterio canónico (`AOS-VISTA.md`, 3.7 y 6.1) fija que
+	 * el detalle diga **sólo** que la dirección queda afuera por seguridad.
+	 */
+	it("el texto del `blocked_url` no nombra lo que bloquea: ni localhost, ni redes internas, ni metadatos", () => {
+		const afuera = auditErrorText(400, { code: "blocked_url" });
+		const texto = `${afuera.title} ${afuera.detail}`;
+
+		assert.equal(
+			/localhost|127\.0\.0\.1|internas?|privad|metadatos|169\.254|10\.|192\.168|\.local\b|red/i.test(texto),
+			false,
+			`el texto no puede nombrar lo que el guardián bloquea: "${texto}"`,
+		);
+		// Y sigue diciendo lo único que le sirve a la persona: esa dirección no se audita, por seguridad.
+		assert.equal(afuera.title, "Esa dirección queda afuera por seguridad");
+		assert.match(afuera.detail, /http\(s\)/, "el único dato que se da es que el endpoint audita sitios públicos");
 	});
 
 	it("un 400 sin `code` (servidor viejo) no inventa el motivo", () => {
@@ -269,10 +289,46 @@ describe("el texto de cada error", () => {
 	});
 
 	it("el 429 dice cuándo puede volver, leyendo el Retry-After", () => {
-		const unaHora = auditErrorText(429, { retryAfterSeconds: 3600 });
+		const unaHora = auditErrorText(429, { retryAfterSeconds: 3600, rateLimitLimit: 20 });
 		assert.match(unaHora.title, /cupo por hoy/);
-		assert.match(unaHora.detail, /20 auditorías por IP y por día/);
 		assert.match(unaHora.detail, /en 1 h/, "traduce los segundos a algo legible");
+	});
+
+	/**
+	 * El candado del defecto del cupo. La extensión decía *"Son 20 auditorías por IP y por día"* con
+	 * una constante propia (`AUDITS_PER_DAY = 20`), que es el **default** del servidor: el cupo real lo
+	 * define una env (`AOS_PUBLIC_AUDITS_PER_DAY`) y viaja en `RateLimit-Limit`. En el despliegue donde
+	 * pasó el incidente valía **200** y la persona leyó **20**: un número falso.
+	 *
+	 * AOS-VISTA.md 3.7 y 6.2: el número **sale de la respuesta**; si la cabecera no viene (un servidor
+	 * viejo, un proxy que la come) la cifra **no se inventa**.
+	 */
+	it("dice el cupo que vino en `RateLimit-Limit`, y nunca el 20 hardcodeado", () => {
+		const conCupo = auditErrorText(429, { retryAfterSeconds: 2700, rateLimitLimit: 200 });
+
+		assert.match(conCupo.detail, /200/, "el cupo es el que mandó el servidor");
+		assert.equal(/\b20\b/.test(conCupo.detail), false, "y no el 20 de la constante vieja");
+		assert.equal(/20 auditorías/.test(conCupo.detail), false, "ni la frase que leía 20 cuando el cupo era 200");
+		assert.match(conCupo.detail, /en 45 min/, "y sigue diciendo cuándo puede volver");
+	});
+
+	it("sin `RateLimit-Limit` no inventa ninguna cifra: dice el cupo sin el número", () => {
+		// Sin cabecera y sin Retry-After: el texto no tiene un solo dígito. Ni un 20, ni un 0.
+		const sinNada = auditErrorText(429, { retryAfterSeconds: null, rateLimitLimit: null });
+		assert.equal(/\d/.test(sinNada.detail), false, `no puede haber cifras acá: "${sinNada.detail}"`);
+		assert.match(sinNada.detail, /medianoche UTC/, "y sigue diciendo cuándo se renueva");
+
+		// Con Retry-After pero sin cabecera: la cifra del cupo sigue sin aparecer; lo único con números
+		// es la espera, que es un dato que sí tenemos.
+		const conEspera = auditErrorText(429, { retryAfterSeconds: 2700, rateLimitLimit: null });
+		assert.match(conEspera.detail, /en 45 min/);
+		assert.equal(/\d+\s+auditorías/.test(conEspera.detail), false, "no se promete un cupo que no sabemos");
+		assert.equal(/por IP y por día/.test(conEspera.detail), false, "la frase del cupo sólo va con el número real");
+	});
+
+	it("un `RateLimit-Limit` ilegible no se convierte en cifra: no se inventa", () => {
+		const roto = auditErrorText(429, { retryAfterSeconds: null, rateLimitLimit: "muchas" });
+		assert.equal(/\d/.test(roto.detail), false, `"muchas" no es un cupo: "${roto.detail}"`);
 	});
 
 	it("si el 429 no trae Retry-After, igual dice cuándo: la medianoche UTC", () => {
@@ -331,6 +387,30 @@ describe("parseAuditFailure", () => {
 		const cupo = parseAuditFailure({ status: 429, headers: headers({ "Retry-After": "3600" }), body: null });
 		assert.equal(cupo.retryAfterSeconds, 3600);
 		assert.equal(cupo.code, null);
+	});
+
+	/**
+	 * El cupo real lo define la env del servidor y viaja en `RateLimit-Limit`: la extensión tiene que
+	 * leerlo de la respuesta, no de una constante propia (AOS-VISTA.md 3.7 y 6.2).
+	 */
+	it("lee el cupo de `RateLimit-Limit`, y cuando la cabecera no viene dice null", () => {
+		const conCabecera = parseAuditFailure({
+			status: 429,
+			headers: headers({ "RateLimit-Limit": "200", "Retry-After": "2700" }),
+			body: null,
+		});
+		assert.equal(conCabecera.rateLimitLimit, 200);
+
+		const sinCabecera = parseAuditFailure({ status: 429, headers: headers({}), body: null });
+		assert.equal(sinCabecera.rateLimitLimit, null, "sin la cabecera no hay cupo que mostrar");
+
+		const basura = parseAuditFailure({ status: 429, headers: headers({ "RateLimit-Limit": "muchas" }), body: null });
+		assert.equal(basura.rateLimitLimit, null, "un valor ilegible no es un cupo");
+		assert.equal(
+			parseAuditFailure({ status: 429, headers: headers({ "RateLimit-Limit": "-5" }), body: null }).rateLimitLimit,
+			null,
+			"un cupo negativo no existe",
+		);
 	});
 
 	it("un cuerpo ilegible no rompe: status y code nulos, sin inventar", () => {
