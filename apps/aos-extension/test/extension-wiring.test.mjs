@@ -3,7 +3,7 @@
 // que alguien pidió explícitamente:
 //
 //   · que no quede ninguna credencial ni host de Maasy/Supabase en lo que se publica,
-//   · que el manifest sea 2.1.0 y hable con BeAOS,
+//   · que el manifest sea 2.2.1 y hable con BeAOS,
 //   · que el overlay siga estando y sin dependencias del servidor,
 //   · que el popup no le pida al DOM un id que el HTML no tiene (el clásico error de vanilla JS,
 //     que no lo agarra ningún compilador porque no hay compilador).
@@ -32,9 +32,9 @@ const PUBLICADOS = [
 ];
 
 describe("manifest", () => {
-	it("es la versión 2.2.0 y se llama BeAOS by Believe", () => {
+	it("es la versión 2.2.1 y se llama BeAOS by Believe", () => {
 		assert.equal(MANIFEST.manifest_version, 3);
-		assert.equal(MANIFEST.version, "2.2.0");
+		assert.equal(MANIFEST.version, "2.2.1");
 		// El nombre es el lockup en texto plano: `BeAOS by Believe`. El manifest no renderiza, así que
 		// acá no hay «e» girada ni punto cian — eso vive en el popup. El descriptor que sigue al guion
 		// es lo único que se recortó, para que el nombre entre en el campo de 45 de la store.
