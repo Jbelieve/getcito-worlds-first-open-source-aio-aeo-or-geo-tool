@@ -8,6 +8,8 @@
  *
  * Reglas:
  *   - solo http/https, sin credenciales embebidas;
+ *   - un dominio pelado sin esquema (`ejemplo.com`, `ejemplo.com/precios`, `localhost`) se interpreta
+ *     como `https://…`: se tolera **la forma**, nunca el destino;
  *   - hostnames prohibidos (localhost, `.local`, `.internal`, metadatos de nube);
  *   - literales IPv4/IPv6 clasificados por rango, no por texto: `127.1`, `2130706433` y
  *     `[::ffff:7f00:1]` son la misma dirección que `127.0.0.1` y el parser de URL ya los normaliza;
@@ -46,11 +48,47 @@ export type UrlGuardRejectionKind = "invalid" | "blocked" | "unresolved";
  * propio literal, que ya se validó en el texto.
  */
 export type UrlGuardResult =
-	| { ok: true; url: URL; addresses: string[] }
+	| { ok: true; url: URL; addresses: string[]; normalized: boolean }
 	| { ok: false; kind: UrlGuardRejectionKind; reason: string };
 
 /** Validación puramente textual: mismo rechazo, pero sin direcciones porque acá no se resolvió nada. */
-export type UrlTextGuardResult = { ok: true; url: URL } | { ok: false; kind: UrlGuardRejectionKind; reason: string };
+export type UrlTextGuardResult =
+	| { ok: true; url: URL; normalized: boolean }
+	| { ok: false; kind: UrlGuardRejectionKind; reason: string };
+
+/**
+ * ¿La entrada trae esquema propio?
+ *
+ * Es la única pregunta que decide si hay que anteponer `https://`. `bescore.believe-global.com` no
+ * trae esquema; `https://…`, `ftp://…` y `mailto:…` sí, y esos tienen que seguir cayendo en el
+ * rechazo por esquema en vez de convertirse en un host llamado `ftp`.
+ *
+ * El `:` de un puerto no es un esquema. El caso concreto que obliga a mirar el puerto numérico es
+ * `localhost:3000`: un esquema puede llevar puntos (RFC 3986 permite `+`, `-` y `.`), así que
+ * `ejemplo.com:8443` se lee como el esquema `ejemplo.com`, y si lo mandáramos por el camino del
+ * esquema `localhost:3000` saldría rechazado por "solo http y https" en vez de por apuntar a una
+ * dirección interna. Se tolera la forma; el rechazo tiene que venir del guardián, no del parser.
+ */
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+const HOST_WITH_PORT = /^[^\s/?#@]+:\d+([/?#]|$)/;
+
+/**
+ * Normaliza la FORMA de la entrada. No valida nada del destino, y no es una excepción del guardián.
+ *
+ * Un dominio pelado (`bescore.believe-global.com`, `ejemplo.com/precios`, `localhost`) se interpreta
+ * como `https://…`: es lo que manda la extensión 2.1.0 que ya está en review y lo que escribe una
+ * persona en un formulario. A partir de acá sigue el camino normal — se resuelve por DNS, se valida
+ * cada dirección y se bloquea igual que cualquier otra URL si el destino es interno. Lo único que
+ * cambia es la forma, nunca el destino.
+ */
+function withDefaultScheme(raw: string): { candidate: string; normalized: boolean } {
+	const trimmed = raw.trim();
+	if (trimmed.length === 0) return { candidate: trimmed, normalized: false };
+	if (HAS_SCHEME.test(trimmed) && HOST_WITH_PORT.test(trimmed) === false) {
+		return { candidate: trimmed, normalized: false };
+	}
+	return { candidate: `https://${trimmed}`, normalized: true };
+}
 
 const defaultLookup: LookupFn = (hostname) => dnsLookup(hostname, { all: true });
 
@@ -244,15 +282,17 @@ function blockedHostnameReason(hostname: string): string | null {
 }
 
 /**
- * Validación puramente textual: protocolo, credenciales, hostname y, si es un literal, la IP.
- * No resuelve DNS — eso lo hace `assertSafeAuditUrl`.
+ * Validación puramente textual: normaliza la forma, y después protocolo, credenciales, hostname y,
+ * si es un literal, la IP. No resuelve DNS — eso lo hace `assertSafeAuditUrl`.
  */
 export function validateAuditUrl(raw: string): UrlTextGuardResult {
+	const { candidate, normalized } = withDefaultScheme(raw);
+
 	let url: URL;
 	try {
-		url = new URL(raw);
+		url = new URL(candidate);
 	} catch {
-		return { ok: false, kind: "invalid", reason: "la URL no se puede parsear" };
+		return { ok: false, kind: "invalid", reason: "no pudimos interpretar eso como una dirección" };
 	}
 
 	if (url.protocol !== "http:" && url.protocol !== "https:") {
@@ -276,7 +316,7 @@ export function validateAuditUrl(raw: string): UrlTextGuardResult {
 		if (ipReason !== null) return { ok: false, kind: "blocked", reason: `IP prohibida: ${ipReason}` };
 	}
 
-	return { ok: true, url };
+	return { ok: true, url, normalized };
 }
 
 /**

@@ -145,7 +145,8 @@ describe("validateAuditUrl — texto, sin DNS", () => {
 	});
 
 	it("rechaza un host vacío o una URL ilegible", () => {
-		expect(validateAuditUrl("no-es-una-url").ok).toBe(false);
+		// `no-es-una-url` sí se lee como un dominio pelado; lo que no se puede interpretar es esto otro.
+		expect(validateAuditUrl("no es una url").ok).toBe(false);
 		expect(validateAuditUrl("https://").ok).toBe(false);
 		// `https:///x` no es un host vacío: el parser de URL lo normaliza a `https://x/`.
 		expect(validateAuditUrl("https:///127.0.0.1").ok).toBe(false);
@@ -153,6 +154,119 @@ describe("validateAuditUrl — texto, sin DNS", () => {
 
 	it("acepta una IP pública como literal", () => {
 		expect(validateAuditUrl("http://93.184.216.34/").ok).toBe(true);
+	});
+
+	/**
+	 * Tolerancia con la FORMA, cero tolerancia con el DESTINO.
+	 *
+	 * La extensión 2.1.0 que está en review manda el dominio pelado, sin esquema y sin path. Eso es lo
+	 * que hay que poder interpretar; que sea pelado no dice nada del destino, así que `localhost`
+	 * pelado se sigue rechazando igual que `http://localhost`.
+	 */
+	describe("dominio pelado (sin esquema)", () => {
+		it("lo interpreta como https, conservando el path y el puerto", () => {
+			const conPath = validateAuditUrl("bescore.believe-global.com/precios?plan=pro#top");
+			expect(conPath.ok).toBe(true);
+			expect(conPath.ok === true && conPath.url.toString()).toBe(
+				"https://bescore.believe-global.com/precios?plan=pro#top",
+			);
+			expect(conPath.ok === true && conPath.normalized).toBe(true);
+
+			const conPuerto = validateAuditUrl("ejemplo.com:8443/x");
+			expect(conPuerto.ok === true && conPuerto.url.toString()).toBe("https://ejemplo.com:8443/x");
+		});
+
+		it("el path importa: no se audita la home en lugar de la página que se está viendo", () => {
+			const result = validateAuditUrl("https://ejemplo.com/precios");
+			expect(result.ok === true && result.url.pathname).toBe("/precios");
+			// Una URL con esquema no se toca: `normalized` es false y el texto queda idéntico.
+			expect(result.ok === true && result.normalized).toBe(false);
+		});
+
+		it("sigue rechazando lo que no es ni URL ni dominio", () => {
+			// Ojo: el `:` hace que estos se lean como un esquema propio, así que caen por protocolo.
+			for (const raw of ["javascript:alert(1)", "mailto:algo@ejemplo.com", "file:/etc/passwd"]) {
+				const result = validateAuditUrl(raw);
+				expect(result.ok, raw).toBe(false);
+				expect(result.ok === false && result.kind, raw).toBe("invalid");
+			}
+			// Y esto no es una dirección de ninguna forma.
+			const ilegible = validateAuditUrl("no es una url");
+			expect(ilegible.ok).toBe(false);
+			expect(ilegible.ok === false && ilegible.kind).toBe("invalid");
+			expect(ilegible.ok === false && ilegible.reason).toContain("interpretar");
+		});
+
+		it("no relaja el destino: localhost, la loopback y los rangos privados pelados se rechazan igual", () => {
+			for (const raw of [
+				"localhost",
+				"localhost:3000",
+				"127.0.0.1",
+				"127.1",
+				"10.0.0.7",
+				"192.168.1.1",
+				"169.254.169.254",
+			]) {
+				const result = validateAuditUrl(raw);
+				expect(result.ok, raw).toBe(false);
+				expect(result.ok === false && result.kind, raw).toBe("blocked");
+			}
+		});
+	});
+});
+
+describe("assertSafeAuditUrl — dominio pelado", () => {
+	const lookupPublico = async () => [{ address: "93.184.216.34", family: 4 }];
+
+	it("audita un dominio pelado: se normaliza a https y se resuelve como cualquier otra URL", async () => {
+		const result = await assertSafeAuditUrl("bescore.believe-global.com", { lookup: lookupPublico });
+		expect(result.ok).toBe(true);
+		expect(result.ok === true && result.url.toString()).toBe("https://bescore.believe-global.com/");
+		// Se resolvió de verdad: la dirección validada es la que se fija en el socket.
+		expect(result.ok === true && result.addresses).toEqual(["93.184.216.34"]);
+		expect(result.ok === true && result.normalized).toBe(true);
+	});
+
+	it("le pasa el hostname pelado al DNS, sin el esquema ni el path", async () => {
+		let pedido: string | null = null;
+		await assertSafeAuditUrl("ejemplo.com/precios", {
+			lookup: async (hostname) => {
+				pedido = hostname;
+				return [{ address: "93.184.216.34", family: 4 }];
+			},
+		});
+		expect(pedido).toBe("ejemplo.com");
+	});
+
+	it("`localhost` pelado sigue rechazado, y se rechaza sin salir a la red", async () => {
+		let llamado = false;
+		const result = await assertSafeAuditUrl("localhost", {
+			lookup: async () => {
+				llamado = true;
+				return [{ address: "93.184.216.34", family: 4 }];
+			},
+		});
+		expect(result.ok).toBe(false);
+		expect(result.ok === false && result.kind).toBe("blocked");
+		expect(llamado).toBe(false);
+	});
+
+	it("un dominio pelado que resuelve a una IP privada también se bloquea", async () => {
+		const result = await assertSafeAuditUrl("sitio-que-miente.example", {
+			lookup: async () => [{ address: "10.0.0.7", family: 4 }],
+		});
+		expect(result.ok).toBe(false);
+		expect(result.ok === false && result.kind).toBe("blocked");
+	});
+
+	it("un dominio pelado que no resuelve se rechaza", async () => {
+		const result = await assertSafeAuditUrl("no-existe.example", {
+			lookup: async () => {
+				throw new Error("ENOTFOUND");
+			},
+		});
+		expect(result.ok).toBe(false);
+		expect(result.ok === false && result.kind).toBe("unresolved");
 	});
 });
 
