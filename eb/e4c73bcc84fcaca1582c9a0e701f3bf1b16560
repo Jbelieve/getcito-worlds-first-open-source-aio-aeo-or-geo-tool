@@ -1,0 +1,22 @@
+packages/aos-aps/src/aos/audit.ts
+  h_c5ca005a78c880 2,23,28-33,36-38,67-68,74,76,93-96,98-104,106,108-109,121,138-144,148,156-157,166-173,210,212-217,236-239,242,245-261,265,274,280,285
+packages/aos-aps/src/aos/guarded-http.test.ts
+  h_c5ca005a78c880 1-295
+packages/aos-aps/src/aos/index.ts
+  h_c5ca005a78c880 2
+packages/aos-aps/src/aos/signature.test.ts
+  h_c5ca005a78c880 45-64,69,73,84,99,112,122
+packages/aos-aps/src/aos/signature.ts
+  h_c5ca005a78c880 2-3,12-17,23-37,39-42,46,86-88,94,96-98,101-105,110,145-151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ebe4c73bcc84fcaca1582c9a0e701f3bf1b16560",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
