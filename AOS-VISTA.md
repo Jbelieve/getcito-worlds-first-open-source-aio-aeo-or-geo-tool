@@ -311,7 +311,7 @@ Reglas de los errores que no se reinventan:
 propias cuentas es la segunda implementación del AOS, y la segunda se separa de la primera. El endpoint
 publica lo que el motor calculó y la vista lo muestra **tal cual**.
 
-Lo mismo vale para las cinco etapas del rubric viejo (declaración N1, ejecutabilidad DOM N2, ejecución
+Lo mismo vale para las cinco etapas del rubric viejo (inventario, declaración N1, ejecutabilidad DOM N2, ejecución
 programática N3, confiabilidad): **no se muestran**, porque este motor no las corre. Inventarlas sería
 mentir con más precisión.
 
