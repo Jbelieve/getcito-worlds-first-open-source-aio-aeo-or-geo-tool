@@ -4,7 +4,7 @@
  * Todo lo de acá se prueba sin base y sin red a propósito: la decisión del límite es parte del
  * contrato, así que tiene que poder verificarse como una función, no como un efecto.
  */
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import {
 	type AosAuditResult,
 	type AxisBreakdown,
@@ -28,6 +28,43 @@ export const DEFAULT_AUDITS_PER_DAY = 20;
 
 /** Tope diario del servicio: la cota que sostiene cuando la identidad del cliente no alcanza. */
 export const DEFAULT_AUDITS_PER_DAY_GLOBAL = 2000;
+
+/**
+ * Cupo diario por IP de la **credencial de verificación** (`AOS_PUBLIC_VERIFY_PER_DAY`).
+ *
+ * Es generoso a propósito —1000 frente a los 20 del cupo público— porque quien lo usa es el equipo
+ * verificando el despliegue, y para eso hacen falta ráfagas: cada corrida de comprobación son decenas
+ * de pedidos seguidos. No es "sin límite": sigue siendo por IP y sigue contando contra el tope global
+ * del servicio (ver `consumePublicQuota`), así que la cota agregada del servicio no cambia.
+ */
+export const DEFAULT_VERIFY_AUDITS_PER_DAY = 1000;
+
+/**
+ * Cabecera de la credencial de verificación: `x-beaos-verify`.
+ *
+ * ## Por qué este nombre
+ *
+ * `x-` porque es una cabecera propia, fuera de los estándares. **No** se usa `Authorization`: esa
+ * cabecera tiene semántica de autenticación (un proxy o un WAF puede tratarla distinto, un cliente
+ * puede mandarla por costumbre, y un `WWW-Authenticate` en la respuesta prometería un esquema de auth
+ * que no existe). Acá no hay identidad ni autorización: la credencial **solo mueve el pedido a otra
+ * cuenta de cupo**.
+ *
+ * `beaos` porque el espacio de cabeceras sin prefijo es de todos: ya hay `x-verify-*` de otros
+ * productos y CDNs, y un nombre genérico se cruzaría con el de un tercero en la cadena de proxies.
+ *
+ * `verify` porque dice para qué es, y es lo que permite que quien lea un log o un `curl` entienda el
+ * pedido sin tener que buscar el código.
+ *
+ * ## Lo que esta cabecera NO es
+ *
+ * No autentica al usuario, no da acceso a ningún dato privado y no saltea ninguna regla: solo cambia
+ * el bucket del contador (ver `quotaLaneForRequest` y `consumePublicQuota`). Y no está en
+ * `AOS_PUBLIC_CORS_ALLOWED_HEADERS`, así que un navegador ajeno no puede mandarla: un `fetch` con
+ * esta cabecera dispara un preflight que la lista blanca de CORS no autoriza. El secreto se queda
+ * fuera de la web, y a propósito.
+ */
+export const VERIFY_HEADER = "x-beaos-verify";
 
 /**
  * Divisor del tope global que marca la **concentración** de una sola clave.
@@ -57,6 +94,16 @@ export interface PublicAuditLimits {
 	 * Cloudflare, `cf-connecting-ip` se vuelve la forma más barata de evadir el cupo por IP.
 	 */
 	cfOnlyIngress: boolean;
+	/**
+	 * Secreto de la credencial de verificación (`AOS_PUBLIC_VERIFY_SECRET`), ya recortado.
+	 *
+	 * **Vacío significa que la función no existe**: sin secreto, todo pedido —con cabecera, sin
+	 * cabecera o con una inventada— va al bucket de IP y la respuesta es idéntica a la de antes de
+	 * que esto existiera. Ver `verifySecretMatches` y `quotaLaneForRequest`.
+	 */
+	verifySecret: string;
+	/** Cupo diario por IP dentro del bucket `verify` (`AOS_PUBLIC_VERIFY_PER_DAY`). */
+	verifyPerIp: number;
 }
 
 /** `"true"` o `"1"` encienden; cualquier otra cosa (incluido vacío y ausente) apaga. */
@@ -81,7 +128,73 @@ export function publicAuditLimits(env: Record<string, string | undefined> = proc
 		requestTimeoutMs: positiveInt(env.AOS_PUBLIC_AUDIT_REQUEST_TIMEOUT_MS, DEFAULT_AUDIT_REQUEST_TIMEOUT_MS),
 		ipSalt: env.AOS_PUBLIC_IP_SALT ?? "",
 		cfOnlyIngress: envFlag(env.AOS_PUBLIC_CF_ONLY_INGRESS),
+		// Se recorta la env para que un espacio o un salto de línea colado en el archivo de entorno no
+		// deje la credencial inutilizable. El valor de la cabecera ya llega sin espacios: el protocolo
+		// HTTP los quita, así que los dos lados se comparan con la misma regla.
+		verifySecret: env.AOS_PUBLIC_VERIFY_SECRET?.trim() ?? "",
+		verifyPerIp: positiveInt(env.AOS_PUBLIC_VERIFY_PER_DAY, DEFAULT_VERIFY_AUDITS_PER_DAY),
 	};
+}
+
+/**
+ * ¿La cabecera presentada es la credencial?
+ *
+ * La comparación es en **tiempo constante** y sobre **digestos del mismo largo**, y las dos partes
+ * importan:
+ *
+ *  · `timingSafeEqual` compara byte a byte sin cortar en la primera diferencia, así que el tiempo de
+ *    respuesta no delata cuántos bytes del prefijo acertó quien prueba. Con `===` (o con
+ *    `crypto.timingSafeEqual` sobre los strings crudos) el tiempo diría, byte a byte, qué tan cerca
+ *    estuvo: es justo la clase de fuga que convierte un secreto largo en uno adivinable por partes.
+ *  · `timingSafeEqual` **exige longitudes iguales** y tira si no lo son. Hashear las dos partes a
+ *    SHA-256 primero normaliza el largo a 32 bytes, así que un secreto de otro largo no rompe nada
+ *    (ni entra por un `try/catch` que alguien podría olvidar) y tampoco se filtra el largo del
+ *    secreto real, que es la mitad del trabajo de quien lo adivina.
+ *
+ * Un secreto vacío apaga la función: devuelve `false` sin comparar, y por lo tanto **no existe**.
+ */
+export function verifySecretMatches(presented: string | null, secret: string): boolean {
+	if (secret.length === 0) return false;
+	if (presented === null) return false;
+	const presentedDigest = createHash("sha256").update(presented, "utf8").digest();
+	const secretDigest = createHash("sha256").update(secret, "utf8").digest();
+	return timingSafeEqual(presentedDigest, secretDigest);
+}
+
+/**
+ * Bucket del contador al que va un pedido.
+ *
+ * `"ip"` es el cupo público de siempre. `"verify"` es el cupo del verificador, que **solo** se alcanza
+ * con la credencial correcta. Cabecera ausente, vacía o equivocada → `"ip"`: el modo de fallar es
+ * siempre el público, nunca el privilegiado.
+ *
+ * La IP se sigue hasheando igual en los dos carriles (`hashClientKey`, en `consumePublicQuota`): lo
+ * que cambia entre uno y otro es la cuenta, no la identidad ni las reglas.
+ */
+export type QuotaLane = "ip" | "verify";
+
+/** El carril de cupo que le corresponde a este pedido, según la cabecera y el secreto configurado. */
+export function quotaLaneForRequest(headers: Headers, limits: PublicAuditLimits): QuotaLane {
+	return verifySecretMatches(headers.get(VERIFY_HEADER), limits.verifySecret) ? "verify" : "ip";
+}
+
+/** Bucket del cupo público por IP en la tabla del contador (`aos_public_usage`). */
+export const PUBLIC_QUOTA_BUCKET = "ip";
+
+/**
+ * Bucket del verificador. Es el corazón del arreglo: un bucket **distinto**, con su propio tope por
+ * IP, para que verificar el despliegue no consuma el cupo de los usuarios reales.
+ */
+export const VERIFY_QUOTA_BUCKET = "verify";
+
+/** Bucket del contador al que va un carril. Función pura para poder probarlo sin base. */
+export function quotaBucketForLane(lane: QuotaLane): string {
+	return lane === "verify" ? VERIFY_QUOTA_BUCKET : PUBLIC_QUOTA_BUCKET;
+}
+
+/** Tope por IP del carril. Pura, por la misma razón que `quotaBucketForLane`. */
+export function quotaLimitForLane(lane: QuotaLane, limits: PublicAuditLimits): number {
+	return lane === "verify" ? limits.verifyPerIp : limits.perIp;
 }
 
 /** Opciones de la extracción de la IP. Hoy una sola: si Cloudflare es el único ingreso. */
@@ -192,11 +305,20 @@ export function quotaConcentrationThreshold(globalLimit: number): number {
 }
 
 export interface QuotaConcentration {
-	/** Pedidos que ya lleva el bucket de IP que más consumió hoy. */
+	/** Pedidos que ya lleva el bucket de cliente que más consumió hoy. */
 	topCount: number;
 	globalLimit: number;
 	/** Día UTC, para que el aviso diga de cuándo habla. */
 	day: string;
+	/**
+	 * Bucket del que habla el aviso (`ip` o `verify`), cuando quien lo llama lo sabe.
+	 *
+	 * Va aparte porque la lectura es distinta: un bucket `ip` concentrado delata el bug (la clave de
+	 * cliente colapsó en un valor constante) o un NAT; uno `verify` concentrado es una corrida de
+	 * verificación con credencial, que es esperable. Sin el nombre, quien lee el log no puede
+	 * distinguirlas y la alarma pierde lo único que la hace accionable.
+	 */
+	bucket?: string;
 }
 
 /**
@@ -216,11 +338,14 @@ export interface QuotaConcentration {
 export function quotaConcentrationWarning(input: QuotaConcentration): string | null {
 	const threshold = quotaConcentrationThreshold(input.globalLimit);
 	if (input.topCount < threshold) return null;
+	const where =
+		input.bucket === undefined ? "un solo bucket de IP" : `el bucket \`${input.bucket}\` de un solo cliente`;
 	return (
-		`[aos-public] ALERTA de concentración: un solo bucket de IP lleva ${input.topCount} pedidos de los ` +
+		`[aos-public] ALERTA de concentración: ${where} lleva ${input.topCount} pedidos de los ` +
 		`${input.globalLimit} del tope global (umbral ${threshold}) el ${input.day}. O es un cliente detrás de NAT ` +
-		"(legítimo) o la clave de cliente colapsó en un valor constante y el cupo por IP dejó de ser por IP. " +
-		"Revisá de dónde sale la IP (AOS_PUBLIC_CF_ONLY_INGRESS / cabeceras del proxy) antes de tocar el cupo."
+		"(legítimo), o es la corrida de verificación con credencial (esperada), o la clave de cliente colapsó en " +
+		"un valor constante y el cupo por IP dejó de ser por IP. Revisá de dónde sale la IP " +
+		"(AOS_PUBLIC_CF_ONLY_INGRESS / cabeceras del proxy) antes de tocar el cupo."
 	);
 }
 
@@ -276,6 +401,17 @@ export function decidePublicQuota(snapshot: QuotaSnapshot): QuotaDecision {
 /**
  * Las cinco cabeceras del contrato (draft-ietf-httpapi-ratelimit-headers + la tríada clásica), y
  * `Retry-After` **solo** cuando se rechaza, que es cuando tiene sentido esperar.
+ *
+ * **El cupo que reflejan es el que decide, no siempre el público.** Con la credencial de verificación
+ * válida, `RateLimit-Limit` dice el cupo de `verify` y `RateLimit-Remaining` lo que le queda a esa IP
+ * dentro de ese bucket. Se eligió así porque unas cabeceras que dijeran 20 mientras el pedido se
+ * decide contra 1000 serían una mentira del contrato: quien tiene la credencial vería `Remaining: 0`
+ * con el cupo de `verify` intacto, o al revés.
+ *
+ * ¿Delata el bucket? No a quien no corresponde: la diferencia **solo** es observable presentando el
+ * secreto correcto, o sea por alguien que ya está autorizado a saberlo. Sin cabecera, con cabecera
+ * equivocada o con la función apagada, estas cabeceras son exactamente las de hoy. Y la política sigue
+ * llamándose `aos-audit` en los dos carriles: no se anuncia un bucket nuevo ni se cambia el contrato.
  */
 export function rateLimitHeaders(
 	decision: QuotaDecision,

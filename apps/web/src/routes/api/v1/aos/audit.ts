@@ -10,6 +10,14 @@
  * token sino un límite diario por IP más un tope global, y un guardián anti-SSRF, porque acá el
  * servidor termina pidiendo URLs arbitrarias que manda un desconocido.
  *
+ * **Credencial de verificación**: además del cupo público, hay una cabecera opcional
+ * (`x-beaos-verify`, ver `@/lib/aos/public-audit`) que mueve el pedido a un bucket propio. Existe
+ * porque el equipo y quien verifica el despliegue salen por la misma IP pública que los usuarios: sin
+ * esto, una corrida de comprobación agota el cupo por IP de todos y el medidor deja de funcionar para
+ * quien lo va a usar. No es un bypass —cambia la cuenta del contador, no las reglas: la IP se hashea
+ * igual, el tope de `verify` la acota, y el tope global del servicio se gasta igual— y sin
+ * `AOS_PUBLIC_VERIFY_SECRET` la cabecera no existe.
+ *
  * No persiste nada: es una medición al paso, no una marca del sistema.
  *
  * **CORS**: la landing pública ("mide tu web") llama a este endpoint **desde el navegador del
@@ -27,6 +35,7 @@ import {
 	publicAuditBody,
 	publicAuditLimits,
 	publicAuditResponse,
+	quotaLaneForRequest,
 	rateLimitedResponse,
 	rateLimitHeaders,
 	validatePublicAuditUrl,
@@ -98,9 +107,15 @@ export const Route = createFileRoute("/api/v1/aos/audit")({
 						// 3. El cupo. Se gasta recién cuando el pedido es auditable de verdad.
 						//    `cfOnlyIngress` sale de la env: apagado (lo medido hoy, el origen es alcanzable
 						//    directo) la identidad es el salto que escribe Traefik; encendido, Cloudflare.
+						//
+						//    El carril sale de la credencial de verificación (`x-beaos-verify`). Sin
+						//    `AOS_PUBLIC_VERIFY_SECRET` —o con la cabecera ausente o equivocada— el carril es
+						//    `ip` y esta rama es idéntica a la de antes de que la credencial existiera: ese es
+						//    el modo de fallar, y es el público. Ver `quotaLaneForRequest`.
 						const snapshot = await consumePublicQuota(
 							clientKeyFromHeaders(request.headers, { cfOnlyIngress: limits.cfOnlyIngress }),
 							limits,
+							quotaLaneForRequest(request.headers, limits),
 						);
 						const quota = decidePublicQuota(snapshot);
 						if (quota.allowed === false) {
