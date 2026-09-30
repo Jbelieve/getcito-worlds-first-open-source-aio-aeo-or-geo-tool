@@ -235,7 +235,9 @@ export function AppSidebar({
 			<SidebarHeader>
 				<SidebarMenu>
 					<SidebarMenuItem>
-						<SidebarMenuButton size="lg" asChild>
+						{/* `h-auto` porque el lockup son dos líneas (44px + 32px): con el `h-12` de `size="lg"`
+						    el header del shell lo recortaba al medio. */}
+						<SidebarMenuButton size="lg" asChild className="h-auto py-3">
 							<Link to="/app" onClick={() => setOpenMobile(false)}>
 								<Logo iconClassName="!size-5" />
 								<div className="ml-auto group-data-[collapsible=icon]:hidden">

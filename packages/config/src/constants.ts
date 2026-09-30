@@ -14,6 +14,17 @@ export const DEFAULT_APP_ICON = "/icons/beaos-icon.svg";
 export const DEFAULT_APP_URL = "http://localhost:3000/";
 
 /**
+ * El lockup de la marca en **texto plano**: `BeAOS by Believe`.
+ *
+ * `DEFAULT_APP_NAME` sigue siendo `BeAOS` porque es la identidad con la que se detecta un despliegue
+ * whitelabel — cambiarlo convertiría a BeAOS en "whitelabel de sí mismo". Este es el otro valor: el
+ * que se escribe donde no se puede dibujar la marca (el título de la pestaña, el manifest de la PWA,
+ * el manifest de la extensión). Donde sí se dibuja, va el lockup de verdad —`BeAOS` arriba y
+ * `by Believe.` abajo con la «e» girada y el punto cian—, que es `BrandLockup` en `logo.tsx`.
+ */
+export const DEFAULT_APP_LOCKUP = `${DEFAULT_APP_NAME} by Believe`;
+
+/**
  * Getcito brand constants — used for icon generation, manifest, and the brand kit.
  */
 export const Getcito_BRAND_COLOR = "#0c3bb9"; // Believe blue

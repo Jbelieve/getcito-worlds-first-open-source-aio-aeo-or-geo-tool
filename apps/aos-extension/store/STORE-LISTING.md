@@ -11,23 +11,38 @@ humano desde el dev console.
 ## Versión del paquete
 
 ```
-2.1.1
+2.2.0
 ```
 
-La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.1.1.zip`) la
-dice sola. La 2.1.1 es un **arreglo**, no un rediseño: la 2.1.0 le mandaba al endpoint el dominio
+La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.2.0.zip`) la
+dice sola. La 2.2.0 es un **arreglo**, no un rediseño: la 2.1.0 le mandaba al endpoint el dominio
 pelado (sin `https://` y sin path), que el endpoint rechaza, así que no auditaba ninguna web. Ahora
 manda la URL completa de la pestaña —con su path, para medir la página que se está viendo— y los
 errores de dirección distinguen "no se pudo interpretar" de "queda afuera por seguridad". No cambia
 nada de lo que el popup muestra.
+
+**Ojo con el número antes de subir.** Este corte le cambia la marca al paquete: el nombre pasa a ser
+el lockup (`BeAOS by Believe — …`) y el header del popup deja de ser texto plano para llevar el
+wordmark de Believe. La 2.2.0 **ya está usada** en el dev console y la store rechaza volver a subir el
+mismo número, así que hay que subir la versión del manifest (2.2.0) antes de publicar. Es una decisión
+de release, no de este cambio: el manifest sigue en 2.2.0 a propósito.
 
 ---
 
 ## Nombre (campo "Name", máx. 45 caracteres)
 
 ```
-BeAOS — Agent Operability & Preference Score
+BeAOS by Believe — Agent Operability Score
 ```
+
+El nombre dice el lockup en **texto plano**, porque el campo no renderiza: `BeAOS by Believe`. Lo
+único que se recortó es el descriptor que sigue al guion —con `& Preference Score` eran 55 caracteres
+y el campo corta en 45—. Es exactamente el `name` del `manifest.json`: Google pide que la ficha y el
+manifest digan lo mismo.
+
+En el popup, donde sí se puede dibujar, el lockup va entero: `BeAOS` arriba y `by` (Inter, mute) +
+`Believe.` en el tratamiento real del wordmark —Fraunces 500, opsz 144, la última «e» girada -18° y el
+punto cian— en una línea aparte y más chica.
 
 ## Descripción corta (campo "Summary", máx. 132 caracteres)
 
@@ -81,8 +96,10 @@ Medir es gratis y no hace falta dejar el correo. Si querés que tu web sea opera
 agentes, lo dejás y el equipo de Believe te contacta.
 
 AOS™ (Agent Operability Score) y APS (Agent Preference Score) son los dos puntajes del estándar
-que BeAOS mide. BeAOS es parte de la infraestructura de marca para la era de agentes que construye
-Believe. Más en be-aos.believe-global.com.
+que BeAOS mide.
+
+BeAOS by Believe — la infraestructura de marca para la era de agentes. Más en
+be-aos.believe-global.com.
 ```
 
 ## Justificación de permisos (campo "Permission justification" — Google lo pide para cada uno)

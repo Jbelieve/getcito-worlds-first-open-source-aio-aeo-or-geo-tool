@@ -9,12 +9,14 @@
  * so they stay in sync with the rest of the app.
  */
 import { createFileRoute } from "@tanstack/react-router";
-import { getDeployment } from "@/lib/config/server";
 import {
 	DEFAULT_APP_ICON,
-	Getcito_THEME_COLOR,
+	DEFAULT_APP_LOCKUP,
+	DEFAULT_APP_NAME,
 	Getcito_BACKGROUND_COLOR,
+	Getcito_THEME_COLOR,
 } from "@workspace/config/constants";
+import { getDeployment } from "@/lib/config/server";
 
 interface ManifestIcon {
 	src: string;
@@ -55,10 +57,13 @@ function buildManifest(): object {
 	}
 
 	const themeColor = hasCustomIcon ? "#000000" : Getcito_THEME_COLOR;
+	// El nombre de la app instalada sigue la misma regla que el título de la pestaña: donde la marca
+	// no se puede dibujar, se escribe. `short_name` queda corto porque es la etiqueta del ícono.
+	const appName = branding.name === DEFAULT_APP_NAME ? DEFAULT_APP_LOCKUP : branding.name;
 
 	return {
 		short_name: branding.name,
-		name: `${branding.name} - AI Search Optimization`,
+		name: `${appName} - AI Search Optimization`,
 		icons,
 		start_url: ".",
 		display: "standalone",
@@ -82,4 +87,3 @@ export const Route = createFileRoute("/api/manifest/")({
 		},
 	},
 });
-

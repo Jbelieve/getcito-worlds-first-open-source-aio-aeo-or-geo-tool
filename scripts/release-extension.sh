@@ -5,9 +5,9 @@
 #   bash scripts/release-extension.sh
 #
 # Deja `dist/beaos-extension-<version>.zip` con **solo lo que va al paquete**: el manifest, los
-# archivos de la extensión y los íconos. Nada de tests, `store/`, markdown de desarrollo ni
-# `.DS_Store`. La lista es explícita a propósito: si mañana alguien agrega un archivo al directorio,
-# no entra al zip por accidente.
+# archivos de la extensión, los íconos y la fuente del wordmark con su licencia. Nada de tests,
+# `store/`, markdown de desarrollo ni `.DS_Store`. La lista es explícita a propósito: si mañana
+# alguien agrega un archivo al directorio, no entra al zip por accidente.
 #
 # La versión sale del manifest, que es la fuente de verdad: así el nombre del zip no puede mentir.
 # Esto **no publica** en la Chrome Web Store — publicar es un paso humano en el dev console.
@@ -26,7 +26,9 @@ VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$M
 
 # Lo que va al paquete. Lo que no está en estas dos listas, no entra.
 FILES=(manifest.json background.js lib.js content-overlay.js popup.html popup.css popup.js)
-DIRS=(icons)
+# `fonts/` lleva el woff2 del wordmark (Fraunces subseteada) y su licencia OFL al lado, que la
+# licencia exige que viaje con la fuente.
+DIRS=(icons fonts)
 
 OUT_DIR="$ROOT/dist"
 OUT="$OUT_DIR/beaos-extension-$VERSION.zip"
