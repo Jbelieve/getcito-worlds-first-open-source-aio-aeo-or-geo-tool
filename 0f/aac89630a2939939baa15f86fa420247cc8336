@@ -1,0 +1,30 @@
+README.md
+  h_c5ca005a78c880 303-304,408-436
+apps/web/src/env.d.ts
+  h_c5ca005a78c880 88-89
+apps/web/src/lib/aos/__tests__/public-verify.test.ts
+  h_c5ca005a78c880 1-318
+apps/web/src/lib/aos/public-audit.ts
+  h_c5ca005a78c880 7,32-68,97-106,131-135,139-199,308,313-321,341-342,344,346-348,404-414
+apps/web/src/lib/aos/public-limit.server.ts
+  h_c5ca005a78c880 10-20,25,29,31,33,35,37,40,43-48,57-58,64-69,74,76,83-88,95,147-151,159,163-166,168,172-173,178-180,184
+apps/web/src/routes/api/v1/aos/audit.ts
+  h_c5ca005a78c880 13-20,38,110-114,118
+packages/config/src/env-registry.ts
+  h_c5ca005a78c880 414-427
+packages/lib/src/db/schema.ts
+  h_c5ca005a78c880 262-264,277
+turbo.json
+  h_c5ca005a78c880 62-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0faac89630a2939939baa15f86fa420247cc8336",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
