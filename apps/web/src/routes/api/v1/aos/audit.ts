@@ -85,7 +85,12 @@ export const Route = createFileRoute("/api/v1/aos/audit")({
 					}
 
 					// 3. El cupo. Se gasta recién cuando el pedido es auditable de verdad.
-					const snapshot = await consumePublicQuota(clientKeyFromHeaders(request.headers), limits);
+					//    `cfOnlyIngress` sale de la env: apagado (lo medido hoy, el origen es alcanzable
+					//    directo) la identidad es el salto que escribe Traefik; encendido, Cloudflare.
+					const snapshot = await consumePublicQuota(
+						clientKeyFromHeaders(request.headers, { cfOnlyIngress: limits.cfOnlyIngress }),
+						limits,
+					);
 					const quota = decidePublicQuota(snapshot);
 					if (quota.allowed === false) {
 						const message =
