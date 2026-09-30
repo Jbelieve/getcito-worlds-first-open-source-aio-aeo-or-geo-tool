@@ -1,0 +1,16 @@
+packages/aos-aps/src/aos/guarded-http.ts
+  h_c5ca005a78c880 1-252
+packages/aos-aps/src/aos/ssrf.ts
+  h_c5ca005a78c880 17-20,42-53,250,292-293,312
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c3f316cd11bd3d324961ff62c3bde21b302a62fe",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
