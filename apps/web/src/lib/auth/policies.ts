@@ -36,6 +36,27 @@ const DEMO_AUTH_WRITE_ALLOWLIST = new Set([
 	"/api/auth/sign-out/",
 ]);
 
+/**
+ * Superficies públicas de AOS: no llevan credencial porque las usa la extensión, que se instala sin
+ * cuenta. Su cota no es un token sino un límite diario por IP más un tope global (ver
+ * `lib/aos/public-audit`), así que la autorización no se decide acá.
+ */
+const PUBLIC_AOS_PATHS = new Set(["/api/v1/aos/audit", "/api/v1/aos/lead"]);
+
+/**
+ * De las públicas, la única que tampoco escribe nada: el audit es una medición al paso.
+ *
+ * El modo demo bloquea escrituras para proteger el estado compartido y el crédito del proveedor, y
+ * acá no hay ninguno de los dos: bloquearlo dejaría la extensión inservible contra una demo sin
+ * proteger nada. El lead sí escribe en la base, así que sigue sujeto al modo demo.
+ */
+const PUBLIC_AOS_READ_ONLY_EXEMPT_PATHS = new Set(["/api/v1/aos/audit"]);
+
+/** El mismo path puede llegar con o sin barra final: la política no debería depender de eso. */
+function normalizePath(pathname: string): string {
+	return pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+}
+
 export type DeploymentPolicyResult =
 	| { action: "allow" }
 	| { action: "block"; status: 401 | 403; error: string; message: string }
@@ -64,15 +85,15 @@ export function evaluateDeploymentPolicy(
 ): DeploymentPolicyResult {
 	const { pathname, method, authorizationHeader } = request;
 	const isWriteMethod = WRITE_METHODS.has(method);
-	const isPlausibleEventRoute =
-		pathname === "/api/plausible/event" ||
-		pathname === "/api/plausible/event/";
+	const isPlausibleEventRoute = pathname === "/api/plausible/event" || pathname === "/api/plausible/event/";
 
 	const isApiRoute = pathname.startsWith("/api/");
 	const isServerFunctionRoute = pathname.startsWith("/_server");
 	const isAllowedAuthWrite = DEMO_AUTH_WRITE_ALLOWLIST.has(pathname);
-	const isOrgPluginMutation =
-		pathname.startsWith("/api/auth/organization/") && isWriteMethod;
+	const isOrgPluginMutation = pathname.startsWith("/api/auth/organization/") && isWriteMethod;
+	const normalizedPath = normalizePath(pathname);
+	const isPublicAosPath = PUBLIC_AOS_PATHS.has(normalizedPath);
+	const isPublicAosReadOnlyExempt = PUBLIC_AOS_READ_ONLY_EXEMPT_PATHS.has(normalizedPath);
 
 	// 0. Better-auth org plugin mutations are blocked everywhere. Orgs are
 	// created server-side only — via the provisioning module (local/demo)
@@ -87,9 +108,15 @@ export function evaluateDeploymentPolicy(
 	}
 
 	// 1. Read-only mode: block every write except the explicit allowlist
-	// (analytics events + the two auth endpoints a visitor needs to use).
+	// (analytics events, the two auth endpoints a visitor needs, and the
+	// public AOS audit, which persists nothing — see PUBLIC_AOS_READ_ONLY_EXEMPT_PATHS).
 	if (features.readOnly && isWriteMethod) {
-		if ((isApiRoute || isServerFunctionRoute) && !isPlausibleEventRoute && !isAllowedAuthWrite) {
+		if (
+			(isApiRoute || isServerFunctionRoute) &&
+			!isPlausibleEventRoute &&
+			!isAllowedAuthWrite &&
+			!isPublicAosReadOnlyExempt
+		) {
 			return {
 				action: "block",
 				status: 403,
@@ -100,24 +127,19 @@ export function evaluateDeploymentPolicy(
 	}
 
 	// 2. Serve OpenAPI spec
-	const isOpenApi =
-		pathname === "/api/v1/openapi.json" ||
-		pathname === "/api/v1/openapi.json/";
+	const isOpenApi = pathname === "/api/v1/openapi.json" || pathname === "/api/v1/openapi.json/";
 
 	if (isOpenApi && method === "GET") {
 		return { action: "serve-openapi" };
 	}
 
-	// 3. Public API v1 key authentication (except docs and spec)
+	// 3. Public API v1 key authentication (except docs, spec and the
+	// deliberately anonymous AOS surfaces, which carry daily IP/global limits).
 	const isPublicApiV1 = pathname.startsWith("/api/v1/");
-	const isPublicApiV1Doc =
-		pathname === "/api/v1/docs" || pathname === "/api/v1/docs/";
+	const isPublicApiV1Doc = pathname === "/api/v1/docs" || pathname === "/api/v1/docs/";
 
-	if (isPublicApiV1 && !isPublicApiV1Doc && !isOpenApi) {
-		const keyResult = evaluateApiKeyAuth(
-			authorizationHeader,
-			options?.adminApiKeys ?? [],
-		);
+	if (isPublicApiV1 && !isPublicApiV1Doc && !isOpenApi && !isPublicAosPath) {
+		const keyResult = evaluateApiKeyAuth(authorizationHeader, options?.adminApiKeys ?? []);
 		if (keyResult !== "allow") {
 			return {
 				action: "block",
@@ -162,8 +184,7 @@ export function evaluateApiKeyAuth(
 	if (!authorizationHeader || !authorizationHeader.startsWith("Bearer ")) {
 		return {
 			error: "Unauthorized",
-			message:
-				"Valid API key required as Bearer token in Authorization header",
+			message: "Valid API key required as Bearer token in Authorization header",
 		};
 	}
 
@@ -215,9 +236,7 @@ export function evaluateRequireAdmin(isAdmin: boolean): "allow" | "deny" {
  * Evaluate organization access requirement.
  * Used by server functions via `requireOrgAccess()` in auth helpers.
  */
-export function evaluateRequireOrgAccess(
-	hasAccess: boolean,
-): "allow" | "deny" {
+export function evaluateRequireOrgAccess(hasAccess: boolean): "allow" | "deny" {
 	return hasAccess ? "allow" : "deny";
 }
 
@@ -248,9 +267,7 @@ export type RouteGuardResult = "allow" | "redirect-to-login" | "not-found";
  * Evaluate the `/_authed` layout guard.
  * Mirrors the `beforeLoad` in `_authed.tsx`.
  */
-export function evaluateAuthedRouteGuard(
-	session: unknown | null,
-): RouteGuardResult {
+export function evaluateAuthedRouteGuard(session: unknown | null): RouteGuardResult {
 	if (!session) return "redirect-to-login";
 	return "allow";
 }
@@ -268,8 +285,6 @@ export function evaluateAdminRouteGuard(isAdmin: boolean): RouteGuardResult {
  * Evaluate the `/app/$brand` layout guard.
  * Mirrors the `loader` in `_authed/app/$brand.tsx`.
  */
-export function evaluateBrandRouteGuard(
-	hasAccess: boolean,
-): RouteGuardResult {
+export function evaluateBrandRouteGuard(hasAccess: boolean): RouteGuardResult {
 	return hasAccess ? "allow" : "not-found";
 }

@@ -46,6 +46,8 @@ import { Route as ApiV1ReportsReportIdRouteImport } from './routes/api/v1/report
 import { Route as ApiV1PromptsPromptIdRouteImport } from './routes/api/v1/prompts/$promptId'
 import { Route as ApiV1CompetitorsCompetitorIdRouteImport } from './routes/api/v1/competitors/$competitorId'
 import { Route as ApiV1BrandsBrandIdRouteImport } from './routes/api/v1/brands/$brandId'
+import { Route as ApiV1AosLeadRouteImport } from './routes/api/v1/aos/lead'
+import { Route as ApiV1AosAuditRouteImport } from './routes/api/v1/aos/audit'
 import { Route as ApiV1AgentAssetsEntityIdRouteImport } from './routes/api/v1/agent-assets/$entityId'
 import { Route as AuthedReportsRenderReportIdRouteImport } from './routes/_authed/reports/render/$reportId'
 import { Route as AuthedAppBrandVisibilityRouteImport } from './routes/_authed/app/$brand/visibility'
@@ -259,6 +261,16 @@ const ApiV1BrandsBrandIdRoute = ApiV1BrandsBrandIdRouteImport.update({
   path: '/api/v1/brands/$brandId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1AosLeadRoute = ApiV1AosLeadRouteImport.update({
+  id: '/api/v1/aos/lead',
+  path: '/api/v1/aos/lead',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1AosAuditRoute = ApiV1AosAuditRouteImport.update({
+  id: '/api/v1/aos/audit',
+  path: '/api/v1/aos/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1AgentAssetsEntityIdRoute =
   ApiV1AgentAssetsEntityIdRouteImport.update({
     id: '/api/v1/agent-assets/$entityId',
@@ -444,6 +456,8 @@ export interface FileRoutesByFullPath {
   '/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
   '/api/v1/agent-assets/$entityId': typeof ApiV1AgentAssetsEntityIdRouteWithChildren
+  '/api/v1/aos/audit': typeof ApiV1AosAuditRoute
+  '/api/v1/aos/lead': typeof ApiV1AosLeadRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -503,6 +517,8 @@ export interface FileRoutesByTo {
   '/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
   '/api/v1/agent-assets/$entityId': typeof ApiV1AgentAssetsEntityIdRouteWithChildren
+  '/api/v1/aos/audit': typeof ApiV1AosAuditRoute
+  '/api/v1/aos/lead': typeof ApiV1AosLeadRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -568,6 +584,8 @@ export interface FileRoutesById {
   '/_authed/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/_authed/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
   '/api/v1/agent-assets/$entityId': typeof ApiV1AgentAssetsEntityIdRouteWithChildren
+  '/api/v1/aos/audit': typeof ApiV1AosAuditRoute
+  '/api/v1/aos/lead': typeof ApiV1AosLeadRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -633,6 +651,8 @@ export interface FileRouteTypes {
     | '/app/$brand/visibility'
     | '/reports/render/$reportId'
     | '/api/v1/agent-assets/$entityId'
+    | '/api/v1/aos/audit'
+    | '/api/v1/aos/lead'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -692,6 +712,8 @@ export interface FileRouteTypes {
     | '/app/$brand/visibility'
     | '/reports/render/$reportId'
     | '/api/v1/agent-assets/$entityId'
+    | '/api/v1/aos/audit'
+    | '/api/v1/aos/lead'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -756,6 +778,8 @@ export interface FileRouteTypes {
     | '/_authed/app/$brand/visibility'
     | '/_authed/reports/render/$reportId'
     | '/api/v1/agent-assets/$entityId'
+    | '/api/v1/aos/audit'
+    | '/api/v1/aos/lead'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -796,6 +820,8 @@ export interface RootRouteChildren {
   ApiOgIndexRoute: typeof ApiOgIndexRoute
   ApiSetupStatusIndexRoute: typeof ApiSetupStatusIndexRoute
   ApiV1AgentAssetsEntityIdRoute: typeof ApiV1AgentAssetsEntityIdRouteWithChildren
+  ApiV1AosAuditRoute: typeof ApiV1AosAuditRoute
+  ApiV1AosLeadRoute: typeof ApiV1AosLeadRoute
   ApiV1BrandsBrandIdRoute: typeof ApiV1BrandsBrandIdRoute
   ApiV1CompetitorsCompetitorIdRoute: typeof ApiV1CompetitorsCompetitorIdRoute
   ApiV1PromptsPromptIdRoute: typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -1069,6 +1095,20 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/brands/$brandId'
       fullPath: '/api/v1/brands/$brandId'
       preLoaderRoute: typeof ApiV1BrandsBrandIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/aos/lead': {
+      id: '/api/v1/aos/lead'
+      path: '/api/v1/aos/lead'
+      fullPath: '/api/v1/aos/lead'
+      preLoaderRoute: typeof ApiV1AosLeadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/aos/audit': {
+      id: '/api/v1/aos/audit'
+      path: '/api/v1/aos/audit'
+      fullPath: '/api/v1/aos/audit'
+      preLoaderRoute: typeof ApiV1AosAuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/agent-assets/$entityId': {
@@ -1407,6 +1447,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOgIndexRoute: ApiOgIndexRoute,
   ApiSetupStatusIndexRoute: ApiSetupStatusIndexRoute,
   ApiV1AgentAssetsEntityIdRoute: ApiV1AgentAssetsEntityIdRouteWithChildren,
+  ApiV1AosAuditRoute: ApiV1AosAuditRoute,
+  ApiV1AosLeadRoute: ApiV1AosLeadRoute,
   ApiV1BrandsBrandIdRoute: ApiV1BrandsBrandIdRoute,
   ApiV1CompetitorsCompetitorIdRoute: ApiV1CompetitorsCompetitorIdRoute,
   ApiV1PromptsPromptIdRoute: ApiV1PromptsPromptIdRouteWithChildren,
