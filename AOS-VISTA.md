@@ -388,15 +388,22 @@ Qué tiene que mostrar:
 
 ## 6. Diferencias conocidas con la implementación de referencia
 
-Este documento manda. La extensión es la referencia **de la traducción**, y en estos tres puntos hace
-algo distinto de lo que dice acá. Se dejan escritos —y **no** se cambió la extensión— para que quien
-porte el criterio a la landing no copie la diferencia:
+Este documento manda. La extensión es la referencia **de la traducción**, y en estos puntos hizo algo
+distinto de lo que dice acá. Se dejan escritos para que quien porte el criterio a la landing no copie
+la diferencia, y **cada hallazgo se conserva aunque se haya cerrado**: así queda el registro de que
+existió y de cuándo se arregló. **Las observaciones 1 y 2 se arreglaron en la 2.2.1 (2026-09-30)**; la
+observación 3 sigue abierta.
 
 1. **El detalle del `blocked_url` nombra lo que el guardián bloquea.** La extensión dice *"El endpoint
    solo audita sitios http(s) públicos. Las direcciones internas, localhost y los metadatos de nube
    quedan afuera por seguridad."* Este documento pide **no** nombrar `localhost`, redes internas ni
    metadatos de nube: son detalles internos de la defensa y le dan a quien prueba un mapa de qué
    apuntar. El texto canónico dice sólo que la dirección **queda afuera por seguridad**.
+
+   > **Arreglado en 2.2.1 — 2026-09-30.** El detalle dice sólo *"El endpoint solo audita sitios
+   > http(s) públicos. Esa dirección queda afuera por seguridad."*, sin enumerar la defensa, y ningún
+   > archivo que viaja al usuario vuelve a nombrar lo que el guardián bloquea (candado estático en
+   > `apps/aos-extension/test/extension-wiring.test.mjs`).
 2. **El `429` hardcodea el cupo en 20.** La extensión dice *"Son 20 auditorías por IP y por día"* con
    una constante propia (`AUDITS_PER_DAY = 20`), que es el **default** del servidor. El cupo efectivo lo
    define una env (`AOS_PUBLIC_AUDITS_PER_DAY`) y viaja en `RateLimit-Limit`: en el despliegue donde
@@ -404,6 +411,11 @@ porte el criterio a la landing no copie la diferencia:
    extensión acierta sólo mientras nadie toque la env. El texto canónico no necesita el número (basta
    con **cuándo** puede volver, leído de `Retry-After`); si una superficie lo quiere decir, tiene que
    salir de la respuesta.
+
+   > **Arreglado en 2.2.1 — 2026-09-30.** El número sale de la cabecera `RateLimit-Limit` de la
+   > respuesta; si no viene, el cupo se dice **sin la cifra** en vez de inventarla, y `Retry-After` (o
+   > `RateLimit-Reset`) sigue diciendo **cuándo** puede volver. La constante del cliente ya no existe y
+   > hay un candado estático que impide reintroducirla.
 3. **Un `status` desconocido se muestra como `n_a`.** La extensión mapea cualquier estado que no sea
    `pass`/`fail`/`n_a` a `n_a`, con su glifo y su `No aplica`. Este documento no define ese caso más
    allá de que **no se inventa** un "pasa" ni un "no pasa"; queda anotado que la lectura actual de la

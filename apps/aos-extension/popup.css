@@ -167,10 +167,7 @@ body {
 .state {
 	padding: 18px 16px;
 }
-/* Ningún bloque que se oculta define `display`, así que no hace falta `!important`. */
-.hidden {
-	display: none;
-}
+/* `.hidden` vive al FINAL del archivo, a propósito: ver el bloque "ocultar" del cierre. */
 .muted {
 	color: var(--ink-suave);
 	font-size: 12.5px;
@@ -688,4 +685,22 @@ body {
 .ft b {
 	color: var(--ink);
 	font-weight: 600;
+}
+
+/* --- ocultar ----------------------------------------------------------------
+ * `.hidden` va **al final del archivo**, y ahí tiene que quedarse.
+ *
+ * No es una utilidad cualquiera: una clase contra una clase empata en especificidad, así que `.hidden`
+ * pierde contra **cualquier** regla de clase que declare su propio `display` y aparezca más abajo. Es
+ * exactamente lo que pasaba con `.badge` (`display: inline-flex`): el JavaScript le ponía `.hidden`
+ * cuando el sitio no publica perfil firmado y la cascada lo ignoraba, así que quedaba a la vista un
+ * pill vacío. Un pill vacío no es cosmético —parece un badge que no cargó— y contradice el criterio
+ * (AOS-VISTA.md §3.5: sin perfil publicado no hay badge).
+ *
+ * Va acá abajo en vez de llevar `!important`: la regla gana por orden, que es como el CSS resuelve los
+ * empates, y no hay que pelearle a ninguna otra declaración. Si mañana se agrega una regla de
+ * componente con `display`, ponerla **antes** de este bloque.
+ */
+.hidden {
+	display: none;
 }

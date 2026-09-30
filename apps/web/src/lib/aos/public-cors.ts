@@ -32,6 +32,21 @@
  * tercero es que **su** navegador no pueda leer nuestra respuesta; no queremos que un sitio ajeno
  * embeba nuestro medidor y se quede con el cupo.
  *
+ * ## `Access-Control-Expose-Headers`: sin esto el widget no puede decir el cupo
+ *
+ * `Access-Control-Allow-Origin` deja que el navegador **entregue** la respuesta, pero un `fetch`
+ * cross-origin solo puede leer las *response headers* CORS-safelisted (`Content-Type`,
+ * `Content-Length`, `Cache-Control`, `Expires`, `Last-Modified`, `Pragma`). **Ninguna** de las
+ * cabeceras de este contrato lo es: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`,
+ * `RateLimit-Policy` y `Retry-After` quedan invisibles para `response.headers.get(...)` aunque
+ * viajen en la respuesta. Desde el backend de la landing no se notaría (el CORS es del navegador) y
+ * la extensión tampoco lo sufre (su `host_permissions` saltea el CORS), pero **la landing sí**: su
+ * "mide tu web" caería al texto sin la cifra del cupo y sin el *"podés volver en 45 min"*.
+ *
+ * Por eso se exponen **exactamente esas cinco** —y no `*`— en las mismas respuestas donde ya va
+ * `Access-Control-Allow-Origin`, o sea solo cuando el origen está permitido. Un sitio ajeno sigue sin
+ * recibir ni una cabecera `Access-Control-*`.
+ *
  * Y nada de `Access-Control-Allow-Credentials`: estos endpoints no tienen cookies ni sesión, así que
  * no hace falta habilitar credenciales.
  */
@@ -56,6 +71,16 @@ export const AOS_PUBLIC_PREFLIGHT_MAX_AGE_SECONDS = 86_400;
 /** Métodos y cabeceras que declara el preflight. El POST lleva `content-type: application/json`. */
 export const AOS_PUBLIC_CORS_METHODS = "POST, OPTIONS";
 export const AOS_PUBLIC_CORS_ALLOWED_HEADERS = "content-type";
+
+/**
+ * Las cinco cabeceras de límite que la superficie que corre en el navegador tiene que poder leer.
+ *
+ * No están en la lista CORS-safelisted, así que sin `Access-Control-Expose-Headers` el widget recibe
+ * los valores pero no los ve. Es la lista **cerrada**: no `*`, ni las cabeceras de la respuesta en
+ * general — solo lo que el medidor de la landing necesita para decir el cupo y cuándo volver.
+ */
+export const AOS_PUBLIC_EXPOSED_HEADERS =
+	"RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, RateLimit-Policy, Retry-After";
 
 /** Un mapa de cabeceras plano. El `Response` de la plataforma lo normaliza a minúsculas. */
 export type CorsHeaderMap = Record<string, string>;
@@ -110,6 +135,10 @@ export function isAllowedPublicOrigin(origin: string | null, allowedOrigins: rea
  *
  * Sin `Origin` (un `curl`, el backend de otro servicio) la respuesta no lleva ninguna cabecera
  * `Access-Control-*`: no hay navegador que necesite leerla.
+ *
+ * `Access-Control-Expose-Headers` sale de acá, con la misma condición que el `Allow-Origin`: es el
+ * único punto donde se decide si el origen está permitido, así que la lista de cabeceras legibles no
+ * puede quedar en un camino y el permiso en otro. Ver el encabezado del archivo.
  */
 export function corsHeadersForRequest(request: Request, allowedOrigins: readonly string[]): CorsHeaderMap {
 	const origin = request.headers.get("origin");
@@ -118,6 +147,7 @@ export function corsHeadersForRequest(request: Request, allowedOrigins: readonly
 		// El origen tal cual vino: nunca `*`, porque con lista blanca no hace falta y `*` le abriría
 		// la lectura a cualquier sitio.
 		headers["Access-Control-Allow-Origin"] = origin;
+		headers["Access-Control-Expose-Headers"] = AOS_PUBLIC_EXPOSED_HEADERS;
 	}
 	return headers;
 }
