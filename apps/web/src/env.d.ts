@@ -85,6 +85,8 @@ declare global {
 			readonly AOS_PUBLIC_IP_SALT?: string;
 			readonly AOS_PUBLIC_CF_ONLY_INGRESS?: string;
 			readonly AOS_PUBLIC_CORS_ORIGINS?: string;
+			readonly AOS_PUBLIC_VERIFY_SECRET?: string;
+			readonly AOS_PUBLIC_VERIFY_PER_DAY?: string;
 		}
 	}
 }

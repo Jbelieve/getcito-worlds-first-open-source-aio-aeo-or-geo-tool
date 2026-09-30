@@ -411,4 +411,18 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description:
 			"Lista blanca de orígenes (separados por coma) que pueden leer las respuestas de /api/v1/aos/audit y /api/v1/aos/lead desde un navegador. Default: https://be-aos.believe-global.com, https://www.be-aos.believe-global.com, https://believe-global.com, https://www.believe-global.com. El widget DEBE llamar a esos endpoints desde el navegador del visitante: si la landing lo hace server-side, todos los visitantes salen con la IP del servidor y se comen entre todos el cupo diario por IP.",
 	},
+	{
+		name: "AOS_PUBLIC_VERIFY_SECRET",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Secreto de la credencial de verificación del audit público. Quien lo mande en la cabecera `x-beaos-verify` gasta del bucket `verify`, con su propio tope por IP, en vez del cupo público: así verificar el despliegue no agota el cupo de los usuarios reales (el equipo y el verificador salen por la misma IP pública). OPTIONAL y apagado por default: ausente o vacía, la cabecera se ignora por completo y el endpoint se comporta como si la función no existiera. La comparación es en tiempo constante y el valor nunca se refleja en respuestas, cabeceras ni logs. No es un bypass: cambia la cuenta del contador, no las reglas (misma IP hasheada, mismo tope global del servicio).",
+	},
+	{
+		name: "AOS_PUBLIC_VERIFY_PER_DAY",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Auditorías públicas por IP y por día dentro del bucket `verify` (default 1000). Es el tope de la credencial de verificación: aunque el secreto se filtre, la cota por IP sigue existiendo. No reemplaza al tope global del servicio, que se gasta igual desde los dos carriles; conviene dejarlo por debajo de un tercio de AOS_PUBLIC_AUDITS_PER_DAY_GLOBAL para que una corrida de verificación no se lleve el cupo del servicio.",
+	},
 ];

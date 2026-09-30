@@ -259,7 +259,9 @@ export type NewProviderCall = typeof providerCalls.$inferInsert;
  * Contador diario del audit público: una fila por cupo y por día.
  *
  * Tiene que sobrevivir un reinicio y ser compartido entre instancias, así que vive en Postgres y no
- * en memoria. `bucket` = `"ip"` (cupo diario de un cliente) o `"global"` (tope del servicio, que es
+ * en memoria. `bucket` = `"ip"` (cupo diario de un cliente), `"verify"` (el cupo de la credencial de
+ * verificación, que es un bucket **aparte** para que verificar el despliegue no agote el de los
+ * usuarios reales; se cuenta por IP igual que `"ip"`) o `"global"` (tope del servicio, que es
  * la cota que sostiene cuando la identidad del cliente no alcanza: NAT compartido o cabecera de IP
  * falsificable). `key_hash` es el SHA-256 de la IP
  * —nunca la IP en claro—: alcanza para contar y no acumula datos personales. `day` es el día UTC en
@@ -272,7 +274,7 @@ export type NewProviderCall = typeof providerCalls.$inferInsert;
 export const aosPublicUsage = pgTable(
 	"aos_public_usage",
 	{
-		/** "ip" para el cupo por cliente, "global" para el tope del servicio. */
+		/** "ip" para el cupo por cliente, "verify" para el de la credencial, "global" para el tope del servicio. */
 		bucket: text("bucket").notNull(),
 		/** SHA-256 de la IP (o la clave fija del bucket global), nunca la IP. */
 		keyHash: text("key_hash").notNull(),

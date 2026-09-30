@@ -300,6 +300,8 @@ Required-column legend: **local** = required in local mode · **wl** = required 
 | `ADMIN_AUTH0_SUB` / `ADMIN_API_KEYS` | server | Admin access (subject claim / bearer tokens). |
 | `DEFAULT_BRAND_DOMAINS` | server | Comma-separated domains added as default brands. |
 | `AOS_PUBLIC_CORS_ORIGINS` | server | Comma-separated whitelist of browser origins allowed to read the public AOS endpoints. Defaults to the BeAOS landing and `believe-global.com` (see [Public AOS endpoints](#public-aos-endpoints-apiv1aosaudit-apiv1aoslead)). |
+| `AOS_PUBLIC_VERIFY_SECRET` | server | Secret of the audit verification credential (header `x-beaos-verify`). When set, a request that carries it spends from the separate `verify` quota bucket instead of the public per-IP one. Optional and off by default: unset or empty, the header is ignored entirely and the endpoint behaves exactly as before. |
+| `AOS_PUBLIC_VERIFY_PER_DAY` | server | Per-IP/day quota inside the `verify` bucket (default `1000`). It does not replace the service-wide global cap, which both lanes spend from. |
 | `DBOS_SYSTEM_DATABASE_URL` | server | Override for the DBOS system database URL. |
 
 ## Usage
@@ -402,6 +404,35 @@ curl -i -X POST https://beaos.believe-global.com/api/v1/aos/audit \
   -H "Content-Type: application/json" \
   -d '{"url":"https://ejemplo.com"}'
 ```
+
+#### Verification credential (`x-beaos-verify`)
+
+Measuring a deployment spends the same public per-IP quota as a real user, and the team and whoever
+verifies the deployment go out through the **same public IP**. A verification run therefore used to
+exhaust everyone's daily quota — that is the incident this solves, not a code bug.
+
+Set `AOS_PUBLIC_VERIFY_SECRET` and send it in the `x-beaos-verify` header to spend from the separate
+`verify` bucket instead:
+
+```bash
+curl -i -X POST https://beaos.believe-global.com/api/v1/aos/audit \
+  -H "Content-Type: application/json" \
+  -H "x-beaos-verify: $AOS_PUBLIC_VERIFY_SECRET" \
+  -d '{"url":"https://ejemplo.com"}'
+```
+
+It is **not a bypass**. It changes the *account* the request is counted in, never the rules: the IP
+is hashed exactly the same way and still counted per IP inside `verify` (capped by
+`AOS_PUBLIC_VERIFY_PER_DAY`, default 1000), the URL guard and the anti-SSRF check run in the same
+order, and the service-wide global cap is spent from both lanes. The comparison is constant-time over
+equal-length digests, so the response time leaks neither the secret's length nor its prefix, and the
+secret is never echoed in a response body, a header or a log. Missing, empty or wrong header → the
+public bucket, which is the safe way to fail. Without `AOS_PUBLIC_VERIFY_SECRET` the header does not
+exist at all and every response is byte-identical to the one before this feature.
+
+The public contract is unchanged: same 13 response keys, same `RateLimit-*` headers, same
+`aos-audit` policy name. When the credential is valid those headers describe the `verify` quota,
+which is only observable to a caller that already presented the secret.
 
 ## Database
 
