@@ -56,7 +56,17 @@ export function websiteSourcesForClaims(input: {
 	dnaWebsite?: unknown;
 	brandWebsite?: string | null;
 }): string[] {
-	const candidates = [input.entityWebsite, input.dnaWebsite, input.brandWebsite];
+	// La web de la ENTIDAD, si existe, es LA web: no se sustituye por otra.
+	//
+	// El error que esto corrige: la cadena probaba entidad -> DNA -> marca y se quedaba con la primera
+	// que RESPONDIERA. Con BeScore eso comparó el bundle de un producto nuevo contra la web corporativa
+	// de Believe --que sirve 6 claims-- y el candado bloqueó una publicacion legitima por un sitio que
+	// BeScore no es. El respaldo tiene que rellenar un campo VACIO, no cambiar de sitio.
+	const entity = typeof input.entityWebsite === "string" ? input.entityWebsite.trim() : "";
+	if (entity.length > 0) return [entity];
+
+	// Solo cuando la entidad no tiene web cargada se busca donde vive el resto de la identidad.
+	const candidates = [input.dnaWebsite, input.brandWebsite];
 	const sources: string[] = [];
 	for (const candidate of candidates) {
 		if (typeof candidate !== "string") continue;

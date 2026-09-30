@@ -53,14 +53,24 @@ describe("claimsGuardDecision", () => {
 });
 
 describe("las fuentes de la web para el candado (el agujero que se cerró)", () => {
-	it("prefiere la entidad, después el DNA, y por último la marca", () => {
+	it("si la entidad tiene web, es ESA y ninguna otra", () => {
+		// BeScore: un producto nuevo con su propia web. Su sitio todavia no publica claims, y eso NO
+		// puede hacer que el candado lo compare contra la web corporativa de Believe.
 		expect(
 			websiteSourcesForClaims({
-				entityWebsite: "https://entidad.com",
+				entityWebsite: "https://bescore.believe-global.com",
 				dnaWebsite: "https://dna.com",
-				brandWebsite: "https://marca.com",
+				brandWebsite: "https://believe-global.com/",
 			}),
-		).toEqual(["https://entidad.com", "https://dna.com", "https://marca.com"]);
+		).toEqual(["https://bescore.believe-global.com"]);
+	});
+	it("solo cuando la entidad NO tiene web se cae al DNA y a la marca", () => {
+		expect(
+			websiteSourcesForClaims({ entityWebsite: null, dnaWebsite: "https://dna.com", brandWebsite: "https://marca.com" }),
+		).toEqual(["https://dna.com", "https://marca.com"]);
+		expect(websiteSourcesForClaims({ entityWebsite: "   ", dnaWebsite: undefined, brandWebsite: "https://marca.com" })).toEqual([
+			"https://marca.com",
+		]);
 	});
 
 	it("el caso real de Believe: la entidad vacía y la marca llena", () => {
