@@ -26,8 +26,17 @@ export const GLOBAL_QUOTA_KEY = "__global__";
 /** Cupo diario por IP. Suficiente para usar la extensión todo el día sin convertirla en un scraping service. */
 export const DEFAULT_AUDITS_PER_DAY = 20;
 
-/** Tope diario del servicio: la única cota real, porque `X-Forwarded-For` se puede forjar. */
+/** Tope diario del servicio: la cota que sostiene cuando la identidad del cliente no alcanza. */
 export const DEFAULT_AUDITS_PER_DAY_GLOBAL = 2000;
+
+/**
+ * Divisor del tope global que marca la **concentración** de una sola clave.
+ *
+ * Es la señal que habría avisado a tiempo del incidente del 2026-09-30: si un único bucket de IP
+ * se lleva más de un tercio del cupo del servicio entero, o hay una oficina con NAT (legítimo) o la
+ * clave de cliente colapsó en un valor constante y el cupo "por IP" dejó de ser por IP.
+ */
+export const QUOTA_CONCENTRATION_DIVISOR = 3;
 
 /** Techo de tiempo total del pedido de audit. */
 export const DEFAULT_AUDIT_TOTAL_TIMEOUT_MS = 20_000;
@@ -41,6 +50,19 @@ export interface PublicAuditLimits {
 	totalTimeoutMs: number;
 	requestTimeoutMs: number;
 	ipSalt: string;
+	/**
+	 * Declara que el único camino al origen es Cloudflare. Ver `clientKeyFromHeaders`.
+	 *
+	 * Apagado por default a propósito: encendido sin haber restringido el firewall a los rangos de
+	 * Cloudflare, `cf-connecting-ip` se vuelve la forma más barata de evadir el cupo por IP.
+	 */
+	cfOnlyIngress: boolean;
+}
+
+/** `"true"` o `"1"` encienden; cualquier otra cosa (incluido vacío y ausente) apaga. */
+function envFlag(raw: string | undefined): boolean {
+	const value = raw?.trim().toLowerCase();
+	return value === "true" || value === "1";
 }
 
 function positiveInt(raw: string | undefined, fallback: number): number {
@@ -58,19 +80,69 @@ export function publicAuditLimits(env: Record<string, string | undefined> = proc
 		totalTimeoutMs: positiveInt(env.AOS_PUBLIC_AUDIT_TOTAL_TIMEOUT_MS, DEFAULT_AUDIT_TOTAL_TIMEOUT_MS),
 		requestTimeoutMs: positiveInt(env.AOS_PUBLIC_AUDIT_REQUEST_TIMEOUT_MS, DEFAULT_AUDIT_REQUEST_TIMEOUT_MS),
 		ipSalt: env.AOS_PUBLIC_IP_SALT ?? "",
+		cfOnlyIngress: envFlag(env.AOS_PUBLIC_CF_ONLY_INGRESS),
 	};
+}
+
+/** Opciones de la extracción de la IP. Hoy una sola: si Cloudflare es el único ingreso. */
+export interface ClientKeyOptions {
+	/**
+	 * `true` **solo** si el firewall del origen ya restringe el ingreso a los rangos de Cloudflare.
+	 * Ver la precedencia completa en `clientKeyFromHeaders`.
+	 */
+	cfOnlyIngress?: boolean;
 }
 
 /**
  * Clave de cliente a partir de las cabeceras.
  *
- * Usamos el **último salto** de `x-forwarded-for`: es el que agrega el proxy que tenemos delante y
- * el único que no controla el cliente. El primer salto (y `cf-connecting-ip`) los puede escribir
- * cualquiera, así que no son identidad — por eso el tope global es la cota que de verdad sostiene.
- * Sin cabecera, todos caen en el mismo bucket `unknown`: se comportan como un solo cliente, que es
- * el modo de fallar seguro (el cupo por IP se agota rápido y el global queda igual de firme).
+ * ## Qué llega de verdad (medido, producción, 2026-09-30)
+ *
+ * El tráfico de la extensión entra `cliente → Traefik (coolify-proxy en contabo-believe) → app`, y
+ * el host del endpoint (`beaos.believe-global.com`, el de `BEAOS_API_URL`) **no pasa por
+ * Cloudflare**: resuelve a la IP del propio VPS (la misma desde 1.1.1.1, 8.8.8.8 y 9.9.9.9), la
+ * respuesta no trae `cf-ray` ni `server: cloudflare`, y el certificado es Let's Encrypt del host.
+ *
+ * Capturado en la interfaz del contenedor mientras entraba tráfico real (una Chrome de la extensión
+ * y un `curl` de prueba), esto es exactamente lo que recibe el endpoint:
+ *
+ * ```text
+ * Host: beaos.believe-global.com
+ * X-Forwarded-For: 198.51.100.7     ← un solo salto: la IP real del cliente
+ * X-Real-Ip: 198.51.100.7           ← lo mismo
+ * X-Forwarded-Proto: https
+ * (sin cf-ray, sin cf-connecting-ip, sin `server: cloudflare`)
+ * ```
+ *
+ * (Las IPs de los ejemplos van anonimizadas en los rangos de documentación de la RFC 5737; lo medido
+ * es un solo salto, el mismo valor en las dos cabeceras.)
+ *
+ * Y una petición con `X-Forwarded-For: 1.2.3.4` + `X-Real-IP: 5.6.7.8` + `cf-connecting-ip: 9.9.9.9`
+ * llegó así: las dos primeras **sobrescritas** por Traefik con la IP real (corre con
+ * `forwardedHeaders.insecure` en false, el default, así que descarta lo que manda el cliente) y
+ * `cf-connecting-ip` **intacta, tal cual la escribió el cliente**. O sea: en esta cadena
+ * `cf-connecting-ip` no lo emite nadie y cualquiera puede inventarlo.
+ *
+ * ## Precedencia, en el orden en que entra el tráfico
+ *
+ * 1. **`cf-connecting-ip`, solo si `cfOnlyIngress` está declarado** (`AOS_PUBLIC_CF_ONLY_INGRESS`).
+ *    Detrás de Cloudflare ese header es el correcto: Cloudflare lo sobrescribe en el borde, así que
+ *    el cliente no lo controla y el último salto de XFF (la IP del POP) sería el ruido. Pero esa
+ *    garantía es **de red, no de cabecera**: un `cf-ray` también se puede escribir a mano desde
+ *    afuera, así que la bandera se enciende recién cuando el firewall solo deja entrar a Cloudflare.
+ *    Si el header no viniera, cae al paso 2.
+ * 2. **El último salto de `x-forwarded-for`**: es el valor que escribe el proxy que sí controlamos.
+ *    Con la cadena medida hay un solo salto, así que "último" = la IP del cliente, y no es
+ *    falsificable porque Traefik reemplaza la cabecera entera en vez de confiar en la del cliente.
+ * 3. **`unknown`**: sin cabecera, todos comparten un bucket. Es el modo de fallar seguro —el cupo por
+ *    IP se agota rápido y el tope global, que nunca se toca, sigue siendo la cota real— y la alarma
+ *    de `quotaConcentrationWarning` lo delata en los logs.
  */
-export function clientKeyFromHeaders(headers: Headers): string {
+export function clientKeyFromHeaders(headers: Headers, options: ClientKeyOptions = {}): string {
+	if (options.cfOnlyIngress === true) {
+		const cloudflare = headers.get("cf-connecting-ip");
+		if (cloudflare !== null && cloudflare.trim().length > 0) return normalizeIpText(cloudflare);
+	}
 	const forwarded = headers.get("x-forwarded-for");
 	if (forwarded === null || forwarded.trim().length === 0) return "unknown";
 	const hops = forwarded
@@ -112,6 +184,44 @@ export function utcDay(now: Date): string {
 export function secondsUntilUtcMidnight(now: Date): number {
 	const nextMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0);
 	return Math.max(1, Math.ceil((nextMidnight - now.getTime()) / 1000));
+}
+
+/** Un tercio del tope global, redondeado hacia arriba y nunca menor a 1. */
+export function quotaConcentrationThreshold(globalLimit: number): number {
+	return Math.max(1, Math.ceil(globalLimit / QUOTA_CONCENTRATION_DIVISOR));
+}
+
+export interface QuotaConcentration {
+	/** Pedidos que ya lleva el bucket de IP que más consumió hoy. */
+	topCount: number;
+	globalLimit: number;
+	/** Día UTC, para que el aviso diga de cuándo habla. */
+	day: string;
+}
+
+/**
+ * Alarma de concentración: el texto que va al log cuando **una sola clave** se está llevando el
+ * servicio por delante, o `null` si todavía no.
+ *
+ * Es a propósito un **aviso, no un bloqueo**. Dos casos legítimos producen la misma señal (una
+ * oficina entera detrás de un NAT, un cliente que de verdad audita mucho), así que la decisión de
+ * cortar no se automatiza: se le cuenta a quien opera, con el número y el día, para que mire de
+ * dónde sale la IP antes de tocar el cupo.
+ *
+ * Lo que sí distingue sin ambigüedad es el caso que ya nos pasó: si la clave colapsó en un valor
+ * constante —un proxy nuevo, una cabecera que desaparece—, **todos** los pedidos del mundo entran en
+ * un bucket y este umbral se cruza mucho antes que el tope global, que es justo lo que se quiere
+ * ver venir.
+ */
+export function quotaConcentrationWarning(input: QuotaConcentration): string | null {
+	const threshold = quotaConcentrationThreshold(input.globalLimit);
+	if (input.topCount < threshold) return null;
+	return (
+		`[aos-public] ALERTA de concentración: un solo bucket de IP lleva ${input.topCount} pedidos de los ` +
+		`${input.globalLimit} del tope global (umbral ${threshold}) el ${input.day}. O es un cliente detrás de NAT ` +
+		"(legítimo) o la clave de cliente colapsó en un valor constante y el cupo por IP dejó de ser por IP. " +
+		"Revisá de dónde sale la IP (AOS_PUBLIC_CF_ONLY_INGRESS / cabeceras del proxy) antes de tocar el cupo."
+	);
 }
 
 export type QuotaReason = "ok" | "ip_limit" | "global_limit";

@@ -12,6 +12,8 @@ import {
 	publicAuditResponse,
 	publicLeadBody,
 	QUOTA_WINDOW_SECONDS,
+	quotaConcentrationThreshold,
+	quotaConcentrationWarning,
 	rateLimitedResponse,
 	rateLimitHeaders,
 	secondsUntilUtcMidnight,
@@ -57,6 +59,16 @@ describe("publicAuditLimits", () => {
 		expect(limits.ipSalt).toBe("sal-secreta");
 	});
 
+	it("`cfOnlyIngress` está apagado salvo que se declare explícitamente", () => {
+		// Apagado es el default medido: el origen de hoy es alcanzable directo, así que confiar en
+		// `cf-connecting-ip` sería regalar la evasión del cupo por IP.
+		expect(publicAuditLimits({}).cfOnlyIngress).toBe(false);
+		expect(publicAuditLimits({ AOS_PUBLIC_CF_ONLY_INGRESS: "" }).cfOnlyIngress).toBe(false);
+		expect(publicAuditLimits({ AOS_PUBLIC_CF_ONLY_INGRESS: "false" }).cfOnlyIngress).toBe(false);
+		expect(publicAuditLimits({ AOS_PUBLIC_CF_ONLY_INGRESS: "true" }).cfOnlyIngress).toBe(true);
+		expect(publicAuditLimits({ AOS_PUBLIC_CF_ONLY_INGRESS: "1" }).cfOnlyIngress).toBe(true);
+	});
+
 	it("una env inválida cae al default en vez de apagar el límite", () => {
 		const limits = publicAuditLimits({
 			AOS_PUBLIC_AUDITS_PER_DAY: "0",
@@ -69,25 +81,113 @@ describe("publicAuditLimits", () => {
 	});
 });
 
+/**
+ * La cadena de producción, tal como se midió el 2026-09-30 capturando en la interfaz del contenedor
+ * (ver el comentario largo de `clientKeyFromHeaders`).
+ *
+ * Lo que importa de estas pruebas es que **el bug no vuelva**: si la fuente de IP colapsa en un
+ * valor constante, dos clientes distintos comparten los 20 pedidos y se rompe para todos.
+ */
 describe("clientKeyFromHeaders", () => {
-	it("usa el último salto de x-forwarded-for, no el primero", () => {
-		// El primero lo escribe el cliente; el último, el proxy que tenemos delante.
-		expect(clientKeyFromHeaders(headers({ "x-forwarded-for": "1.2.3.4, 5.6.7.8, 9.10.11.12" }))).toBe("9.10.11.12");
+	describe("cadena medida: cliente → Traefik → app, sin Cloudflare", () => {
+		it("toma el único salto de x-forwarded-for, que es la IP del cliente", () => {
+			// Así llegó la petición real: un solo salto, ya reescrito por Traefik.
+			expect(clientKeyFromHeaders(headers({ "x-forwarded-for": "198.51.100.7", "x-real-ip": "198.51.100.7" }))).toBe(
+				"198.51.100.7",
+			);
+		});
+
+		it("ignora cf-connecting-ip: en esta cadena no lo escribe nadie y el cliente lo puede inventar", () => {
+			// Medido: `cf-connecting-ip: 9.9.9.9` mandada por el cliente llegó intacta al endpoint,
+			// mientras XFF y X-Real-IP fueron sobrescritas. Confiar en ella sería un bucket nuevo por
+			// pedido, o sea cupo infinito para quien la falsifique.
+			expect(clientKeyFromHeaders(headers({ "cf-connecting-ip": "9.9.9.9" }))).toBe("unknown");
+			expect(clientKeyFromHeaders(headers({ "cf-connecting-ip": "9.9.9.9", "x-forwarded-for": "198.51.100.7" }))).toBe(
+				"198.51.100.7",
+			);
+		});
+
+		it("con varios saltos toma el último: es el que dejó el proxy que sí controlamos", () => {
+			expect(clientKeyFromHeaders(headers({ "x-forwarded-for": "1.2.3.4, 5.6.7.8, 9.10.11.12" }))).toBe("9.10.11.12");
+		});
 	});
 
-	it("ignora cf-connecting-ip: no es identidad", () => {
-		expect(clientKeyFromHeaders(headers({ "cf-connecting-ip": "1.2.3.4" }))).toBe("unknown");
+	describe("detrás de Cloudflare (AOS_PUBLIC_CF_ONLY_INGRESS)", () => {
+		const cf = { cfOnlyIngress: true };
+
+		it("con solo cf-connecting-ip, esa es la IP del cliente", () => {
+			expect(clientKeyFromHeaders(headers({ "cf-connecting-ip": "203.0.113.10" }), cf)).toBe("203.0.113.10");
+		});
+
+		it("cf-connecting-ip manda sobre el salto del proxy, que es constante", () => {
+			// Es el caso que rompía todo: para Cloudflare el último salto de XFF es el POP, igual para
+			// todos; el cliente está en cf-connecting-ip.
+			expect(
+				clientKeyFromHeaders(
+					headers({ "cf-connecting-ip": "203.0.113.10", "x-forwarded-for": "172.71.0.9, 10.0.1.43" }),
+					cf,
+				),
+			).toBe("203.0.113.10");
+		});
+
+		it("sin cf-connecting-ip cae al respaldo: el último salto de x-forwarded-for", () => {
+			expect(clientKeyFromHeaders(headers({ "x-forwarded-for": "203.0.113.10" }), cf)).toBe("203.0.113.10");
+			expect(clientKeyFromHeaders(headers({}), cf)).toBe("unknown");
+		});
+
+		it("dos clientes distintos NO comparten bucket (la regresión del cupo colapsado)", () => {
+			// Mismo proxy, mismo XFF constante; lo único distinto es el cliente.
+			const porProxy = { "x-forwarded-for": "10.0.1.43" };
+			const uno = clientKeyFromHeaders(headers({ ...porProxy, "cf-connecting-ip": "203.0.113.10" }), cf);
+			const dos = clientKeyFromHeaders(headers({ ...porProxy, "cf-connecting-ip": "203.0.113.11" }), cf);
+
+			expect(uno).toBe("203.0.113.10");
+			expect(dos).toBe("203.0.113.11");
+			expect(uno).not.toBe(dos);
+			// Y la clave que llega a la base también es distinta: no comparten los 20 pedidos.
+			expect(hashClientKey(uno, "sal")).not.toBe(hashClientKey(dos, "sal"));
+		});
 	});
 
 	it("sin cabecera cae en un bucket compartido, que es el modo de fallar seguro", () => {
 		expect(clientKeyFromHeaders(headers({}))).toBe("unknown");
 		expect(clientKeyFromHeaders(headers({ "x-forwarded-for": "   " }))).toBe("unknown");
+		expect(clientKeyFromHeaders(headers({ "x-forwarded-for": ", ," }))).toBe("unknown");
 	});
 
 	it("normaliza corchetes, puerto y zona", () => {
 		expect(clientKeyFromHeaders(headers({ "x-forwarded-for": "1.2.3.4:5678" }))).toBe("1.2.3.4");
 		expect(clientKeyFromHeaders(headers({ "x-forwarded-for": "[2001:db8::1]:443" }))).toBe("2001:db8::1");
 		expect(clientKeyFromHeaders(headers({ "x-forwarded-for": "fe80::1%en0" }))).toBe("fe80::1");
+	});
+});
+
+describe("alarma de concentración del cupo", () => {
+	it("el umbral es un tercio del tope global", () => {
+		expect(quotaConcentrationThreshold(DEFAULT_AUDITS_PER_DAY_GLOBAL)).toBe(667);
+		expect(quotaConcentrationThreshold(3)).toBe(1);
+		expect(quotaConcentrationThreshold(1)).toBe(1);
+	});
+
+	it("no dice nada mientras ningún bucket se acerque al umbral", () => {
+		expect(quotaConcentrationWarning({ topCount: 666, globalLimit: 2000, day: "2026-09-30" })).toBeNull();
+		expect(quotaConcentrationWarning({ topCount: 20, globalLimit: 2000, day: "2026-09-30" })).toBeNull();
+	});
+
+	it("avisa cuando una sola clave se lleva más de un tercio del servicio", () => {
+		const warning = quotaConcentrationWarning({ topCount: 667, globalLimit: 2000, day: "2026-09-30" });
+		expect(warning).not.toBeNull();
+		// El aviso tiene que traer los números y el día: sin eso no se puede investigar.
+		expect(warning).toContain("667");
+		expect(warning).toContain("2000");
+		expect(warning).toContain("2026-09-30");
+	});
+
+	it("es un aviso, no un bloqueo: nombra el caso legítimo y el patológico", () => {
+		const warning = quotaConcentrationWarning({ topCount: 900, globalLimit: 2000, day: "2026-09-30" });
+		// Una oficina con NAT es legítima; una clave constante es el bug. El log no elige por su cuenta.
+		expect(warning).toMatch(/NAT/);
+		expect(warning).toMatch(/constante/);
 	});
 });
 

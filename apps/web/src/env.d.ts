@@ -83,6 +83,7 @@ declare global {
 			readonly AOS_PUBLIC_AUDIT_TOTAL_TIMEOUT_MS?: string;
 			readonly AOS_PUBLIC_AUDIT_REQUEST_TIMEOUT_MS?: string;
 			readonly AOS_PUBLIC_IP_SALT?: string;
+			readonly AOS_PUBLIC_CF_ONLY_INGRESS?: string;
 		}
 	}
 }

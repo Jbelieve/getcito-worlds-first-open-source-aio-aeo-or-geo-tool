@@ -35,7 +35,7 @@ export const Route = createFileRoute("/api/v1/aos/lead")({
 				body: publicLeadBody,
 				handle: async ({ body, request }): Promise<Response> => {
 					const limits = publicAuditLimits();
-					const clientKey = clientKeyFromHeaders(request.headers);
+					const clientKey = clientKeyFromHeaders(request.headers, { cfOnlyIngress: limits.cfOnlyIngress });
 					const snapshot = await consumePublicQuota(clientKey, limits);
 					const quota = decidePublicQuota(snapshot);
 					if (quota.allowed === false) {

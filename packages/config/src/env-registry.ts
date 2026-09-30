@@ -376,7 +376,7 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		scope: "server",
 		requiredBy: "optional",
 		description:
-			"Tope diario de auditorías públicas de AOS para todo el servicio (default 2000). Es la cota real, porque X-Forwarded-For se puede forjar.",
+			"Tope diario de auditorías públicas de AOS para todo el servicio (default 2000). Es la cota que sostiene cuando la identidad del cliente no alcanza: un NAT compartido, o un origen alcanzable directo donde la cabecera de IP se puede falsificar.",
 	},
 	{
 		name: "AOS_PUBLIC_AUDIT_TOTAL_TIMEOUT_MS",
@@ -396,5 +396,12 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		requiredBy: "optional",
 		description:
 			"Sal para hashear la IP en el contador de cuota y en los leads. Sin sal, un IPv4 es enumerable y el hash deja de ser un pseudónimo.",
+	},
+	{
+		name: "AOS_PUBLIC_CF_ONLY_INGRESS",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"true/1 declara que el único camino al origen es Cloudflare, y entonces cf-connecting-ip pasa a ser la identidad del cliente (default: apagado). Encenderlo SOLO después de restringir el firewall a los rangos de Cloudflare: mientras el origen sea alcanzable directo, esa cabecera se puede falsificar y el cupo por IP se evade.",
 	},
 ];
