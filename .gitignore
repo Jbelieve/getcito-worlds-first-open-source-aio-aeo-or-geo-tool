@@ -27,6 +27,9 @@ out/
 # production
 /build
 
+# extensión de Chrome: el zip de la release lo escribe scripts/release-extension.sh
+/dist/
+
 # misc / secrets
 .DS_Store
 *.pem
