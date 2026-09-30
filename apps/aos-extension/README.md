@@ -36,10 +36,16 @@ El glob entre comillas va a propósito: la forma `node --test apps/aos-extension
 directorio pelado) recién funciona en Node 24, y el glob también anda en Node 22. Si tu `node` dice
 `Cannot find module '.../test'`, es eso.
 
-Los fixtures de `test/fixtures/` son **respuestas reales del endpoint público**, capturadas en
-producción: un sitio completo (`score` 100, perfil firmado, APS 94) y uno sin perfil
-(`example.com`, `score` 0, con `n_a`, con `gain` y con diagnósticos sin evidencia). Los tests corren
-contra eso, no contra lo que creemos que el endpoint devuelve.
+Los fixtures de `test/fixtures/` son **respuestas reales**, y hay uno por contrato:
+
+| Fixture | Qué es |
+|---|---|
+| `audit-believe-global.json` | Sitio completo con el contrato 2.1.0: `score` 100, perfil firmado (APS declarado 94), sub-scores por eje, desglose y `botBeacon` |
+| `audit-sin-perfil.json` | `example.com` con el contrato 2.1.0: `score` 0, sin brand.json, con `n_a`, con `gain` y con diagnósticos sin evidencia |
+| `audit-contrato-2.0.0.json` | La **misma** respuesta de believe-global.com capturada **antes** de extender el endpoint: el contrato 2.0.0, sin ninguno de los campos nuevos. Es la prueba de que la respuesta vieja no rompe el popup |
+
+Los tres se capturaron corriendo el motor de verdad contra el sitio de verdad, y los campos viejos del
+primero salen **idénticos** al tercero: es la prueba de que lo agregado es aditivo.
 
 ## Cómo armar el zip de la release
 
@@ -61,8 +67,8 @@ publica.
 | Archivo | Rol |
 |---|---|
 | `manifest.json` | MV3. Permisos mínimos: `activeTab` + `scripting` + `storage`, y un solo `host_permissions`: `https://beaos.believe-global.com/*` |
-| `lib.js` | Config, endpoints, las funciones puras (request, mapeo, textos) y el storage |
-| `popup.html` / `popup.css` / `popup.js` | El popup: score, banda, listado completo, perfil firmado, próximo paso y captura de lead |
+| `lib.js` | Config, endpoints, las funciones puras (request, mapeo de la respuesta —incluidos sub-scores, desglose y badge—, textos) y el storage |
+| `popup.html` / `popup.css` / `popup.js` | El popup: score, banda, puntajes por eje, listado completo, perfil firmado con badge, Bot Beacon declarado, próximo paso y captura de lead |
 | `background.js` | Service worker: inyecta el overlay en la pestaña activa a pedido |
 | `content-overlay.js` | Modo "lo que ve un agente": anota el DOM real (verde/rojo) + panel resumen. **No se toca** |
 | `test/` | Tests de las piezas puras con el runner de node |
@@ -96,29 +102,41 @@ demasiado, cualquier otro un mensaje genérico con el detalle en la consola.
 
 1. El **score** y su **banda**. El número va en ink — es un dato, no se pinta por lo que vale — y el
    chip de al lado dice la banda sobre la rampa azul: el color ordena, no juzga.
-2. El **listado completo de requisitos**, sin recortar, en el orden del estándar: qué es, si pasa,
-   **su línea de evidencia** y los puntos que devolvería arreglarlo cuando los tenga.
-3. Los **`diagnostic` aparte y sin puntos**: se informan y no mueven el score, así que no se les
+2. Los **puntajes por eje** (`AOS` / `APS`), con su barra y su desglose: cuántos checks pasan, cuánto
+   peso se ganó sobre el que aplica y cuántos no aplican. Los calcula el motor y llegan por el
+   endpoint; el popup no recalcula ningún peso.
+3. El **listado completo de requisitos**, sin recortar, en el orden del estándar: qué es, de qué eje
+   es, si pasa, **su línea de evidencia** y los puntos que devolvería arreglarlo cuando los tenga.
+4. Los **`diagnostic` aparte y sin puntos**: se informan y no mueven el score, así que no se les
    inventa una ganancia. Los **`n_a`** viajan marcados como "no aplica a este tipo de negocio".
-4. El **perfil firmado**: APS declarado, cuántas pruebas declara y si su firma Ed25519 verifica. Si
+5. El **perfil firmado**: APS declarado, cuántas pruebas declara y si su firma Ed25519 verifica. Si
    el sitio no publica perfil, se dice — no se rellena con ceros.
-5. **"Ver en la página"**: el overlay, igual que siempre.
+6. El **badge Agent-Preferred**, **solo** cuando `signatureVerified` es `true`. En los seis tokens de
+   la marca: no es el SVG oscuro de la extensión vieja y no hay versión "apagada", porque un badge
+   apagado igual diría Agent-Preferred.
+7. El **Bot Beacon**: el tráfico agéntico real. Se muestra siempre y hoy dice que **no hay fuente**
+   (ver abajo).
+8. **"Ver en la página"**: el overlay, igual que siempre.
 
 El popup es superficie nuestra, así que usa los seis tokens de la marca, copiados a mano en
 `popup.css` porque la extensión no puede importar de `@workspace/ui`. El cian se usa para lo que hay
-que hacer, no de adorno: aparece dos veces, en el subrayado del número y en el próximo paso.
+que hacer, no de adorno: aparece dos veces, en el subrayado del número y en el próximo paso. El badge
+y el desglose van sobre la rampa azul — ordenan, no piden nada.
 
-## Lo que el contrato nuevo no trae
+## Las cuatro cosas que se recuperaron de la extensión vieja
 
-La extensión vieja mostraba cosas que el endpoint de BeAOS **no devuelve**, y no se rellenaron a ojo:
+La extensión de Maasy mostraba cuatro cosas que la 2.0.0 había perdido porque el contrato del endpoint
+no las tenía. Están de vuelta, cada una donde corresponde:
 
-- El **desglose por niveles** (`breakdown`: inventario, N1, N2, N3, confiabilidad). La respuesta
-  pública solo trae el score total.
-- El **Bot Beacon** (tráfico agéntico real). No está en el contrato público.
-- Los **sub-scores por eje** (`aos_standards` / `aps_standards`). El endpoint expone el score total
-  y el APS **declarado** por el sitio, que no es el mismo número.
-- El **badge Agent-Preferred** (`files.believe-global.com`). Era un SVG oscuro con hex propios sobre
-  una superficie que ahora es de papel; la firma verificada se dice con palabras.
+| Lo que mostraba Maasy | Cómo volvió |
+|---|---|
+| **Sub-scores por eje** (`aos_standards` / `aps_standards`) | Los dos números ya existían en el motor; el endpoint ahora los publica como `aosStandards` / `apsStandards`. `apsStandards` es el APS **medido**, distinto del `declaredAps` que declara el sitio |
+| **Desglose por niveles** (`breakdown`: inventario / N1 / N2 / N3 / confiabilidad) | **No tiene equivalente.** Esos cinco niveles son del AOS v1 y este motor no los corre: no mide DOM, ni formularios, ni ejecución programática, ni confiabilidad. En vez de fabricar cinco números, el desglose honesto es **por eje del estándar**, con los mismos pesos que hacen el score, y el detalle con evidencia por requisito está en el checklist |
+| **Bot Beacon** (tráfico agéntico real) | **No hay fuente, y se dice.** En Maasy salía de su propio instrumento (`bot_beacon_hits`, con el user-agent clasificado, más `aos_operator_tasks`): es dato de Maasy sobre los sitios que instrumenta, no algo medible de una URL arbitraria. BeAOS no tiene ingest de tráfico, así que el contrato publica `botBeacon: null` y el popup declara el hueco. Un cero se leería como "no te visitó ningún agente" |
+| **Badge Agent-Preferred** | Vuelve con los seis tokens de la marca en vez del SVG oscuro con hex propios de Maasy, y **solo** si `signatureVerified` es `true`. No hay badge apagado |
+
+Lo que **no** se toca: el checklist completo con evidencia, los `n_a` marcados, los diagnósticos
+aparte y sin puntos, y los errores con mensaje humano (400 / 429 con `Retry-After` / 504).
 
 ## Roadmap
 

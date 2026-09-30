@@ -43,12 +43,15 @@ acción real — no solo leerlo.
 Con un click, BeAOS audita cualquier web que estés visitando y devuelve las dos medidas:
 
 • Un score de 0 a 100 y su banda (Operable, Intentable, Bloqueado, Inerte).
-• El listado COMPLETO de requisitos, sin recortar: qué es cada uno, si pasa o no, y qué se vio
-  al comprobarlo. Cuando un requisito no aplica a tu tipo de negocio, se dice.
+• El puntaje desglosado por eje (AOS y APS): cuánto saca cada uno, cuántos requisitos pasan sobre
+  los que aplican, y cuánto peso se ganó sobre el que había en juego.
+• El listado COMPLETO de requisitos, sin recortar: qué es cada uno, de qué eje, si pasa o no, y qué
+  se vio al comprobarlo. Cuando un requisito no aplica a tu tipo de negocio, se dice.
 • Cuántos puntos AOS/APS devolvería arreglar cada cosa que falta, ordenado por impacto.
 • Los diagnósticos aparte: se informan y no mueven el score, así que no se les inventan puntos.
 • El perfil firmado del sitio: qué APS declara sobre sí mismo, cuántas pruebas publica y si su
-  firma Ed25519 verifica de verdad contra las claves que él mismo sirve.
+  firma Ed25519 verifica de verdad contra las claves que él mismo sirve. Cuando verifica, el sitio
+  se lleva el badge Agent-Preferred; cuando no, no hay badge.
 
 Y el modo estrella: "Ver en la página". Resalta sobre la web real, en verde y rojo, exactamente
 qué acciones puede ejecutar un agente y cuáles no. Lo que ve un agente, visible para vos.

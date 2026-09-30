@@ -9,7 +9,15 @@
 //
 // Todo el texto de datos entra por `textContent`, nunca por `innerHTML`: parte de lo que se muestra
 // (la evidencia, el título del requisito) lo escribe el sitio auditado.
+//
+// Las cuatro cosas que la extensión vieja mostraba y que la 2.0.0 había perdido están de vuelta, y
+// cada una donde corresponde:
+//   · los sub-scores por eje y su desglose, calculados en el MOTOR y publicados por el endpoint — acá
+//     no se recalcula ningún peso;
+//   · el Bot Beacon, que se muestra declarando que BeAOS no tiene esa fuente: no se inventa un número;
+//   · el badge Agent-Preferred, con los seis tokens de la marca, y solo con la firma verificada.
 import {
+	AXIS_TEXT,
 	auditErrorText,
 	auditUrl,
 	captureLead,
@@ -110,6 +118,117 @@ function renderAps(audit) {
 	const sig = $("aps-sig");
 	sig.className = `aps-sig tone-${aps.signatureTone}`;
 	sig.textContent = aps.signatureText;
+	renderBadge(aps);
+}
+
+/**
+ * El badge Agent-Preferred. Se muestra **solo** cuando `signatureVerified` es `true`: no hay versión
+ * "apagada", porque un badge apagado igual dice Agent-Preferred y sería una afirmación falsa. El
+ * texto y la paleta son nuestros: los seis tokens de la marca, no el SVG oscuro de la extensión
+ * vieja, que traía hex propios sobre una superficie que ahora es de papel.
+ */
+function renderBadge(aps) {
+	const el = $("badge");
+	if (aps.badge === null) {
+		el.classList.add("hidden");
+		el.replaceChildren();
+		return;
+	}
+	const mark = document.createElement("span");
+	mark.className = "badge-mark";
+	mark.setAttribute("aria-hidden", "true");
+	mark.textContent = "✓";
+	const text = document.createElement("span");
+	text.textContent = `${aps.badge.label} · ${aps.badge.text}`;
+	el.replaceChildren(mark, text);
+	el.classList.remove("hidden");
+}
+
+/**
+ * El puntaje por eje: los sub-scores y su desglose, tal como los calculó el motor.
+ *
+ * Todo lo que se muestra acá viene del endpoint. El popup **no convierte pesos en porcentajes**: la
+ * cuenta del estándar vive en el motor, y repetirla acá sería la segunda implementación del AOS que
+ * se separa de la primera. Si el endpoint no manda los campos (una respuesta de la 2.0.0), el bloque
+ * no se muestra: no se rellena.
+ */
+function renderAxes(audit) {
+	const block = $("axes-block");
+	const rows =
+		audit.breakdown.length > 0
+			? audit.breakdown
+			: // Sin desglose, pero con sub-scores: se muestra el número, sin barra ni pesos. Una barra pide
+				// un denominador, y ese denominador solo lo tiene el motor.
+				axisRowsFromSubScores(audit.subScores);
+	if (rows.length === 0) {
+		block.classList.add("hidden");
+		return;
+	}
+	$("axes").replaceChildren(...rows.map(renderAxis));
+	block.classList.remove("hidden");
+}
+
+function axisRowsFromSubScores(subScores) {
+	if (subScores === null) return [];
+	const rows = [];
+	for (const [axis, label] of [
+		["AOS", AXIS_TEXT.AOS],
+		["APS", AXIS_TEXT.APS],
+	]) {
+		const value = axis === "AOS" ? subScores.aos : subScores.aps;
+		if (value === null) continue;
+		rows.push({ axis, label, percent: value, passed: null, applicable: null, notApplicable: null });
+	}
+	return rows;
+}
+
+/** Una fila del desglose: el nombre del eje, su número, la barra y el detalle en mono. */
+function renderAxis(row) {
+	const el = document.createElement("div");
+	el.className = "axis";
+
+	const head = document.createElement("div");
+	head.className = "axis-hd";
+	const name = document.createElement("span");
+	name.className = "axis-name";
+	name.textContent = row.label;
+	const value = document.createElement("span");
+	value.className = "axis-val";
+	value.textContent = `${row.percent}/100`;
+	head.append(name, value);
+	el.append(head);
+
+	// La barra es el mismo dato que el número, en largo. Sin denominador no hay barra que dibujar: una
+	// barra al 50% de nada no significa nada.
+	if (row.maxWeight > 0) {
+		const bar = document.createElement("div");
+		bar.className = "axis-bar";
+		const fill = document.createElement("i");
+		fill.style.width = `${row.percent}%`;
+		bar.append(fill);
+		el.append(bar);
+
+		const meta = document.createElement("p");
+		meta.className = "axis-meta";
+		const parts = [`${row.passed} de ${row.applicable} pasan`, `peso ${row.earnedWeight}/${row.maxWeight}`];
+		if (row.notApplicable > 0) parts.push(`${row.notApplicable} no aplica`);
+		meta.textContent = parts.join(" · ");
+		el.append(meta);
+	}
+
+	return el;
+}
+
+/**
+ * El Bot Beacon: el tráfico agéntico real que recibió el sitio.
+ *
+ * Hoy no hay fuente, y se dice. En Maasy el dato salía de su propio instrumento de tráfico más su
+ * operador: es dato de Maasy sobre los sitios que instrumenta, no algo medible de una URL
+ * arbitraria. Un cero acá se leería como "no te visitó ningún agente", que sería falso.
+ */
+function renderBeacon(audit) {
+	$("beacon-band").textContent = audit.botBeacon === null ? "sin fuente" : `${audit.botBeacon.windowDays} días`;
+	$("beacon-text").textContent = audit.botBeaconText;
 }
 
 /** Aparición 2 del cian: el próximo paso, que es el arreglo que más puntos devuelve. */
@@ -158,6 +277,7 @@ function renderResult(audit) {
 	$("audited-at").textContent = auditedAtText(audit.auditedAt);
 
 	renderAps(audit);
+	renderAxes(audit);
 	renderNext(audit);
 
 	$("scored-count").textContent = `${audit.counts.scored} · ${audit.counts.scoredFail} en falta`;
@@ -172,6 +292,10 @@ function renderResult(audit) {
 		renderList("diags", audit.diagnostics);
 		diagBlock.classList.remove("hidden");
 	}
+
+	// El Bot Beacon se muestra siempre: cuando no hay fuente, lo dice. Es la cuarta cosa recuperada de
+	// la extensión vieja, y la única de las cuatro que no se puede llenar con un dato real.
+	renderBeacon(audit);
 
 	// La tarjeta de captura arranca limpia en cada resultado.
 	$("lead").classList.remove("hidden");

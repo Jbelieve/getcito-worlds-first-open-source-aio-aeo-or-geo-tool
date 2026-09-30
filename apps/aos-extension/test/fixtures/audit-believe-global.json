@@ -162,8 +162,33 @@
 			"evidence": "/.well-known/http-message-signatures-directory no responde JSON."
 		}
 	],
+	"aosStandards": 100,
+	"apsStandards": 100,
+	"breakdown": [
+		{
+			"axis": "AOS",
+			"passed": 7,
+			"failed": 0,
+			"notApplicable": 1,
+			"applicable": 7,
+			"earnedWeight": 16,
+			"maxWeight": 16,
+			"percent": 100
+		},
+		{
+			"axis": "APS",
+			"passed": 3,
+			"failed": 0,
+			"notApplicable": 0,
+			"applicable": 3,
+			"earnedWeight": 7,
+			"maxWeight": 7,
+			"percent": 100
+		}
+	],
 	"declaredAps": 94,
 	"claims": 6,
 	"signatureVerified": true,
-	"auditedAt": "2026-09-30T03:22:39.918Z"
+	"botBeacon": null,
+	"auditedAt": "2026-09-30T03:55:01.890Z"
 }

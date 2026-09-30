@@ -2,28 +2,39 @@
 //
 //   node --test apps/aos-extension/test/
 //
-// Las dos respuestas de `fixtures/` son **reales**: se capturaron del endpoint público
-// (`POST https://beaos.believe-global.com/api/v1/aos/audit`) el 2026-09-30 y no se tocaron. Son la
-// mitad del valor de estos tests: prueban contra lo que el endpoint devuelve de verdad, no contra lo
-// que creemos que devuelve.
+// Las respuestas de `fixtures/` son **reales**: se capturaron del endpoint público corriendo el motor
+// de verdad contra el sitio de verdad, y no se tocaron. Son la mitad del valor de estos tests: prueban
+// contra lo que el endpoint devuelve, no contra lo que creemos que devuelve.
 //
-//   audit-believe-global.json → sitio completo: score 100, perfil firmado, APS 94.
+//   audit-believe-global.json → sitio completo: score 100, perfil firmado, APS declarado 94, con los
+//                               campos de la 2.1.0 (sub-scores por eje, desglose, botBeacon).
 //   audit-sin-perfil.json     → example.com: score 0, sin brand.json, con `n_a` y con `gain`.
+//   audit-contrato-2.0.0.json → LA MISMA respuesta de believe-global.com capturada ANTES de extender
+//                               el endpoint: el contrato 2.0.0, sin ninguno de los campos nuevos.
+//                               Es la prueba de que la respuesta vieja sigue funcionando.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
+	AXIS_TEXT,
 	auditErrorText,
 	auditRequestBody,
 	auditRequestInit,
+	BADGE_LABEL,
+	BADGE_VERIFIED_TEXT,
+	BOT_BEACON_NO_SOURCE_TEXT,
+	botBeaconText,
 	domainFromUrl,
 	humanWait,
 	leadRequestBody,
 	leadRequestInit,
 	mapAps,
 	mapAuditResponse,
+	mapBotBeacon,
+	mapBreakdown,
 	mapRequirement,
+	mapSubScores,
 	NO_EVIDENCE_TEXT,
 	NO_PROFILE_TEXT,
 	readRetryAfter,
@@ -35,6 +46,8 @@ function fixture(name) {
 
 const COMPLETO = fixture("audit-believe-global.json");
 const SIN_PERFIL = fixture("audit-sin-perfil.json");
+/** El contrato 2.0.0: la respuesta de la 2.0.0 que está en master, sin los campos nuevos. */
+const VIEJO = fixture("audit-contrato-2.0.0.json");
 
 /** Un mapa de headers mínimo, con la misma interfaz que `Headers`. */
 function headers(map) {
@@ -351,5 +364,209 @@ describe("mapAps", () => {
 
 	it("dice '1 prueba' en singular", () => {
 		assert.equal(mapAps({ declaredAps: 5, claims: 1, signatureVerified: true }).claimsText, "1 prueba declarada");
+	});
+});
+
+// --- las cuatro cosas que la 2.0.0 había perdido ------------------------------
+
+describe("sub-scores por eje", () => {
+	const audit = mapAuditResponse(COMPLETO);
+
+	it("llegan los dos, tal como los calculó el motor", () => {
+		assert.deepEqual(audit.subScores, { aos: 100, aps: 100 });
+		// El score total ES el sub-score del eje AOS: es el contrato, no una coincidencia.
+		assert.equal(audit.score, audit.subScores.aos);
+	});
+
+	it("el APS medido y el APS declarado no son el mismo número", () => {
+		// `subScores.aps` lo medimos nosotros sobre el estándar; `aps.declaredAps` es lo que el sitio
+		// dice de sí mismo. Mezclarlos sería mostrar dos veces el número equivocado.
+		assert.equal(audit.subScores.aps, 100);
+		assert.equal(audit.aps.declaredAps, 94);
+	});
+
+	it("el popup no los recalcula: sin el campo en la respuesta, quedan null", () => {
+		assert.equal(mapSubScores({}), null);
+		assert.equal(mapSubScores(undefined), null);
+		assert.equal(mapAuditResponse({ score: 80, requirements: [] }).subScores, null);
+	});
+
+	it("acota un porcentaje fuera de rango en vez de mostrarlo crudo", () => {
+		assert.deepEqual(mapSubScores({ aosStandards: 999, apsStandards: -4 }), { aos: 100, aps: 0 });
+	});
+});
+
+describe("el desglose por eje", () => {
+	const audit = mapAuditResponse(COMPLETO);
+
+	it("trae los dos ejes en orden fijo, con su nombre legible", () => {
+		assert.deepEqual(
+			audit.breakdown.map((entry) => entry.axis),
+			["AOS", "APS"],
+		);
+		assert.equal(audit.breakdown[0].label, AXIS_TEXT.AOS);
+		assert.equal(audit.breakdown[1].label, AXIS_TEXT.APS);
+	});
+
+	it("cuenta checks y pesos del eje, y el `percent` es el sub-score del eje", () => {
+		const [aos, aps] = audit.breakdown;
+		assert.deepEqual(
+			{ passed: aos.passed, failed: aos.failed, notApplicable: aos.notApplicable, aplican: aos.applicable },
+			{ passed: 7, failed: 0, notApplicable: 1, aplican: 7 },
+			"el `n_a` se cuenta aparte y no entra en el denominador",
+		);
+		assert.equal(aos.earnedWeight, aos.maxWeight);
+		assert.equal(aos.percent, audit.subScores.aos);
+		assert.equal(aps.percent, audit.subScores.aps);
+		assert.equal(aps.applicable, 3, "los tres checks de APS aplican a este tipo de negocio");
+	});
+
+	it("el peso es el del motor, no un porcentaje recalculado acá", () => {
+		// 16 y 7 son los denominadores reales del rubric para `brand` (MUST=3, SHOULD=2). Si alguien
+		// reimplementara los pesos en el popup, este test seguiría pasando solo por casualidad.
+		assert.equal(audit.breakdown[0].maxWeight, 16);
+		assert.equal(audit.breakdown[1].maxWeight, 7);
+	});
+
+	it("NO inventa los cinco niveles de la extensión vieja: ese rubric no se corre acá", () => {
+		const json = JSON.stringify(audit.breakdown);
+		for (const clave of [
+			"inventory",
+			"declaration_level1",
+			"dom_executability_level2",
+			"programmatic_execution_level3",
+			"reliability",
+		]) {
+			assert.equal(json.includes(clave), false, `no se puede fabricar el nivel ${clave}`);
+		}
+		assert.equal(audit.breakdown.length, 2, "son dos ejes, no cinco niveles");
+	});
+
+	it("un desglose roto que venga de la red no rompe el popup", () => {
+		const roto = mapBreakdown([{ axis: "OTRO" }, { axis: "AOS", percent: 999, passed: -3 }, null, "x", undefined]);
+		assert.equal(roto.length, 1, "solo sobrevive el eje que existe");
+		assert.equal(roto[0].percent, 100, "el porcentaje se acota");
+		assert.equal(roto[0].passed, 0, "un conteo negativo es 0, no un número raro");
+		assert.deepEqual(mapBreakdown(undefined), []);
+		assert.deepEqual(mapBreakdown("no es un array"), []);
+	});
+});
+
+describe("el badge Agent-Preferred", () => {
+	it("aparece con la firma verificada, con la etiqueta y el texto de la marca", () => {
+		const aps = mapAuditResponse(COMPLETO).aps;
+		assert.equal(aps.signatureVerified, true);
+		assert.deepEqual(aps.badge, { label: BADGE_LABEL, text: BADGE_VERIFIED_TEXT });
+		assert.equal(BADGE_LABEL, "Agent-Preferred");
+	});
+
+	it("no aparece si el sitio no publica perfil firmado", () => {
+		assert.equal(mapAuditResponse(SIN_PERFIL).aps.badge, null);
+	});
+
+	it("no aparece si publica perfil pero la firma no verifica", () => {
+		const aps = mapAps({ declaredAps: 40, claims: 2, signatureVerified: false });
+		assert.equal(aps.published, true, "el perfil está");
+		assert.equal(aps.badge, null, "pero el badge no: publicar no es verificar");
+	});
+
+	it("solo con `true` de verdad, no con algo que se le parezca", () => {
+		for (const signatureVerified of [undefined, null, false, 0, "true", 1, {}]) {
+			assert.equal(
+				mapAps({ declaredAps: 40, claims: 2, signatureVerified }).badge,
+				null,
+				`signatureVerified=${JSON.stringify(signatureVerified)} no habilita el badge`,
+			);
+		}
+	});
+
+	it("el texto que afirma la verificación solo existe cuando la firma verifica", () => {
+		for (const signatureVerified of [undefined, false]) {
+			const aps = mapAps({ declaredAps: 40, claims: 2, signatureVerified });
+			assert.equal(aps.badge, null);
+			assert.equal(/firmado verificado/.test(aps.signatureText), false);
+		}
+	});
+});
+
+describe("el Bot Beacon", () => {
+	it("declara el hueco: BeAOS no tiene la fuente y no la simula", () => {
+		assert.equal(COMPLETO.botBeacon, null, "el endpoint manda null: no tiene de dónde sacarlo");
+		const audit = mapAuditResponse(COMPLETO);
+		assert.equal(audit.botBeacon, null);
+		assert.equal(audit.botBeaconText, BOT_BEACON_NO_SOURCE_TEXT);
+		assert.match(audit.botBeaconText, /no lo inventamos/);
+		assert.equal(/\d/.test(audit.botBeaconText), false, "el texto del hueco no lleva ningún número");
+	});
+
+	it("un beacon vacío o roto se lee como 'sin dato', nunca como cero agentes", () => {
+		for (const raw of [undefined, null, {}, 0, "x", [], { crawlHits: 0, operationAttempts: 0 }]) {
+			assert.equal(mapBotBeacon(raw), null, `${JSON.stringify(raw)} no es un beacon`);
+		}
+	});
+
+	it("si algún día hay fuente, la línea dice lo mismo que decía la extensión vieja", () => {
+		const beacon = mapBotBeacon({
+			windowDays: 30,
+			crawlHits: 412,
+			distinctAgents: 3,
+			operationAttempts: 7,
+			operationFailures: 5,
+			topAgents: [{ agentName: "GPTBot" }, { agentName: "Claude-User" }],
+		});
+		const texto = botBeaconText(beacon);
+		assert.match(texto, /7 agentes intentaron operar este dominio, 5 fallaron \(30 d\)/);
+		assert.match(texto, /412 hits de crawl · GPTBot, Claude-User/);
+		assert.equal(botBeaconText(null), BOT_BEACON_NO_SOURCE_TEXT);
+	});
+});
+
+describe("una respuesta vieja (contrato 2.0.0) no rompe el popup", () => {
+	const viejo = mapAuditResponse(VIEJO);
+	const nuevo = mapAuditResponse(COMPLETO);
+
+	it("el fixture viejo de verdad no trae ninguno de los campos nuevos", () => {
+		for (const campo of ["aosStandards", "apsStandards", "breakdown", "botBeacon"]) {
+			assert.equal(campo in VIEJO, false, `${campo} no existía en el contrato 2.0.0`);
+		}
+	});
+
+	it("mapea igual que siempre: score, banda, listado completo y perfil", () => {
+		assert.equal(viejo.score, 100);
+		assert.equal(viejo.band.raw, "Agent-Operable");
+		assert.equal(viejo.band.label, "Operable");
+		assert.equal(viejo.scored.length, 11);
+		assert.equal(viejo.diagnostics.length, 8);
+		assert.equal(viejo.aps.published, true);
+		assert.equal(viejo.aps.signatureVerified, true);
+	});
+
+	it("los campos nuevos quedan vacíos en vez de inventarse", () => {
+		assert.equal(viejo.subScores, null, "sin sub-scores en la respuesta, no hay sub-scores");
+		assert.deepEqual(viejo.breakdown, [], "y el bloque de ejes no se muestra");
+		assert.equal(viejo.botBeacon, null);
+		assert.equal(viejo.botBeaconText, BOT_BEACON_NO_SOURCE_TEXT);
+	});
+
+	it("el badge ya funcionaba: `signatureVerified` existía desde la 2.0.0", () => {
+		assert.deepEqual(viejo.aps.badge, { label: BADGE_LABEL, text: BADGE_VERIFIED_TEXT });
+	});
+
+	it("todo lo que ya existía sale idéntico al de la respuesta nueva", () => {
+		// La prueba de que los campos agregados son aditivos: sobre la MISMA respuesta real, el mapeo
+		// de todo lo viejo no cambió ni un carácter. (`auditedAt` queda afuera: cambia con la captura.)
+		for (const campo of ["url", "score", "band", "businessType", "scored", "diagnostics", "aps", "counts", "plan"]) {
+			assert.deepEqual(viejo[campo], nuevo[campo], `el campo ${campo} cambió con el contrato nuevo`);
+		}
+	});
+
+	it("si el endpoint devolviera SOLO el desglose, tampoco rompe", () => {
+		const soloDesglose = mapAuditResponse({
+			requirements: [],
+			breakdown: [{ axis: "AOS", percent: 50, passed: 1, failed: 1, notApplicable: 0, applicable: 2 }],
+		});
+		assert.equal(soloDesglose.subScores, null);
+		assert.equal(soloDesglose.breakdown.length, 1);
+		assert.equal(soloDesglose.breakdown[0].maxWeight, 0, "sin pesos se muestra el número, sin barra");
 	});
 });
