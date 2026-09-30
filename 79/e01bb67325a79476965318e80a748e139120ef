@@ -1,0 +1,20 @@
+apps/aos-extension/README.md
+  h_c5ca005a78c880 106-109
+apps/aos-extension/lib.js
+  h_c5ca005a78c880 217,223-228,246
+apps/aos-extension/test/extension-wiring.test.mjs
+  h_c5ca005a78c880 136-146
+apps/aos-extension/test/lib.test.mjs
+  h_c5ca005a78c880 258,264-283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "79e01bb67325a79476965318e80a748e139120ef",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
