@@ -14,12 +14,63 @@
 
 import { db } from "@workspace/lib/db/db";
 import { aosPublicUsage } from "@workspace/lib/db/schema";
-import { and, eq, sql } from "drizzle-orm";
-import { GLOBAL_QUOTA_KEY, hashClientKey, type PublicAuditLimits, type QuotaSnapshot, utcDay } from "./public-audit";
+import { and, desc, eq, sql } from "drizzle-orm";
+import {
+	GLOBAL_QUOTA_KEY,
+	hashClientKey,
+	type PublicAuditLimits,
+	type QuotaSnapshot,
+	quotaConcentrationWarning,
+	utcDay,
+} from "./public-audit";
 
 /** Buckets del contador. `ip` es el cupo del cliente; `global`, el del servicio entero. */
 const IP_BUCKET = "ip";
 const GLOBAL_BUCKET = "global";
+
+/**
+ * Buckets ya avisados, para que la alarma no inunde el log: un bucket concentrado se avisa una vez
+ * por proceso y por día, no una vez por pedido. Se vacía cuando cambia el día.
+ */
+const warnedConcentrations = new Set<string>();
+let warnedDay: string | null = null;
+
+/**
+ * Lee el bucket de IP que más consumió hoy y, si se está llevando más de un tercio del tope global,
+ * lo deja dicho en el log.
+ *
+ * Es una lectura **de más**: una consulta indexada por request, contra un endpoint que ya hace
+ * decenas de pedidos de red. Se paga a propósito, porque la alternativa —enterarse por el reclamo de
+ * un usuario— es exactamente lo que pasó. Nunca bloquea nada y nunca puede tumbar una respuesta: si
+ * la consulta falla, la request sigue igual que si no hubiera alarma.
+ */
+async function warnIfOneKeyConcentratesQuota(day: string, globalLimit: number): Promise<void> {
+	try {
+		const rows = await db
+			.select({ keyHash: aosPublicUsage.keyHash, count: aosPublicUsage.count })
+			.from(aosPublicUsage)
+			.where(and(eq(aosPublicUsage.bucket, IP_BUCKET), eq(aosPublicUsage.day, day)))
+			.orderBy(desc(aosPublicUsage.count))
+			.limit(1);
+
+		const top = rows[0];
+		if (top === undefined) return;
+
+		const warning = quotaConcentrationWarning({ topCount: top.count, globalLimit, day });
+		if (warning === null) return;
+
+		if (warnedDay !== day) {
+			warnedDay = day;
+			warnedConcentrations.clear();
+		}
+		const seen = `${day}:${top.keyHash}`;
+		if (warnedConcentrations.has(seen)) return;
+		warnedConcentrations.add(seen);
+		console.warn(warning);
+	} catch (error) {
+		console.error("[aos-public] no pudimos revisar la concentración del cupo", error);
+	}
+}
 
 /**
  * Intenta gastar un cupo. Devuelve el total ya consumido (contando este pedido) o `null` si el
@@ -78,6 +129,9 @@ export async function consumePublicQuota(
 	const base = { ipLimit: limits.perIp, globalLimit: limits.global, now };
 
 	const ipCount = await tryConsume(IP_BUCKET, ipKeyHash, day, limits.perIp);
+	// La alarma mira el día entero, no este pedido: por eso va después del consumo y sin importar el
+	// resultado (el colapso de la clave se ve mejor justo cuando empiezan los rechazos).
+	await warnIfOneKeyConcentratesQuota(day, limits.global);
 	if (ipCount === null) {
 		return { ...base, ipCount: limits.perIp, globalCount: 0 };
 	}

@@ -260,7 +260,8 @@ export type NewProviderCall = typeof providerCalls.$inferInsert;
  *
  * Tiene que sobrevivir un reinicio y ser compartido entre instancias, así que vive en Postgres y no
  * en memoria. `bucket` = `"ip"` (cupo diario de un cliente) o `"global"` (tope del servicio, que es
- * la única cota real porque `X-Forwarded-For` se puede forjar). `key_hash` es el SHA-256 de la IP
+ * la cota que sostiene cuando la identidad del cliente no alcanza: NAT compartido o cabecera de IP
+ * falsificable). `key_hash` es el SHA-256 de la IP
  * —nunca la IP en claro—: alcanza para contar y no acumula datos personales. `day` es el día UTC en
  * `YYYY-MM-DD`.
  *
