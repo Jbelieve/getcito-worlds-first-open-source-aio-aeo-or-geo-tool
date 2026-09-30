@@ -1,0 +1,18 @@
+apps/web/src/lib/aos/__tests__/public-audit.test.ts
+  h_c5ca005a78c880 4,240-288
+apps/web/src/lib/aos/public-audit.ts
+  h_c5ca005a78c880 12,201-206,208,212-255
+apps/web/src/routes/api/v1/aos/audit.ts
+  h_c5ca005a78c880 18,61-62,65-71,78,80-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "321afdf19e3d03c72a0c3774297deefac7d640f7",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
