@@ -11,12 +11,15 @@ humano desde el dev console.
 ## Versión del paquete
 
 ```
-2.1.0
+2.1.1
 ```
 
-La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.1.0.zip`) la
-dice sola. Es un incremento sobre la 2.0.0, no un rediseño: el listado de abajo cambió solo en lo que
-el popup muestra de nuevo (el puntaje por eje y el badge Agent-Preferred).
+La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.1.1.zip`) la
+dice sola. La 2.1.1 es un **arreglo**, no un rediseño: la 2.1.0 le mandaba al endpoint el dominio
+pelado (sin `https://` y sin path), que el endpoint rechaza, así que no auditaba ninguna web. Ahora
+manda la URL completa de la pestaña —con su path, para medir la página que se está viendo— y los
+errores de dirección distinguen "no se pudo interpretar" de "queda afuera por seguridad". No cambia
+nada de lo que el popup muestra.
 
 ---
 
