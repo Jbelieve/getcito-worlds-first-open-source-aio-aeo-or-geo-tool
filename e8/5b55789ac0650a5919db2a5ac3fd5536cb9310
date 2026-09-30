@@ -1,0 +1,16 @@
+apps/web/src/lib/aos/__tests__/public-cors.test.ts
+  h_c5ca005a78c880 16,21,35-46,69-99,197-206,212-213,241,253,270,274-282,299,302-310,343,363-365,372,379,391,399
+apps/web/src/lib/aos/public-cors.ts
+  h_c5ca005a78c880 35-49,75-84,138-141,150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e85b55789ac0650a5919db2a5ac3fd5536cb9310",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
