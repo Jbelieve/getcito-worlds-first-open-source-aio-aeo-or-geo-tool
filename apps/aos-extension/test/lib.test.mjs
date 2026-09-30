@@ -255,10 +255,30 @@ describe("el texto de cada error", () => {
 
 		assert.match(afuera.title, /seguridad/);
 		assert.match(afuera.detail, /http\(s\)/);
-		assert.match(afuera.detail, /internas/);
+		assert.match(afuera.detail, /queda afuera por seguridad/);
 
 		assert.notEqual(noSePudoLeer.title, afuera.title);
 		assert.notEqual(noSePudoLeer.detail, afuera.detail);
+	});
+
+	/**
+	 * El candado del defecto del `blocked_url`: el texto le enseñaba a quien prueba **qué apuntar**
+	 * (redes internas, `localhost`, metadatos de nube) y a una persona normal no le dice nada —casi
+	 * nadie audita su propio `localhost`—. El criterio canónico (`AOS-VISTA.md`, 3.7 y 6.1) fija que
+	 * el detalle diga **sólo** que la dirección queda afuera por seguridad.
+	 */
+	it("el texto del `blocked_url` no nombra lo que bloquea: ni localhost, ni redes internas, ni metadatos", () => {
+		const afuera = auditErrorText(400, { code: "blocked_url" });
+		const texto = `${afuera.title} ${afuera.detail}`;
+
+		assert.equal(
+			/localhost|127\.0\.0\.1|internas?|privad|metadatos|169\.254|10\.|192\.168|\.local\b|red/i.test(texto),
+			false,
+			`el texto no puede nombrar lo que el guardián bloquea: "${texto}"`,
+		);
+		// Y sigue diciendo lo único que le sirve a la persona: esa dirección no se audita, por seguridad.
+		assert.equal(afuera.title, "Esa dirección queda afuera por seguridad");
+		assert.match(afuera.detail, /http\(s\)/, "el único dato que se da es que el endpoint audita sitios públicos");
 	});
 
 	it("un 400 sin `code` (servidor viejo) no inventa el motivo", () => {

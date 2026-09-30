@@ -103,8 +103,10 @@ entrada por sitio. El endpoint además tolera un dominio pelado y lo interpreta 
 que la extensión 2.1.0 —la que manda el dominio— también funciona contra ese servidor.
 
 Los errores se traducen a un mensaje claro, nunca a un alert técnico. El **400** viene con un `code`
-y hay dos motivos distintos que no se confunden: `invalid_url` (no se pudo interpretar la dirección)
-e `blocked_url` (destinos internos, `localhost`, metadatos de nube, esquemas que no son http/https).
+y hay dos motivos distintos que no se confunden: `invalid_url` (no se pudo interpretar la dirección) e
+`blocked_url` (esa dirección queda afuera por seguridad). El texto del segundo **no enumera lo que el
+guardián bloquea**: la lista de lo que se deja afuera vive en el servidor, y nombrarla en el popup le
+daría un mapa a quien prueba sin decirle nada a una persona normal.
 Después: **429** se pasó el cupo: se lee `Retry-After` para decir **cuándo** puede volver y
 `RateLimit-Limit` para decir el cupo **real** (si no vino, se dice el cupo sin el número), **504**
 tardó demasiado, cualquier otro un mensaje genérico con el detalle en la consola.

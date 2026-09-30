@@ -133,6 +133,17 @@ describe("los textos que ve el usuario no dicen cosas falsas", () => {
 		);
 		assert.match(LIB, /RateLimit-Limit/, "y tiene que leer la cabecera que lo publica");
 	});
+
+	it("el texto del bloqueo no enumera lo que el guardián bloquea", () => {
+		for (const name of PUBLICADOS) {
+			assert.equal(
+				/direcciones internas|metadatos de nube|localhost/i.test(read(name)),
+				false,
+				`${name}: nombrar lo que se bloquea le da un mapa a quien prueba y no le sirve a nadie más`,
+			);
+		}
+		assert.match(LIB, /Esa dirección queda afuera por seguridad/, "y el texto canónico sigue ahí");
+	});
 });
 
 describe("el overlay queda igual", () => {

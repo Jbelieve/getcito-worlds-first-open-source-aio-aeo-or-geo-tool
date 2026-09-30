@@ -214,11 +214,17 @@ export function readRateLimit(headers) {
  *
  * **El 400 no es un solo error.** El servidor distingue dos motivos y los manda en `code`:
  *   · `invalid_url` — no se pudo interpretar la dirección (un error de forma);
- *   · `blocked_url` — la dirección queda afuera por seguridad (un destino interno).
+ *   · `blocked_url` — la dirección queda afuera por seguridad.
  * Antes los dos caían en el mismo texto, y por eso un error de parseo se le mostraba al usuario
  * como si hubiera auditado una dirección interna. Cuando el `code` no viene (un servidor viejo, o un
  * 400 que no es del guardián) se dice la verdad sin inventar el motivo: se pudo ni interpretar ni
  * confirmar.
+ *
+ * **El `blocked_url` no enumera lo que bloquea.** El texto viejo detallaba los destinos que el
+ * guardián deja afuera: le enseñaba a quien prueba **qué apuntar** y a una persona normal no le decía
+ * nada (casi nadie audita su propia máquina). El criterio canónico fija el texto: la dirección
+ * **queda afuera por seguridad**, sin el detalle de la defensa. La lista de lo que se bloquea vive en
+ * el servidor, que es donde tiene que vivir.
  *
  * **El 429 dice el cupo que vino, no el que suponemos.** El número sale de `rateLimitLimit`
  * (la cabecera `RateLimit-Limit`); si no vino, el cupo se dice **sin la cifra**, porque un número
@@ -237,8 +243,7 @@ export function auditErrorText(status, { code = null, retryAfterSeconds = null, 
 		if (code === "blocked_url") {
 			return {
 				title: "Esa dirección queda afuera por seguridad",
-				detail:
-					"El endpoint solo audita sitios http(s) públicos. Las direcciones internas, localhost y los metadatos de nube quedan afuera por seguridad.",
+				detail: "El endpoint solo audita sitios http(s) públicos. Esa dirección queda afuera por seguridad.",
 			};
 		}
 		return {
