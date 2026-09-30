@@ -115,6 +115,26 @@ describe("sin credencial y sin rastro de Maasy en lo que se publica", () => {
 	});
 });
 
+/**
+ * Candado estático de los textos que ve el usuario: no pueden decir cosas falsas. Hay defectos que se
+ * pueden reintroducir sin que ningún test de comportamiento chille —una constante con el cupo, una
+ * frase que enumera lo que el guardián bloquea—, así que además del test de cada función queda esto:
+ * lo que se publica no puede volver a decirlo.
+ */
+describe("los textos que ve el usuario no dicen cosas falsas", () => {
+	it("el cupo no está hardcodeado: el número sale de `RateLimit-Limit`", () => {
+		// `AUDITS_PER_DAY = 20` era el **default** del servidor, no el cupo: en el despliegue donde pasó
+		// el incidente el cupo valía 200 y la persona leyó 20. Una constante del cliente acierta sólo
+		// mientras nadie toque la env.
+		assert.equal(
+			/(AUDITS_PER_DAY|AUDITS_PER_IP)\s*[:=]/.test(LIB),
+			false,
+			"el cupo no puede ser una constante del cliente: tiene que salir de RateLimit-Limit",
+		);
+		assert.match(LIB, /RateLimit-Limit/, "y tiene que leer la cabecera que lo publica");
+	});
+});
+
 describe("el overlay queda igual", () => {
 	it("sigue existiendo, define la misma función global y no pide nada al servidor", () => {
 		assert.match(OVERLAY, /window\.__aosRenderOverlay = function \(audit\)/);

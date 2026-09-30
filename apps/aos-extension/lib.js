@@ -39,9 +39,6 @@ export const BEAOS_API_URL = "https://beaos.believe-global.com";
 export const AUDIT_ENDPOINT = `${BEAOS_API_URL}/api/v1/aos/audit`;
 export const LEAD_ENDPOINT = `${BEAOS_API_URL}/api/v1/aos/lead`;
 
-/** Cupo diario por IP del endpoint público. Es el número que se le dice al usuario en un 429. */
-export const AUDITS_PER_DAY = 20;
-
 /** Enlaces del popup que son del **estándar**: no se tocan con el rebautizo. */
 export const STANDARD_REPO_URL = "https://github.com/BELIEVE-IT-GROUP/aos-aps-standard";
 
@@ -184,11 +181,36 @@ export function humanWait(seconds) {
 }
 
 /**
+ * Lee `RateLimit-Limit`: **el cupo que el servidor decidió para este pedido**. `null` cuando la
+ * cabecera no viene o no dice un cupo.
+ *
+ * Por qué no hay una constante con el número: el cupo efectivo lo define la env del servidor
+ * (`AOS_PUBLIC_AUDITS_PER_DAY`, default 20) y la cabecera lo publica. Un número escrito acá es un
+ * número falso apenas alguien toque la env — pasó, con un cupo real de **200** y un texto que decía
+ * **20**. La constante de cupo que vivía en este archivo se fue por eso.
+ *
+ * Y cuando la cabecera no viene (un servidor viejo, un proxy que la come) lo correcto es **no
+ * inventar la cifra**: se dice el cupo sin el número. Un `0` o un default acá serían la misma mentira
+ * de antes, con otro origen.
+ */
+export function readRateLimit(headers) {
+	if (!headers || typeof headers.get !== "function") return null;
+	const raw = headers.get("RateLimit-Limit");
+	if (raw === null || raw === undefined) return null;
+	const text = String(raw).trim();
+	if (text.length === 0) return null;
+	const value = Number(text);
+	if (Number.isInteger(value) === false || value <= 0) return null;
+	return value;
+}
+
+/**
  * El texto de cada error, en castellano y sin jerga.
  *
- * `status` es el HTTP, `code` es el `code` del cuerpo del 400 (si vino) y `retryAfterSeconds` lo que
- * dijo el servidor que hay que esperar (puede faltar). Nunca se muestra un alert técnico. El caso 0
- * es "no se pudo llegar": red caída, DNS, extensión sin permiso.
+ * `status` es el HTTP, `code` es el `code` del cuerpo del 400 (si vino), `retryAfterSeconds` lo que
+ * dijo el servidor que hay que esperar y `rateLimitLimit` el cupo que publicó en `RateLimit-Limit`
+ * (los dos pueden faltar). Nunca se muestra un alert técnico. El caso 0 es "no se pudo llegar": red
+ * caída, DNS, extensión sin permiso.
  *
  * **El 400 no es un solo error.** El servidor distingue dos motivos y los manda en `code`:
  *   · `invalid_url` — no se pudo interpretar la dirección (un error de forma);
@@ -197,8 +219,13 @@ export function humanWait(seconds) {
  * como si hubiera auditado una dirección interna. Cuando el `code` no viene (un servidor viejo, o un
  * 400 que no es del guardián) se dice la verdad sin inventar el motivo: se pudo ni interpretar ni
  * confirmar.
+ *
+ * **El 429 dice el cupo que vino, no el que suponemos.** El número sale de `rateLimitLimit`
+ * (la cabecera `RateLimit-Limit`); si no vino, el cupo se dice **sin la cifra**, porque un número
+ * inventado es peor que ninguno. Lo que nunca falta es **cuándo** puede volver, leído de
+ * `Retry-After` (o de `RateLimit-Reset`).
  */
-export function auditErrorText(status, { code = null, retryAfterSeconds = null } = {}) {
+export function auditErrorText(status, { code = null, retryAfterSeconds = null, rateLimitLimit = null } = {}) {
 	if (status === 400) {
 		if (code === "invalid_url") {
 			return {
@@ -222,12 +249,24 @@ export function auditErrorText(status, { code = null, retryAfterSeconds = null }
 	}
 	if (status === 429) {
 		const wait = retryAfterSeconds === null ? null : humanWait(retryAfterSeconds);
+		// El cupo, solo si el servidor lo dijo. Sin cifra la frase del cupo no va: "Son auditorías por IP
+		// y por día" no se lee.
+		const cupo = rateLimitLimit === null ? null : `Son ${rateLimitLimit} auditorías por IP y por día.`;
+		if (cupo === null) {
+			return {
+				title: "Se acabó el cupo por hoy",
+				detail:
+					wait === null
+						? "El cupo se renueva a la medianoche UTC."
+						: `Podés volver ${wait}, o cuando el cupo se renueva a la medianoche UTC.`,
+			};
+		}
 		return {
 			title: "Se acabó el cupo por hoy",
 			detail:
 				wait === null
-					? `Son ${AUDITS_PER_DAY} auditorías por IP y por día, y el cupo se renueva a la medianoche UTC.`
-					: `Son ${AUDITS_PER_DAY} auditorías por IP y por día. Podés volver ${wait}, o a la medianoche UTC.`,
+					? `${cupo} El cupo se renueva a la medianoche UTC.`
+					: `${cupo} Podés volver ${wait}, o a la medianoche UTC.`,
 		};
 	}
 	if (status === 504) {
@@ -514,6 +553,8 @@ export function parseAuditFailure({ status, headers, body } = {}) {
 		/** `invalid_url` (no se pudo interpretar) o `blocked_url` (queda afuera por seguridad). */
 		code,
 		retryAfterSeconds: readRetryAfter(headers),
+		/** El cupo que decidió el servidor para este pedido. Sin la cabecera, `null`: no se inventa. */
+		rateLimitLimit: readRateLimit(headers),
 		error: message,
 	};
 }
@@ -526,9 +567,11 @@ export function parseAuditFailure({ status, headers, body } = {}) {
  * Recibe la **URL completa** de la pestaña (con esquema y con path), no el dominio: el endpoint exige
  * una URL parseable y el path es parte de lo que se mide.
  *
- * Devuelve `{ ok: true, data }` o `{ ok: false, status, code, retryAfterSeconds, error }`. El status
- * 0 es "no se pudo llegar" (red, DNS, permiso), y ahí `code` es `null` porque no hubo respuesta. El
- * detalle técnico crudo va a la consola; el texto que ve el usuario sale de `auditErrorText`.
+ * Devuelve `{ ok: true, data }` o `{ ok: false, status, code, retryAfterSeconds, rateLimitLimit, error }`.
+ * El status 0 es "no se pudo llegar" (red, DNS, permiso), y ahí `code` es `null` porque no hubo
+ * respuesta. El detalle técnico crudo va a la consola; el texto que ve el usuario sale de
+ * `auditErrorText`. `rateLimitLimit` es el cupo que el servidor publicó en `RateLimit-Limit`: viaja
+ * para que el 429 pueda decir el número **real** (o ninguno, si la cabecera no vino).
  */
 export async function auditUrl(url) {
 	try {
@@ -539,12 +582,19 @@ export async function auditUrl(url) {
 		}
 		const data = await resp.json().catch(() => null);
 		if (data === null || typeof data !== "object") {
-			return { ok: false, status: resp.status, code: null, retryAfterSeconds: null, error: "respuesta ilegible" };
+			return {
+				ok: false,
+				status: resp.status,
+				code: null,
+				retryAfterSeconds: null,
+				rateLimitLimit: null,
+				error: "respuesta ilegible",
+			};
 		}
 		return { ok: true, data };
 	} catch (error) {
 		console.error("[BeAOS] el audit falló:", error);
-		return { ok: false, status: 0, code: null, retryAfterSeconds: null, error: String(error) };
+		return { ok: false, status: 0, code: null, retryAfterSeconds: null, rateLimitLimit: null, error: String(error) };
 	}
 }
 

@@ -79,7 +79,10 @@ publica.
 Dos endpoints **públicos a propósito**, en `https://beaos.believe-global.com` (la API) y sin
 credencial: sin token, sin sesión y sin apikey. Antes la extensión hablaba con Supabase (Maasy) y
 mandaba una publishable key; ahora no manda nada más que el cuerpo. Lo que sostiene el servicio es el
-límite diario por IP (**20**) más el tope global del endpoint.
+límite diario por IP más el tope global del endpoint. El cupo diario **no es una constante del
+cliente**: lo define la env del servidor (`AOS_PUBLIC_AUDITS_PER_DAY`) y viaja en la cabecera
+`RateLimit-Limit` de la respuesta, que es de donde el popup saca el número que le muestra a la
+persona. Si la cabecera no viene, el popup dice el cupo **sin la cifra** en vez de inventarla.
 
 **Dos hosts, dos papeles.** La web pública que ve el usuario es `https://be-aos.believe-global.com`
 (la landing de marca; es la que va en el enlace "Ver más sobre BeAOS"). La app con sesión y la API
@@ -102,8 +105,9 @@ que la extensión 2.1.0 —la que manda el dominio— también funciona contra e
 Los errores se traducen a un mensaje claro, nunca a un alert técnico. El **400** viene con un `code`
 y hay dos motivos distintos que no se confunden: `invalid_url` (no se pudo interpretar la dirección)
 e `blocked_url` (destinos internos, `localhost`, metadatos de nube, esquemas que no son http/https).
-Después: **429** se pasó el cupo y se lee `Retry-After` para decir cuándo puede volver, **504** tardó
-demasiado, cualquier otro un mensaje genérico con el detalle en la consola.
+Después: **429** se pasó el cupo: se lee `Retry-After` para decir **cuándo** puede volver y
+`RateLimit-Limit` para decir el cupo **real** (si no vino, se dice el cupo sin el número), **504**
+tardó demasiado, cualquier otro un mensaje genérico con el detalle en la consola.
 
 ## Qué muestra el popup
 
