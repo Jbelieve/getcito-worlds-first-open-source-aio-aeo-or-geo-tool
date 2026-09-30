@@ -1,16 +1,22 @@
 /// <reference types="vite/client" />
-import { useEffect } from "react";
-import { HeadContent, Outlet, ScriptOnce, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
-import { NotFound } from "@/router-default-components";
+
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import type { QueryClient } from "@tanstack/react-query";
-import { DEFAULT_APP_ICON, Getcito_THEME_COLOR } from "@workspace/config/constants";
-import type { DeploymentMode } from "@workspace/config/types";
+import { createRootRouteWithContext, HeadContent, Outlet, ScriptOnce, Scripts } from "@tanstack/react-router";
+import {
+	DEFAULT_APP_ICON,
+	DEFAULT_APP_LOCKUP,
+	DEFAULT_APP_NAME,
+	Getcito_THEME_COLOR,
+} from "@workspace/config/constants";
 import type { MissingEnvVar } from "@workspace/config/env";
-import { getClientConfig, getEnvValidationStateFn, type PublicClientConfig } from "@/server/config";
+import type { DeploymentMode } from "@workspace/config/types";
+import { useEffect } from "react";
 import MissingEnvPage from "@/components/missing-env-page";
 import queryDevtools from "@/integrations/tanstack-query/devtools";
 import { initPostHog } from "@/lib/posthog";
+import { NotFound } from "@/router-default-components";
+import { getClientConfig, getEnvValidationStateFn, type PublicClientConfig } from "@/server/config";
 import appCss from "../styles.css?url";
 
 interface RouterContext {
@@ -25,8 +31,10 @@ interface RouterContext {
 
 // Client-side cache for config data — avoids HTTP round-trips on every SPA navigation.
 // Server-side (SSR) always fetches fresh (cachedRootData is reset per request).
-let cachedRootData: { clientConfig: PublicClientConfig; envValidation: { mode: DeploymentMode; missing: MissingEnvVar[]; isValid: boolean } } | null =
-	typeof window === "undefined" ? null : null;
+let cachedRootData: {
+	clientConfig: PublicClientConfig;
+	envValidation: { mode: DeploymentMode; missing: MissingEnvVar[]; isValid: boolean };
+} | null = typeof window === "undefined" ? null : null;
 
 export const Route = createRootRouteWithContext<RouterContext>()({
 	notFoundComponent: NotFound,
@@ -56,11 +64,14 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 		}
 
 		const hasCustomIcon = Boolean(branding?.icon && branding.icon !== DEFAULT_APP_ICON);
-		const appName = branding?.name || "BeAOS";
+		const appName = branding?.name || DEFAULT_APP_NAME;
+		// Donde no se puede dibujar la marca, la marca se escribe: `BeAOS by Believe`. Solo cuando el
+		// despliegue es BeAOS — a un whitelabel no se le pega un "by Believe" que no pidió.
+		const brandName = appName === DEFAULT_APP_NAME ? DEFAULT_APP_LOCKUP : appName;
 		const themeColor = hasCustomIcon ? "#000000" : Getcito_THEME_COLOR;
 		const appUrl = branding?.url ? branding.url.replace(/\/$/, "") : undefined;
 
-		const title = `${appName} - AI Search Optimization`;
+		const title = `${brandName} - AI Search Optimization`;
 		const description = "Track and optimize your brand's visibility across AI models.";
 		// Don't pass `title` to /api/og — the renderer already shows the brand
 		// (Getcito logo or whitelabel icon + name), so a "Brand - AI Search Optimization"
@@ -84,8 +95,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 				{ charSet: "utf-8" },
 				{ name: "viewport", content: "width=device-width, initial-scale=1" },
 				{ name: "theme-color", content: themeColor },
-				{ name: "apple-mobile-web-app-title", content: appName },
-				{ property: "og:site_name", content: appName },
+				{ name: "apple-mobile-web-app-title", content: brandName },
+				{ property: "og:site_name", content: brandName },
 				{ property: "og:locale", content: "en_US" },
 				{ property: "og:title", content: title },
 				{ property: "og:description", content: description },
@@ -115,7 +126,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 							// probes for /favicon.ico and /apple-touch-icon.png 404 on
 							// whitelabel deployments instead of picking up Getcito assets.
 							{ rel: "icon", type: "image/svg+xml", href: "/icons/beaos-icon.svg" },
-																					{ rel: "apple-touch-icon", href: "/icons/beaos-icon.svg" },
+							{ rel: "apple-touch-icon", href: "/icons/beaos-icon.svg" },
 						]),
 			],
 			scripts,

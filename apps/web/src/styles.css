@@ -26,6 +26,7 @@
 	--font-sans: var(--font-inter);
 	--font-mono: var(--font-jetbrains-mono);
 	--font-display: var(--font-fraunces);
+	--font-wordmark: var(--font-fraunces-wordmark);
 	--font-titan-one: "Titan One", cursive;
 	--color-sidebar-ring: var(--sidebar-ring);
 	--color-sidebar-border: var(--sidebar-border);
@@ -68,6 +69,9 @@
 :root {
 	--font-inter: Inter, ui-sans-serif, system-ui, sans-serif;
 	--font-fraunces: Fraunces, Georgia, Cambria, Times New Roman, serif;
+	/* El corte de Fraunces del wordmark: el @font-face de abajo, no el de @fontsource, porque el
+	   wordmark necesita el eje `opsz` (144) y el Fraunces estático de los titulares no lo tiene. */
+	--font-fraunces-wordmark: "Fraunces Wordmark", Fraunces, Georgia, Cambria, Times New Roman, serif;
 	--font-jetbrains-mono: JetBrains Mono, ui-monospace, SFMono-Regular, monospace;
 	--radius: 0.5rem;
 	--background: #fafaf7;
@@ -129,8 +133,8 @@
 	--accent: #083344;
 	--accent-foreground: #67e8f9;
 	--destructive: #f87171;
-	--border: rgba(255,255,255,0.12);
-	--input: rgba(255,255,255,0.18);
+	--border: rgba(255, 255, 255, 0.12);
+	--input: rgba(255, 255, 255, 0.18);
 	--ring: #4f8cff;
 	--chart-1: #6d94e8;
 	--chart-2: #6ed0ff;
@@ -143,7 +147,7 @@
 	--sidebar-primary-foreground: #07101f;
 	--sidebar-accent: #1f2937;
 	--sidebar-accent-foreground: #f8fafc;
-	--sidebar-border: rgba(255,255,255,0.12);
+	--sidebar-border: rgba(255, 255, 255, 0.12);
 	--sidebar-ring: #4f8cff;
 }
 
@@ -198,4 +202,90 @@
 		print-color-adjust: exact !important;
 		color-adjust: exact !important;
 	}
+}
+
+/* ── El wordmark de Believe, canónico ────────────────────────────────────────────────────────────
+   Una sola cosa, y no se mezcla con nada: Fraunces 500, opsz 144, tracking -0.025em, azul Believe
+   700, la última «e» girada -18° (pivote 50% 65%) y el punto cian como firma. Nunca en negro: vive
+   en azul Believe, o blanco sobre azul. Por eso el color de la marca lo hereda del contenedor: un
+   `text-*` del llamador lo cambia, y `cn` (tailwind-merge) resuelve el choque con el azul por
+   defecto.
+
+   La fuente va **empaquetada, no de afuera**: el woff2 vive en `public/fonts/` y lo sirve la propia
+   app — cero llamadas a Google Fonts en runtime, y anda sin internet. Es Fraunces variable (OFL)
+   subseteada a los glifos de la marca; la receta está en `scripts/subset-fraunces-wordmark.sh` y la
+   licencia viaja al lado del archivo (`public/fonts/OFL.txt`). */
+@font-face {
+	font-family: "Fraunces Wordmark";
+	src: url("/fonts/fraunces-wordmark.woff2") format("woff2");
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+.wordmark {
+	font-family: var(--font-fraunces-wordmark);
+	font-weight: 500;
+	font-variation-settings: "opsz" 144;
+	font-optical-sizing: none;
+	letter-spacing: -0.025em;
+	color: inherit;
+	white-space: nowrap;
+}
+
+.wordmark-e {
+	display: inline-block;
+	transform: rotate(-18deg);
+	transform-origin: 50% 65%;
+}
+
+/* El punto es un círculo de CSS, no un glifo: 0.25em de diámetro y 0.28em de aire, apoyado en la
+   línea base como un punto de verdad, con el micro-ajuste óptico del brandbook hacia el centro de
+   la altura de la x. */
+.wordmark-dot {
+	display: inline-block;
+	width: 0.25em;
+	height: 0.25em;
+	margin-left: 0.28em;
+	border-radius: 50%;
+	background: var(--signal);
+	vertical-align: baseline;
+	position: relative;
+	top: -0.02em;
+}
+
+/* El lockup: `BeAOS` arriba y `by Believe.` en una línea aparte, más chica. El wordmark tiene mínimo
+   32px y de ahí no baja, así que la línea grande va a 44px —1,375× la chica, pero la diferencia se
+   lee mucho más porque una línea es caja alta y la otra no—. */
+.lockup {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: flex-start;
+	line-height: 1;
+}
+
+.lockup-name {
+	font-family: var(--font-fraunces-wordmark);
+	font-weight: 500;
+	font-variation-settings: "opsz" 144;
+	font-optical-sizing: none;
+	letter-spacing: -0.025em;
+	font-size: 44px;
+	line-height: 1;
+	color: inherit;
+}
+
+/* La línea del wordmark: el tamaño lo pone acá, y de 32px no se baja. */
+.lockup-by {
+	font-size: 32px;
+	line-height: 1;
+	margin-top: 4px;
+}
+
+/* "by" es el conector, no la marca: va en Inter y en el mute de la paleta. Es lo único que no es
+   Fraunces en el lockup. */
+.lockup-conector {
+	font-family: var(--font-inter);
+	font-size: 0.5em;
+	color: var(--muted-foreground);
 }
