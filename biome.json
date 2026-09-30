@@ -9,6 +9,13 @@
 		"ignoreUnknown": false,
 		"includes": ["apps/**", "packages/**", "!**/node_modules/**", "!packages/ui/src/components/**"]
 	},
+	"overrides": [
+		{
+			"includes": ["apps/aos-extension/content-overlay.js"],
+			"formatter": { "enabled": false },
+			"linter": { "enabled": false }
+		}
+	],
 	"formatter": {
 		"enabled": true,
 		"indentStyle": "tab",

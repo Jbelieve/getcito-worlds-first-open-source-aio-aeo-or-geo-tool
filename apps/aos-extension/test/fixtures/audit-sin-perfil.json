@@ -1,0 +1,179 @@
+{
+	"url": "https://example.com/",
+	"score": 0,
+	"band": "Agent-Inert",
+	"businessType": "brand",
+	"requirements": [
+		{
+			"id": "AOS-DISC-01",
+			"axis": "AOS",
+			"strength": "SHOULD",
+			"title": "llms.txt",
+			"status": "fail",
+			"evidence": "/llms.txt responde 404.",
+			"gain": 12.5
+		},
+		{
+			"id": "AOS-DISC-03",
+			"axis": "AOS",
+			"strength": "SHOULD",
+			"title": "AGENTS.md",
+			"status": "fail",
+			"evidence": "/AGENTS.md responde 404.",
+			"gain": 12.5
+		},
+		{
+			"id": "AOS-DISC-04",
+			"axis": "AOS",
+			"strength": "MUST",
+			"title": "robots.txt + sitemap",
+			"status": "fail",
+			"evidence": "robots.txt no responde · sitemap.xml no responde.",
+			"gain": 18.8
+		},
+		{
+			"id": "AOS-CONT-01",
+			"axis": "AOS",
+			"strength": "SHOULD",
+			"title": "JSON-LD identity",
+			"status": "fail",
+			"evidence": "Ningún bloque JSON-LD en el HTML.",
+			"gain": 12.5
+		},
+		{
+			"id": "AOS-IDEN-01",
+			"axis": "AOS",
+			"strength": "MUST",
+			"title": "A2A Agent Card",
+			"status": "fail",
+			"evidence": "/.well-known/agent-card.json responde 404.",
+			"gain": 18.8
+		},
+		{
+			"id": "AOS-IDEN-02",
+			"axis": "AOS",
+			"strength": "SHOULD",
+			"title": "Agent permissions",
+			"status": "fail",
+			"evidence": "/.well-known/agent-permissions.json responde 404.",
+			"gain": 12.5
+		},
+		{
+			"id": "AOS-CAPA-01",
+			"axis": "AOS",
+			"strength": "SHOULD",
+			"title": "MCP Server Card",
+			"status": "fail",
+			"evidence": "Ni server-card, ni MCP, ni OpenAPI por las vías que probamos.",
+			"gain": 12.5
+		},
+		{
+			"id": "AOS-API-01",
+			"axis": "AOS",
+			"strength": "MUST",
+			"title": "Public API / OpenAPI",
+			"status": "n_a",
+			"evidence": "No encontramos MCP ni OpenAPI por ninguna de las vías que probamos."
+		},
+		{
+			"id": "APS-CLAIM-01",
+			"axis": "APS",
+			"strength": "MUST",
+			"title": "brand.json Claims & Proofs",
+			"status": "fail",
+			"evidence": "/.well-known/brand.json responde 404.",
+			"gain": 42.9
+		},
+		{
+			"id": "APS-PROV-02",
+			"axis": "APS",
+			"strength": "SHOULD",
+			"title": "Public key (keys.json)",
+			"status": "fail",
+			"evidence": "/.well-known/keys.json responde 404.",
+			"gain": 28.6
+		},
+		{
+			"id": "APS-PROV-01",
+			"axis": "APS",
+			"strength": "SHOULD",
+			"title": "Ed25519 signature verifies",
+			"status": "fail",
+			"evidence": "Sin firma válida: no pudimos verificar los bytes servidos contra la clave pública.",
+			"gain": 28.6
+		},
+		{
+			"id": "AOS-DISC-02",
+			"axis": "AOS",
+			"strength": "MAY",
+			"title": "llms-full.txt",
+			"status": "fail",
+			"diagnostic": true,
+			"evidence": "/llms-full.txt no responde."
+		},
+		{
+			"id": "AOS-CONT-02",
+			"axis": "AOS",
+			"strength": "SHOULD",
+			"title": "Proof objects as structured data",
+			"status": "fail",
+			"diagnostic": true,
+			"evidence": "Sin JSON-LD de tipo CreativeWork, CaseStudy, Review ni Article."
+		},
+		{
+			"id": "AOS-CONT-03",
+			"axis": "AOS",
+			"strength": "MAY",
+			"title": "Markdown content negotiation",
+			"status": "fail",
+			"diagnostic": true,
+			"evidence": "Con Accept: text/markdown no devuelve markdown."
+		},
+		{
+			"id": "AOS-CAPA-02",
+			"axis": "AOS",
+			"strength": "SHOULD",
+			"title": "NLWeb /ask endpoint",
+			"status": "fail",
+			"diagnostic": true,
+			"evidence": "/ask responde 404."
+		},
+		{
+			"id": "APS-CLAIM-02",
+			"axis": "APS",
+			"strength": "MUST",
+			"title": "Mandatory boundary",
+			"status": "fail",
+			"diagnostic": true
+		},
+		{
+			"id": "APS-CLAIM-03",
+			"axis": "APS",
+			"strength": "MUST",
+			"title": "Proofs link to claims",
+			"status": "fail",
+			"diagnostic": true
+		},
+		{
+			"id": "APS-CLAIM-04",
+			"axis": "APS",
+			"strength": "MUST",
+			"title": "Derived confidence",
+			"status": "fail",
+			"diagnostic": true
+		},
+		{
+			"id": "APS-PROV-03",
+			"axis": "APS",
+			"strength": "MAY",
+			"title": "Web Bot Auth",
+			"status": "fail",
+			"diagnostic": true,
+			"evidence": "/.well-known/http-message-signatures-directory no responde JSON."
+		}
+	],
+	"declaredAps": null,
+	"claims": 0,
+	"signatureVerified": false,
+	"auditedAt": "2026-09-30T03:22:40.652Z"
+}

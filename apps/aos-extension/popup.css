@@ -1,0 +1,519 @@
+/*
+ * Popup de BeAOS — superficie nuestra, así que usa la paleta de la marca.
+ *
+ * Los seis tokens están copiados a mano porque la extensión no tiene build y no puede importar de
+ * `@workspace/ui`. Fuente canónica: `apps/web/src/styles.css` (bloque `:root`, comentario "Believe
+ * brand inks"): paper = --background, Believe Blue 700 = --primary, Believe Blue 900 = --believe-900,
+ * Cyan 400 = --signal, Ink 900 = --foreground, Ink 500 = --muted-foreground.
+ *
+ * La **semántica** de los estados no se inventa acá: es la de `apps/web/src/components/status-tone.tsx`,
+ * y son tres canales con un solo significado cada uno.
+ *
+ *   azul  — cuánto hay.   Rampa ordinal: más azul, más cumplido. El color ordena, no juzga.
+ *   tinta — qué tan grave. Peso, no tono: lo que falla se escribe en ink pleno, lo demás en ink suave.
+ *   cian  — qué hacer ahora. La única señal, y aparece exactamente dos veces: en el subrayado del
+ *                           número grande y en el bloque del próximo paso. No es decoración.
+ *
+ * Dos reglas que sostienen esto: (1) un número nunca se pinta por lo que vale — el número es un dato
+ * y va en ink, el chip de al lado es el que dice la banda; (2) un estado nunca depende solo del color
+ * — cada uno lleva su palabra y su glifo, así que se entiende en blanco y negro o con daltonismo.
+ *
+ * El único valor que no sale de un token es la opacidad, que es una derivación del token — igual que
+ * en status-tone.tsx. No hay un séptimo hex.
+ *
+ * El overlay ("lo que ve un agente") no se toca: sus colores quedan como estaban en content-overlay.js.
+ */
+:root {
+	/* Los seis tokens de la marca. */
+	--papel: #fafaf7; /* --background */
+	--azul: #0c3bb9; /* --primary / --believe-700 */
+	--tinta: #062778; /* --believe-900 */
+	--cian: #00aaff; /* --signal */
+	--ink: #1a1a1a; /* --foreground / Ink 900 */
+	--ink-suave: #6b6b65; /* --muted-foreground / Ink 500 */
+
+	/* Derivaciones por opacidad: nunca un hex nuevo. */
+	--linea: rgba(26, 26, 26, 0.12);
+	--linea-suave: rgba(26, 26, 26, 0.08);
+	--azul-05: rgba(12, 59, 185, 0.05);
+	--azul-10: rgba(12, 59, 185, 0.1);
+	--azul-20: rgba(12, 59, 185, 0.2);
+	--azul-30: rgba(12, 59, 185, 0.3);
+
+	--radius: 10px;
+	--fuente: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	--mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-synthesis: none;
+}
+
+* {
+	box-sizing: border-box;
+	margin: 0;
+}
+
+body {
+	width: 380px;
+	max-height: 600px;
+	overflow-y: auto;
+	background: var(--papel);
+	color: var(--ink);
+	font-family: var(--fuente);
+	font-size: 13px;
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+}
+
+/* --- header --- */
+.hd {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--linea);
+}
+.hd-mark {
+	font-weight: 700;
+	font-size: 17px;
+	letter-spacing: -0.01em;
+	color: var(--azul);
+}
+.hd-domain {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-suave);
+	max-width: 200px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* --- estados --- */
+.state {
+	padding: 18px 16px;
+}
+/* Ningún bloque que se oculta define `display`, así que no hace falta `!important`. */
+.hidden {
+	display: none;
+}
+.muted {
+	color: var(--ink-suave);
+	font-size: 12.5px;
+}
+.big {
+	font-size: 16px;
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+
+/* --- la etiqueta técnica: mono, mayúscula, tracking abierto (MONO_LABEL de status-tone.tsx) --- */
+.eyebrow {
+	font-family: var(--mono);
+	font-size: 10px;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.18em;
+	color: var(--ink-suave);
+}
+
+/* --- score + banda --- */
+.score-row {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 14px;
+}
+.score-num {
+	display: flex;
+	align-items: baseline;
+	gap: 2px;
+	font-size: 46px;
+	font-weight: 700;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+	/* El número es un dato: va en ink. No se pinta por lo que vale. */
+	color: var(--ink);
+	/* Aparición 1 del cian: el subrayado del número grande. */
+	border-bottom: 3px solid var(--cian);
+	padding-bottom: 4px;
+	min-width: 96px;
+}
+.score-num small {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--ink-suave);
+}
+.score-meta {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 6px;
+	padding-bottom: 6px;
+	text-align: right;
+}
+.score-tag {
+	font-size: 11.5px;
+	color: var(--ink-suave);
+	line-height: 1.4;
+}
+
+/* El chip de banda: la rampa azul dice cuánto hay. Palabra + marca llena o hueca, nunca solo color. */
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 10px;
+	border-radius: 999px;
+	border: 1px solid var(--linea);
+	font-size: 11.5px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.chip::before {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	flex: none;
+	border: 1px solid currentColor;
+}
+.tone--full {
+	border-color: var(--azul-30);
+	background: var(--azul-10);
+	color: var(--azul);
+}
+.tone--full::before {
+	background: var(--azul);
+}
+.tone--high {
+	border-color: var(--azul-20);
+	background: var(--azul-05);
+	color: var(--azul);
+}
+.tone--high::before {
+	background: rgba(12, 59, 185, 0.72);
+}
+.tone--mid {
+	border-color: var(--linea);
+	background: transparent;
+	color: var(--ink);
+}
+.tone--mid::before {
+	background: rgba(12, 59, 185, 0.45);
+}
+.tone--low {
+	border-color: var(--linea);
+	background: transparent;
+	color: var(--ink-suave);
+}
+.tone--low::before {
+	background: transparent;
+}
+.tone--none,
+.tone--unknown {
+	border-style: dashed;
+	border-color: rgba(26, 26, 26, 0.25);
+	background: transparent;
+	color: var(--ink-suave);
+}
+.tone--none::before,
+.tone--unknown::before {
+	background: transparent;
+	border-color: rgba(26, 26, 26, 0.16);
+}
+
+/* --- bloques --- */
+.block {
+	margin-top: 14px;
+	padding: 12px;
+	border: 1px solid var(--linea);
+	border-radius: var(--radius);
+}
+.block-hd {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+.block-aps {
+	background: var(--azul-05);
+}
+/* Nota al pie de un bloque: mono chico, dato de contexto (cuándo se midió). */
+.block-note {
+	margin-top: 7px;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	color: var(--ink-suave);
+}
+.aps-line {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+}
+.aps-score {
+	font-size: 20px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--tinta);
+}
+/* Sin perfil no hay número que mostrar, así que la frase ocupa el lugar del dato. */
+.aps-score--none {
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--ink-suave);
+}
+.aps-claims {
+	font-size: 12px;
+	color: var(--tinta);
+}
+.aps-sig {
+	margin-top: 4px;
+	font-size: 11.5px;
+	color: var(--ink-suave);
+}
+.aps-sig.tone-primary {
+	color: var(--azul);
+}
+.aps-sig.tone-ink {
+	color: var(--ink);
+}
+
+/* Aparición 2 del cian: el próximo paso. Es la única señal de "qué hacer ahora". */
+.next {
+	margin-top: 14px;
+	padding: 10px 12px;
+	border-left: 3px solid var(--cian);
+	background: var(--azul-05);
+	border-radius: 0 var(--radius) var(--radius) 0;
+}
+.next-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--ink);
+}
+.next-detail {
+	font-size: 11.5px;
+	color: var(--ink-suave);
+	margin-top: 2px;
+}
+
+/* --- listado de requisitos --- */
+.list {
+	list-style: none;
+	padding: 0;
+	display: grid;
+	gap: 0;
+}
+.req {
+	display: grid;
+	grid-template-columns: 18px 1fr;
+	gap: 9px;
+	padding: 9px 0;
+	border-top: 1px solid var(--linea-suave);
+}
+.req:first-child {
+	border-top: none;
+}
+.req-glyph {
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1.4;
+}
+/* El tono: azul para lo que pasa, ink pleno para lo que falla, ink suave para lo que no aplica. */
+.req-glyph.tone-primary {
+	color: var(--azul);
+}
+.req-glyph.tone-ink {
+	color: var(--ink);
+}
+.req-glyph.tone-muted {
+	color: var(--ink-suave);
+}
+.req-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--ink);
+}
+.req-n_a .req-title,
+.req-diag .req-title {
+	font-weight: 500;
+	color: var(--ink-suave);
+}
+.req-id {
+	font-family: var(--mono);
+	font-size: 10px;
+	font-weight: 400;
+	letter-spacing: 0.06em;
+	color: var(--ink-suave);
+	margin-right: 5px;
+}
+.req-meta {
+	font-family: var(--mono);
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--ink-suave);
+	margin-top: 1px;
+}
+/* La evidencia: lo que se vio al comprobar. Es lo que hace que el listado no sea un sí/no pelado. */
+.req-evidence {
+	font-size: 11.5px;
+	color: var(--ink-suave);
+	margin-top: 3px;
+}
+.req-evidence.is-empty {
+	font-style: italic;
+	opacity: 0.8;
+}
+/* La ganancia: puntos que devolvería arreglarlo. Solo existe en los que puntúan y fallan. */
+.req-gain {
+	font-size: 11.5px;
+	font-weight: 600;
+	color: var(--tinta);
+	font-variant-numeric: tabular-nums;
+	margin-top: 3px;
+}
+.list-block {
+	margin-top: 16px;
+}
+.list-block .eyebrow {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	padding-bottom: 6px;
+}
+.diag-block {
+	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px dashed var(--linea);
+}
+
+/* --- loading --- */
+.ring--spin {
+	border: 3px solid var(--linea);
+	border-top-color: var(--azul);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+	margin: 6px auto 14px;
+	width: 34px;
+	height: 34px;
+}
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* --- botones --- */
+.btn {
+	border: none;
+	border-radius: var(--radius);
+	padding: 9px 14px;
+	font-family: inherit;
+	font-size: 12.5px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.btn:active {
+	transform: translateY(1px);
+}
+.btn--primary {
+	background: var(--azul);
+	color: var(--papel);
+	flex: none;
+}
+.btn--ghost {
+	background: transparent;
+	color: var(--azul);
+	border: 1px solid var(--azul-20);
+}
+.btn--ghost:hover {
+	background: var(--azul-05);
+}
+.btn[disabled] {
+	opacity: 0.6;
+	cursor: default;
+}
+
+/* --- lead --- */
+.lead {
+	margin-top: 18px;
+	padding: 12px;
+	border: 1px solid var(--linea);
+	border-radius: var(--radius);
+}
+.lead-q {
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--tinta);
+	margin-bottom: 8px;
+}
+.lead-row {
+	display: flex;
+	gap: 8px;
+}
+#email-input {
+	flex: 1;
+	min-width: 0;
+	padding: 9px 11px;
+	border-radius: var(--radius);
+	border: 1px solid var(--linea);
+	background: var(--papel);
+	color: var(--ink);
+	font-family: inherit;
+	font-size: 12.5px;
+}
+#email-input:focus {
+	outline: none;
+	border-color: var(--azul);
+}
+#email-input.is-bad {
+	border-color: var(--ink);
+}
+.lead-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+	margin-top: 9px;
+}
+.lead-more {
+	font-size: 11.5px;
+	color: var(--azul);
+	text-decoration: none;
+}
+.lead-more:hover {
+	text-decoration: underline;
+}
+.lead-error {
+	margin-top: 8px;
+	font-size: 11.5px;
+	color: var(--ink);
+}
+.lead-thanks {
+	margin-top: 18px;
+	padding: 11px;
+	border: 1px solid var(--azul-20);
+	border-radius: var(--radius);
+	background: var(--azul-05);
+	color: var(--azul);
+	font-size: 12.5px;
+	text-align: center;
+	font-weight: 600;
+}
+
+/* --- footer --- */
+.ft {
+	padding: 10px 16px;
+	border-top: 1px solid var(--linea);
+	font-size: 10.5px;
+	color: var(--ink-suave);
+	text-align: center;
+	line-height: 1.45;
+}
+.ft b {
+	color: var(--ink);
+	font-weight: 600;
+}

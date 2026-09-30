@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>BeAOS</title>
+  </head>
+  <body>
+    <header class="hd">
+      <span class="hd-mark">BeAOS</span>
+      <span class="hd-domain" id="domain">—</span>
+    </header>
+
+    <main>
+      <!-- estados: loading / result / error / not-web -->
+      <section id="loading" class="state">
+        <div class="ring--spin"></div>
+        <p class="muted">Midiendo si un agente puede operar este sitio…</p>
+      </section>
+
+      <section id="notweb" class="state hidden">
+        <p class="big">Abre una página web</p>
+        <p class="muted">
+          El AOS™ mide sitios http(s) públicos. Esta pestaña no lo es, así que el endpoint la
+          rechazaría.
+        </p>
+      </section>
+
+      <section id="error" class="state hidden">
+        <p class="big" id="error-title">No se pudo medir</p>
+        <p class="muted" id="error-msg"></p>
+        <button type="button" class="btn btn--ghost" id="retry">Reintentar</button>
+      </section>
+
+      <section id="result" class="state hidden">
+        <!-- 1. el score y su banda. El número en ink; el chip de al lado dice la banda. -->
+        <div class="score-row">
+          <div class="score-num"><span id="score">0</span><small>/100</small></div>
+          <div class="score-meta">
+            <span class="chip tone--unknown" id="band">—</span>
+            <p class="score-tag" id="score-tag"></p>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="block-hd">
+            <span class="eyebrow">Lo que ve un agente</span>
+            <span class="eyebrow" id="business-type"></span>
+          </div>
+          <button type="button" class="btn btn--ghost" id="overlay-btn">👁 Ver en la página</button>
+          <p class="block-note" id="audited-at"></p>
+        </div>
+
+        <!-- 3. lo nuevo: APS declarado, pruebas declaradas y si la firma verifica. -->
+        <div class="block block-aps">
+          <div class="block-hd">
+            <span class="eyebrow">Perfil firmado del sitio</span>
+            <span class="eyebrow" id="aps-band"></span>
+          </div>
+          <div class="aps-line">
+            <span class="aps-score" id="aps-score">—</span>
+            <span class="aps-claims" id="aps-claims"></span>
+          </div>
+          <p class="aps-sig" id="aps-sig"></p>
+        </div>
+
+        <!-- Aparición 2 del cian: qué hacer ahora. -->
+        <div class="next hidden" id="next"></div>
+
+        <!-- 2. el listado completo: qué es, si pasa, su evidencia y la ganancia cuando exista. -->
+        <div class="list-block">
+          <div class="eyebrow">
+            <span>Requisitos que puntúan</span>
+            <span id="scored-count"></span>
+          </div>
+          <ul class="list" id="reqs"></ul>
+        </div>
+
+        <!-- Los diagnostic: se informan y NO mueven el score, así que van aparte y sin puntos. -->
+        <div class="list-block diag-block hidden" id="diag-block">
+          <div class="eyebrow">
+            <span>Diagnóstico · no mueve el score</span>
+            <span id="diag-count"></span>
+          </div>
+          <ul class="list" id="diags"></ul>
+        </div>
+
+        <div class="lead hidden" id="lead">
+          <p class="lead-q">¿Quieres que tu web sea operable y preferida por agentes?</p>
+          <div class="lead-row">
+            <input type="email" id="email-input" placeholder="tu@correo.com" autocomplete="email" />
+            <button type="button" class="btn btn--primary" id="lead-submit">Enviar</button>
+          </div>
+          <p class="lead-error hidden" id="lead-error">
+            No se pudo enviar. Probá de nuevo en un rato o escribinos a hola@believe-global.com.
+          </p>
+          <div class="lead-links">
+            <a class="lead-more" id="beaos-more" href="https://beaos.believe-global.com" target="_blank" rel="noopener">Ver más sobre BeAOS →</a>
+            <a class="lead-more" id="standard-more" href="https://github.com/BELIEVE-IT-GROUP/aos-aps-standard" target="_blank" rel="noopener">El estándar AOS/APS →</a>
+            <a class="lead-more" id="believe-more" href="https://believe-global.com" target="_blank" rel="noopener">Believe →</a>
+          </div>
+        </div>
+        <p class="lead-thanks hidden" id="lead-thanks">¡Gracias! El equipo de Believe te contacta.</p>
+      </section>
+    </main>
+
+    <footer class="ft">
+      <span>
+        SEO te posiciona · GEO te menciona · <b>AOS™ mide si un agente puede operar</b> · APS si además
+        te prefiere
+      </span>
+    </footer>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
