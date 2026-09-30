@@ -13,10 +13,12 @@
 import { describe, expect, it } from "vitest";
 import { Route as AuditRoute } from "@/routes/api/v1/aos/audit";
 import { Route as LeadRoute } from "@/routes/api/v1/aos/lead";
+import { decidePublicQuota, rateLimitedResponse } from "../public-audit";
 import {
 	AOS_PUBLIC_CORS_ALLOWED_HEADERS,
 	AOS_PUBLIC_CORS_METHODS,
 	AOS_PUBLIC_CORS_ORIGINS_ENV,
+	AOS_PUBLIC_EXPOSED_HEADERS,
 	AOS_PUBLIC_PREFLIGHT_MAX_AGE_SECONDS,
 	aosPublicCorsOrigins,
 	corsHeadersForRequest,
@@ -29,6 +31,18 @@ import {
 } from "../public-cors";
 
 const LANDING = "https://be-aos.believe-global.com";
+
+/**
+ * Las cinco que el widget de la landing necesita poder leer: ninguna es CORS-safelisted, así que sin
+ * `Access-Control-Expose-Headers` el `fetch` cross-origin recibe los valores y no los ve.
+ */
+const CINCO_DE_LIMITE = [
+	"RateLimit-Limit",
+	"RateLimit-Remaining",
+	"RateLimit-Reset",
+	"RateLimit-Policy",
+	"Retry-After",
+];
 
 /** Los intentos de colarse: por sufijo, por esquema y por mayúsculas. */
 const LOOKALIKES = [
@@ -50,6 +64,37 @@ function requestWithOrigin(origin: string | null, method = "POST"): Request {
 /** Las cabeceras `Access-Control-*` presentes, que es lo único que un navegador mira para leer. */
 function corsHeaderNames(headers: Headers): string[] {
 	return [...headers.keys()].filter((name) => name.toLowerCase().startsWith("access-control-"));
+}
+
+/**
+ * Las cabeceras que la respuesta declara legibles, en el orden en que las enumera. `null` es "no hay
+ * `Access-Control-Expose-Headers`", que es lo que tiene que pasarle a un origen ajeno.
+ */
+function exposedHeaders(headers: Headers): string[] | null {
+	const raw = headers.get("Access-Control-Expose-Headers");
+	return raw === null
+		? null
+		: raw
+				.split(",")
+				.map((name) => name.trim())
+				.filter((name) => name.length > 0);
+}
+
+/**
+ * Un 429 real, armado por el mismo camino que usa la ruta (`rateLimitedResponse`), con el cupo ya
+ * pasado. El caso importa más que ningún otro: si el navegador no puede leer `Retry-After`, la
+ * landing no puede decir *"podés volver en 45 min"*.
+ */
+function real429(): Response {
+	const decision = decidePublicQuota({
+		ipCount: 20,
+		globalCount: 20,
+		ipLimit: 20,
+		globalLimit: 2000,
+		now: new Date("2026-09-30T12:00:00.000Z"),
+	});
+	expect(decision.allowed).toBe(false);
+	return rateLimitedResponse(decision, "Alcanzaste el límite de 20 auditorías por día.");
 }
 
 /** Handler tal como lo expone la ruta: `{ request, params }` y una `Response`. */
@@ -149,11 +194,23 @@ describe("corsHeadersForRequest", () => {
 		expect(headers.Vary).toBe("Origin");
 	});
 
+	it("expone exactamente las cinco cabeceras de límite, y solo esas", () => {
+		const headers = corsHeadersForRequest(requestWithOrigin(LANDING), DEFAULT_AOS_PUBLIC_CORS_ORIGINS);
+		const declaradas = headers["Access-Control-Expose-Headers"];
+		expect(declaradas).toBe(AOS_PUBLIC_EXPOSED_HEADERS);
+		// El orden no importa para el navegador, pero el conjunto sí: se enumeran las cinco y ninguna más.
+		expect(exposedHeaders(new Headers(headers))?.slice().sort()).toEqual([...CINCO_DE_LIMITE].sort());
+		// Nada de `*`: el comodín expondría toda la respuesta y no hace falta.
+		expect(declaradas).not.toContain("*");
+	});
+
 	it("a un origen ajeno no le devuelve ninguna cabecera de permiso", () => {
 		for (const origin of LOOKALIKES) {
 			const headers = corsHeadersForRequest(requestWithOrigin(origin), DEFAULT_AOS_PUBLIC_CORS_ORIGINS);
 			expect(Object.keys(headers), origin).toEqual(["Vary"]);
 			expect(headers["Access-Control-Allow-Origin"]).toBeUndefined();
+			// Si no puede leer la respuesta, tampoco tiene por qué saber qué cabeceras exponemos.
+			expect(headers["Access-Control-Expose-Headers"], origin).toBeUndefined();
 			expect(headers["Access-Control-Allow-Credentials"]).toBeUndefined();
 		}
 	});
@@ -181,6 +238,7 @@ describe("publicCorsPreflightResponse", () => {
 		expect(response.headers.get("Access-Control-Allow-Headers")).toBe(AOS_PUBLIC_CORS_ALLOWED_HEADERS);
 		expect(response.headers.get("Access-Control-Max-Age")).toBe(String(AOS_PUBLIC_PREFLIGHT_MAX_AGE_SECONDS));
 		expect(response.headers.get("Vary")).toBe("Origin");
+		expect(exposedHeaders(response.headers)).toEqual(CINCO_DE_LIMITE);
 		expect(await response.text()).toBe("");
 	});
 
@@ -192,6 +250,7 @@ describe("publicCorsPreflightResponse", () => {
 			);
 			expect(response.status, origin).toBe(204);
 			expect(corsHeaderNames(response.headers), origin).toEqual([]);
+			expect(response.headers.get("Access-Control-Expose-Headers"), origin).toBeNull();
 			expect(response.headers.get("Vary")).toBe("Origin");
 		}
 	});
@@ -208,7 +267,17 @@ describe("withPublicCors", () => {
 			expect(response.status).toBe(status);
 			expect(response.headers.get("Access-Control-Allow-Origin")).toBe(LANDING);
 			expect(response.headers.get("RateLimit-Limit")).toBe("20");
+			expect(exposedHeaders(response.headers)).toEqual(CINCO_DE_LIMITE);
 		}
+	});
+
+	it("el 429 real sale con `Retry-After` y las cinco expuestas: es donde más importa", () => {
+		const response = withPublicCors(real429(), requestWithOrigin(LANDING), DEFAULT_AOS_PUBLIC_CORS_ORIGINS);
+		expect(response.status).toBe(429);
+		// La cabecera que la landing necesita para decir *cuándo* puede volver la persona.
+		expect(response.headers.get("Retry-After")).not.toBeNull();
+		expect(response.headers.get("RateLimit-Remaining")).toBe("0");
+		expect(exposedHeaders(response.headers)).toEqual(CINCO_DE_LIMITE);
 	});
 
 	it("no toca un `Vary` que ya menciona `Origin`", () => {
@@ -227,7 +296,17 @@ describe("withPublicCors", () => {
 			DEFAULT_AOS_PUBLIC_CORS_ORIGINS,
 		);
 		expect(corsHeaderNames(response.headers)).toEqual([]);
+		expect(response.headers.get("Access-Control-Expose-Headers")).toBeNull();
 		expect(response.headers.get("Vary")).toBe("Origin");
+	});
+
+	it("el 429 tampoco expone nada si el origen es ajeno", () => {
+		const response = withPublicCors(real429(), requestWithOrigin("*"), DEFAULT_AOS_PUBLIC_CORS_ORIGINS);
+		// Las cabeceras de límite viajan igual —son parte del contrato del endpoint— pero ese navegador
+		// no las puede leer: lo único que pierde es el tercero, no nosotros.
+		expect(response.headers.get("Retry-After")).not.toBeNull();
+		expect(corsHeaderNames(response.headers)).toEqual([]);
+		expect(response.headers.get("Access-Control-Expose-Headers")).toBeNull();
 	});
 });
 
@@ -261,6 +340,7 @@ describe("route /api/v1/aos/audit", () => {
 		expect(response.status).toBe(204);
 		expect(response.headers.get("Access-Control-Allow-Origin")).toBe(LANDING);
 		expect(response.headers.get("Access-Control-Allow-Headers")).toBe("content-type");
+		expect(exposedHeaders(response.headers)).toEqual(CINCO_DE_LIMITE);
 	});
 
 	it("el preflight de un origen parecido sale 204 sin cabeceras CORS", async () => {
@@ -280,18 +360,23 @@ describe("route /api/v1/aos/audit", () => {
 		expect(response.status).toBe(400);
 		expect(response.headers.get("Access-Control-Allow-Origin")).toBe(LANDING);
 		expect(response.headers.get("Vary")).toBe("Origin");
+		// El 400 no trae cabeceras de límite, pero la exposición es parte del permiso: va igual, para que
+		// la superficie no tenga que distinguir "no hay cupo que leer" de "no puedo leerlo".
+		expect(exposedHeaders(response.headers)).toEqual(CINCO_DE_LIMITE);
 	});
 
 	it("el 400 del POST NO es legible desde un origen parecido", async () => {
 		const response = await postJson(requestWithOrigin("https://be-aos.believe-global.com.evil.com"), {});
 		expect(response.status).toBe(400);
 		expect(corsHeaderNames(response.headers)).toEqual([]);
+		expect(response.headers.get("Access-Control-Expose-Headers")).toBeNull();
 	});
 
 	it("sin `Origin` el POST responde como hoy, sin cabeceras CORS", async () => {
 		const response = await postJson(requestWithOrigin(null), {});
 		expect(response.status).toBe(400);
 		expect(corsHeaderNames(response.headers)).toEqual([]);
+		expect(response.headers.get("Access-Control-Expose-Headers")).toBeNull();
 	});
 });
 
@@ -303,6 +388,7 @@ describe("route /api/v1/aos/lead", () => {
 		});
 		expect(permitido.status).toBe(204);
 		expect(permitido.headers.get("Access-Control-Allow-Origin")).toBe(LANDING);
+		expect(exposedHeaders(permitido.headers)).toEqual(CINCO_DE_LIMITE);
 
 		const ajeno = await leadHandlers().OPTIONS({
 			request: requestWithOrigin("http://be-aos.believe-global.com", "OPTIONS"),
@@ -310,5 +396,6 @@ describe("route /api/v1/aos/lead", () => {
 		});
 		expect(ajeno.status).toBe(204);
 		expect(corsHeaderNames(ajeno.headers)).toEqual([]);
+		expect(ajeno.headers.get("Access-Control-Expose-Headers")).toBeNull();
 	});
 });
