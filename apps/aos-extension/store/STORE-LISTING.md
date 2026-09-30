@@ -11,11 +11,11 @@ humano desde el dev console.
 ## Versión del paquete
 
 ```
-2.1.1
+2.2.0
 ```
 
-La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.1.1.zip`) la
-dice sola. La 2.1.1 es un **arreglo**, no un rediseño: la 2.1.0 le mandaba al endpoint el dominio
+La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.2.0.zip`) la
+dice sola. La 2.2.0 es un **arreglo**, no un rediseño: la 2.1.0 le mandaba al endpoint el dominio
 pelado (sin `https://` y sin path), que el endpoint rechaza, así que no auditaba ninguna web. Ahora
 manda la URL completa de la pestaña —con su path, para medir la página que se está viendo— y los
 errores de dirección distinguen "no se pudo interpretar" de "queda afuera por seguridad". No cambia
@@ -23,9 +23,9 @@ nada de lo que el popup muestra.
 
 **Ojo con el número antes de subir.** Este corte le cambia la marca al paquete: el nombre pasa a ser
 el lockup (`BeAOS by Believe — …`) y el header del popup deja de ser texto plano para llevar el
-wordmark de Believe. La 2.1.1 **ya está usada** en el dev console y la store rechaza volver a subir el
+wordmark de Believe. La 2.2.0 **ya está usada** en el dev console y la store rechaza volver a subir el
 mismo número, así que hay que subir la versión del manifest (2.2.0) antes de publicar. Es una decisión
-de release, no de este cambio: el manifest sigue en 2.1.1 a propósito.
+de release, no de este cambio: el manifest sigue en 2.2.0 a propósito.
 
 ---
 

@@ -32,9 +32,9 @@ const PUBLICADOS = [
 ];
 
 describe("manifest", () => {
-	it("es la versión 2.1.1 y se llama BeAOS by Believe", () => {
+	it("es la versión 2.2.0 y se llama BeAOS by Believe", () => {
 		assert.equal(MANIFEST.manifest_version, 3);
-		assert.equal(MANIFEST.version, "2.1.1");
+		assert.equal(MANIFEST.version, "2.2.0");
 		// El nombre es el lockup en texto plano: `BeAOS by Believe`. El manifest no renderiza, así que
 		// acá no hay «e» girada ni punto cian — eso vive en el popup. El descriptor que sigue al guion
 		// es lo único que se recortó, para que el nombre entre en el campo de 45 de la store.
