@@ -1,0 +1,16 @@
+packages/aos-aps/src/aos/ssrf.test.ts
+  h_c5ca005a78c880 148-149,158-270
+packages/aos-aps/src/aos/ssrf.ts
+  h_c5ca005a78c880 11-12,51,55-91,285-286,289-290,293,295,319
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dec5e4b466f7d495011e42afe3ff858bd50b8822",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
