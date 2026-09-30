@@ -250,6 +250,28 @@ describe("publicAuditResponse", () => {
 				aos_standards: 62,
 				aps_standards: 40,
 				signature_verified: true,
+				breakdown: [
+					{
+						axis: "AOS",
+						passed: 4,
+						failed: 3,
+						notApplicable: 1,
+						applicable: 7,
+						earnedWeight: 10,
+						maxWeight: 16,
+						percent: 62,
+					},
+					{
+						axis: "APS",
+						passed: 1,
+						failed: 2,
+						notApplicable: 0,
+						applicable: 3,
+						earnedWeight: 3,
+						maxWeight: 7,
+						percent: 40,
+					},
+				],
 				requirements: [
 					{
 						id: "AOS-DISC-01",
@@ -326,6 +348,56 @@ describe("publicAuditResponse", () => {
 		const result = auditResult();
 		result.standards.signature_verified = false;
 		expect(publicAuditResponse(result, NOW).signatureVerified).toBe(false);
+	});
+
+	it("agrega los sub-scores por eje y el desglose, tal cual los calculó el motor", () => {
+		const payload = publicAuditResponse(auditResult(), NOW);
+		expect(payload.aosStandards).toBe(62);
+		expect(payload.apsStandards).toBe(40);
+		expect(payload.score).toBe(payload.aosStandards);
+		expect(payload.breakdown.map((entry) => entry.axis)).toEqual(["AOS", "APS"]);
+		// El endpoint no recalcula: publica el `percent` del motor, con su peso ganado y su máximo.
+		expect(payload.breakdown[0]).toMatchObject({ axis: "AOS", earnedWeight: 10, maxWeight: 16, percent: 62 });
+		expect(payload.breakdown[1]).toMatchObject({ axis: "APS", earnedWeight: 3, maxWeight: 7, percent: 40 });
+	});
+
+	it("el APS medido y el APS declarado son dos números distintos y no se pisan", () => {
+		const payload = publicAuditResponse(auditResult(), NOW);
+		// `apsStandards` lo medimos nosotros; `declaredAps` es lo que el sitio dice de sí mismo.
+		expect(payload.apsStandards).toBe(40);
+		expect(payload.declaredAps).toBe(41);
+		expect(payload.apsStandards).not.toBe(payload.declaredAps);
+	});
+
+	it("botBeacon es null: no hay fuente y no se inventa un número", () => {
+		// BeAOS no tiene ingest de tráfico agéntico. El campo viaja null para que el hueco sea
+		// explícito y verificable, en vez de un cero que se leería como "no te visitó ningún agente".
+		expect(publicAuditResponse(auditResult(), NOW).botBeacon).toBeNull();
+	});
+
+	it("no cambia ninguno de los campos que la extensión 2.0.0 ya leía", () => {
+		const payload = publicAuditResponse(auditResult(), NOW);
+		// Congelado a propósito: si alguno cambia de nombre o de forma, la 2.0.0 deja de funcionar.
+		expect(Object.keys(payload).sort()).toEqual(
+			[
+				"apsStandards",
+				"auditedAt",
+				"aosStandards",
+				"band",
+				"botBeacon",
+				"breakdown",
+				"businessType",
+				"claims",
+				"declaredAps",
+				"requirements",
+				"score",
+				"signatureVerified",
+				"url",
+			].sort(),
+		);
+		expect(payload.requirements).toHaveLength(2);
+		expect(payload.claims).toBe(3);
+		expect(payload.businessType).toBe("brand");
 	});
 });
 
