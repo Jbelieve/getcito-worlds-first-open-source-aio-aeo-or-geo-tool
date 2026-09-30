@@ -228,11 +228,9 @@ describe("evaluateDeploymentPolicy", () => {
 		});
 
 		it("blocks POST /api/v1/brands even with a valid key", () => {
-			const result = evaluateDeploymentPolicy(
-				features,
-				req("POST", "/api/v1/brands", `Bearer ${VALID_API_KEY}`),
-				{ adminApiKeys: API_KEYS },
-			);
+			const result = evaluateDeploymentPolicy(features, req("POST", "/api/v1/brands", `Bearer ${VALID_API_KEY}`), {
+				adminApiKeys: API_KEYS,
+			});
 			expect(result).toMatchObject({ action: "block", status: 403, error: "Demo Mode" });
 		});
 
@@ -246,11 +244,9 @@ describe("evaluateDeploymentPolicy", () => {
 		});
 
 		it("blocks POST /api/v1/competitors even with a valid key", () => {
-			const result = evaluateDeploymentPolicy(
-				features,
-				req("POST", "/api/v1/competitors", `Bearer ${VALID_API_KEY}`),
-				{ adminApiKeys: API_KEYS },
-			);
+			const result = evaluateDeploymentPolicy(features, req("POST", "/api/v1/competitors", `Bearer ${VALID_API_KEY}`), {
+				adminApiKeys: API_KEYS,
+			});
 			expect(result).toMatchObject({ action: "block", status: 403, error: "Demo Mode" });
 		});
 
@@ -389,6 +385,50 @@ describe("evaluateDeploymentPolicy", () => {
 				status: 403,
 				error: "Demo Mode",
 			});
+		});
+	});
+
+	// ────────────────────────────────────────────────────────────
+	// Public AOS surfaces: no credential, by design
+	// ────────────────────────────────────────────────────────────
+	describe("public AOS surfaces", () => {
+		it("allows POST /api/v1/aos/audit with no key and no session", () => {
+			for (const features of [LOCAL_FEATURES, DEMO_FEATURES, WHITELABEL_FEATURES]) {
+				const result = evaluateDeploymentPolicy(features, req("POST", "/api/v1/aos/audit"));
+				expect(result.action, `readOnly=${String(features.readOnly)}`).toBe("allow");
+			}
+		});
+
+		it("allows POST /api/v1/aos/audit with a trailing slash", () => {
+			const result = evaluateDeploymentPolicy(DEMO_FEATURES, req("POST", "/api/v1/aos/audit/"));
+			expect(result.action).toBe("allow");
+		});
+
+		it("allows POST /api/v1/aos/lead with no key, but not in read-only mode (it writes)", () => {
+			expect(evaluateDeploymentPolicy(LOCAL_FEATURES, req("POST", "/api/v1/aos/lead")).action).toBe("allow");
+			// El lead persiste en la base, así que el modo demo lo sigue bloqueando.
+			expect(evaluateDeploymentPolicy(DEMO_FEATURES, req("POST", "/api/v1/aos/lead"))).toMatchObject({
+				action: "block",
+				status: 403,
+				error: "Demo Mode",
+			});
+		});
+
+		it("does not open the key requirement for its neighbours", () => {
+			// El allowlist es exacto: un path hermano sigue pidiendo credencial.
+			expect(evaluateDeploymentPolicy(LOCAL_FEATURES, req("POST", "/api/v1/aos/unknown"))).toMatchObject({
+				action: "block",
+				status: 401,
+			});
+			expect(evaluateDeploymentPolicy(LOCAL_FEATURES, req("POST", "/api/v1/aos/audit/extra"))).toMatchObject({
+				action: "block",
+				status: 401,
+			});
+		});
+
+		it("still blocks /api/v1/tools/analyze in read-only mode (the exemption is only for the audit)", () => {
+			const result = evaluateDeploymentPolicy(DEMO_FEATURES, req("POST", "/api/v1/tools/analyze"));
+			expect(result).toMatchObject({ action: "block", status: 403, error: "Demo Mode" });
 		});
 	});
 });

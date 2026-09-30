@@ -78,6 +78,11 @@ declare global {
 			readonly SENTRY_PROJECT?: string;
 			readonly SENTRY_AUTH_TOKEN?: string;
 			readonly DISABLE_TELEMETRY?: string;
+			readonly AOS_PUBLIC_AUDITS_PER_DAY?: string;
+			readonly AOS_PUBLIC_AUDITS_PER_DAY_GLOBAL?: string;
+			readonly AOS_PUBLIC_AUDIT_TOTAL_TIMEOUT_MS?: string;
+			readonly AOS_PUBLIC_AUDIT_REQUEST_TIMEOUT_MS?: string;
+			readonly AOS_PUBLIC_IP_SALT?: string;
 		}
 	}
 }

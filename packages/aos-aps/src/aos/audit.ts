@@ -1,5 +1,3 @@
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { type ApsBreakdown, computeApsScore, parseBrandProfile } from "../preference";
 import {
 	DISCOVERY_FILES,
@@ -21,6 +19,7 @@ import {
 	type StandardsResult,
 } from "./requirements";
 import { verifyBrandSignature } from "./signature";
+import { assertSafeAuditUrl } from "./ssrf";
 
 export interface AosAuditInput {
 	url: string;
@@ -49,32 +48,14 @@ export interface AosAuditResult {
 const DEFAULT_TIMEOUT_MS = 8000;
 const USER_AGENT = "BeAOS-AOS-Audit/0.1 (+https://beaos.believe-global.com)";
 
-function isPrivateIp(ip: string): boolean {
-	if (ip.startsWith("10.")) return true;
-	if (ip.startsWith("192.168.")) return true;
-	if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip)) return true;
-	if (ip.startsWith("127.")) return true;
-	if (ip === "::1") return true;
-	if (ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80")) return true;
-	return false;
-}
-
+/**
+ * El guardián anti-SSRF vive en `./ssrf` y lo comparten el endpoint público, el worker y el MCP:
+ * una sola definición de "destino interno" para que no quede abierto en un camino y tapado en otro.
+ */
 async function assertSafeUrl(raw: string): Promise<URL> {
-	const url = new URL(raw);
-	if (url.protocol !== "http:" && url.protocol !== "https:") {
-		throw new Error("Only http/https URLs are supported");
-	}
-	const host = url.hostname;
-	if (host === "localhost" || host.endsWith(".localhost")) throw new Error("localhost is not allowed");
-	if (isIP(host)) {
-		if (isPrivateIp(host)) throw new Error("private IPs are not allowed");
-		return url;
-	}
-	const addresses = await lookup(host, { all: true });
-	if (addresses.some((entry) => isPrivateIp(entry.address))) {
-		throw new Error("private IPs are not allowed");
-	}
-	return url;
+	const result = await assertSafeAuditUrl(raw);
+	if (result.ok === false) throw new Error(result.reason);
+	return result.url;
 }
 
 /** A URL taken from the audited content (a declared MCP endpoint) needs its own guard. */
@@ -307,8 +288,7 @@ export async function runAosAudit(input: AosAuditInput): Promise<AosAuditResult>
 		signature_valid: signatureValid
 			? "La firma verifica contra /.well-known/keys.json sobre los bytes servidos."
 			: "Sin firma válida: no pudimos verificar los bytes servidos contra la clave pública.",
-		llms_full_txt:
-			discoveryFiles.llms_full_txt === true ? "/llms-full.txt responde." : "/llms-full.txt no responde.",
+		llms_full_txt: discoveryFiles.llms_full_txt === true ? "/llms-full.txt responde." : "/llms-full.txt no responde.",
 		proof_objects:
 			proofTypes.length > 0
 				? `JSON-LD de evidencia con tipos: ${proofTypes.join(", ")}.`

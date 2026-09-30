@@ -10,6 +10,10 @@
  * Handlers signal expected failures (404, 409, ...) by throwing `ApiError`.
  * A plain-object return value is wrapped in `Response.json()` with `status`
  * (default 200); returning a `Response` passes through untouched.
+ *
+ * `createPublicApiHandler` is the same pipeline without the key check, for the
+ * deliberately anonymous surfaces (the public AOS audit and its lead form),
+ * which carry their own per-IP and global daily limits instead.
  */
 import type { z } from "zod";
 import { validateApiKeyFromRequest } from "@/lib/auth/policies";
@@ -41,7 +45,7 @@ export interface ApiHandlerContext<P, B> {
 	request: Request;
 }
 
-export function createApiHandler<P = Record<string, string>, B = undefined>(opts: {
+export interface ApiHandlerOptions<P, B> {
 	/** Zod schema for route path params, e.g. `z.object({ promptId: z.guid() })`. */
 	params?: z.ZodType<P>;
 	/** Zod schema for the JSON request body (POST/PATCH). */
@@ -51,57 +55,83 @@ export function createApiHandler<P = Record<string, string>, B = undefined>(opts
 	/** Translate domain errors thrown by `handle` into `ApiError` before the generic 500. */
 	mapError?: (err: unknown) => ApiError | undefined;
 	handle: (ctx: ApiHandlerContext<P, B>) => Promise<Response | object>;
-}) {
-	return async ({ request, params }: { request: Request; params: Record<string, string> }): Promise<Response> => {
-		if (!validateApiKeyFromRequest(request)) {
-			return errorResponse(401, "Unauthorized", "Valid API key required");
-		}
+}
 
-		let parsedParams = params as P;
-		if (opts.params) {
-			const result = opts.params.safeParse(params);
-			if (!result.success) {
-				return errorResponse(400, "Validation Error", formatZodError(result.error));
-			}
-			parsedParams = result.data;
-		}
+type RouteHandlerArgs = { request: Request; params: Record<string, string> };
 
-		let parsedBody = undefined as B;
-		if (opts.body) {
-			let raw: unknown;
-			try {
-				raw = await request.json();
-			} catch {
-				return errorResponse(400, "Validation Error", "Request body must be valid JSON");
-			}
-			const result = opts.body.safeParse(raw);
-			if (!result.success) {
-				return errorResponse(400, "Validation Error", formatZodError(result.error));
-			}
-			parsedBody = result.data;
-		}
+/**
+ * The shared pipeline. `authenticate` is the only difference between the keyed
+ * and the public surface; everything else (validation order, error envelopes,
+ * the logged 500) has to stay identical for both.
+ */
+async function runHandler<P, B>(
+	opts: ApiHandlerOptions<P, B>,
+	{ request, params }: RouteHandlerArgs,
+	authenticate: boolean,
+): Promise<Response> {
+	if (authenticate && !validateApiKeyFromRequest(request)) {
+		return errorResponse(401, "Unauthorized", "Valid API key required");
+	}
 
+	let parsedParams = params as P;
+	if (opts.params) {
+		const result = opts.params.safeParse(params);
+		if (!result.success) {
+			return errorResponse(400, "Validation Error", formatZodError(result.error));
+		}
+		parsedParams = result.data;
+	}
+
+	let parsedBody = undefined as B;
+	if (opts.body) {
+		let raw: unknown;
 		try {
-			const result = await opts.handle({ params: parsedParams, body: parsedBody, request });
-			if (result instanceof Response) {
-				return result;
-			}
-			return Response.json(result, { status: opts.status ?? 200 });
-		} catch (err) {
-			if (err instanceof ApiError) {
-				return errorResponse(err.status, err.error, err.message);
-			}
-			let mapped: ApiError | undefined;
-			try {
-				mapped = opts.mapError?.(err);
-			} catch (mapErr) {
-				console.error(`[api] ${request.method} ${new URL(request.url).pathname} mapError threw:`, mapErr);
-			}
-			if (mapped) {
-				return errorResponse(mapped.status, mapped.error, mapped.message);
-			}
-			console.error(`[api] ${request.method} ${new URL(request.url).pathname} failed:`, err);
-			return errorResponse(500, "Internal Server Error", "An unexpected error occurred");
+			raw = await request.json();
+		} catch {
+			return errorResponse(400, "Validation Error", "Request body must be valid JSON");
 		}
-	};
+		const result = opts.body.safeParse(raw);
+		if (!result.success) {
+			return errorResponse(400, "Validation Error", formatZodError(result.error));
+		}
+		parsedBody = result.data;
+	}
+
+	try {
+		const result = await opts.handle({ params: parsedParams, body: parsedBody, request });
+		if (result instanceof Response) {
+			return result;
+		}
+		return Response.json(result, { status: opts.status ?? 200 });
+	} catch (err) {
+		if (err instanceof ApiError) {
+			return errorResponse(err.status, err.error, err.message);
+		}
+		let mapped: ApiError | undefined;
+		try {
+			mapped = opts.mapError?.(err);
+		} catch (mapErr) {
+			console.error(`[api] ${request.method} ${new URL(request.url).pathname} mapError threw:`, mapErr);
+		}
+		if (mapped) {
+			return errorResponse(mapped.status, mapped.error, mapped.message);
+		}
+		console.error(`[api] ${request.method} ${new URL(request.url).pathname} failed:`, err);
+		return errorResponse(500, "Internal Server Error", "An unexpected error occurred");
+	}
+}
+
+export function createApiHandler<P = Record<string, string>, B = undefined>(opts: ApiHandlerOptions<P, B>) {
+	return async (args: RouteHandlerArgs): Promise<Response> => runHandler(opts, args, true);
+}
+
+/**
+ * Anonymous sibling of `createApiHandler`: no API key and no session.
+ *
+ * For the public AOS surfaces, which are meant to be reachable by anyone who
+ * installs the extension. They are still rate-limited (per IP and globally) by
+ * the caller, not here.
+ */
+export function createPublicApiHandler<P = Record<string, string>, B = undefined>(opts: ApiHandlerOptions<P, B>) {
+	return async (args: RouteHandlerArgs): Promise<Response> => runHandler(opts, args, false);
 }

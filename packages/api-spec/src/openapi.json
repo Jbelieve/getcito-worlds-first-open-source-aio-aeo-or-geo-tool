@@ -342,14 +342,7 @@
 						}
 					}
 				},
-				"required": [
-					"brandName",
-					"website",
-					"additionalDomains",
-					"aliases",
-					"competitors",
-					"suggestedPrompts"
-				]
+				"required": ["brandName", "website", "additionalDomains", "aliases", "competitors", "suggestedPrompts"]
 			},
 			"CreateBrandRequest": {
 				"type": "object",
@@ -549,6 +542,87 @@
 					}
 				},
 				"required": ["brandId", "promptId", "promptValue", "startDate", "endDate", "mentions", "citations"]
+			},
+			"AosAuditRequest": {
+				"type": "object",
+				"properties": {
+					"url": {
+						"type": "string",
+						"format": "uri",
+						"maxLength": 2048,
+						"description": "Sitio http/https a auditar. Los destinos internos (loopback, rangos privados, .local, .internal, metadatos de nube) se rechazan con 400."
+					}
+				},
+				"required": ["url"]
+			},
+			"AosAuditResponse": {
+				"type": "object",
+				"properties": {
+					"url": { "type": "string", "description": "URL normalizada que se auditó." },
+					"score": { "type": "integer", "minimum": 0, "maximum": 100, "description": "AOS medido por el motor." },
+					"band": { "type": "string", "description": "Banda del score." },
+					"businessType": { "type": "string", "enum": ["brand", "product_api"] },
+					"requirements": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": { "type": "string" },
+								"axis": { "type": "string", "enum": ["AOS", "APS"] },
+								"strength": { "type": "string", "enum": ["MUST", "SHOULD", "MAY"] },
+								"title": { "type": "string" },
+								"status": { "type": "string", "enum": ["pass", "fail", "n_a"] },
+								"diagnostic": {
+									"type": "boolean",
+									"description": "true en los chequeos que se reportan pero no puntúan."
+								},
+								"evidence": { "type": "string", "description": "Qué vimos al comprobarlo." },
+								"gain": {
+									"type": "number",
+									"description": "Puntos de AOS que devolvería si pasa. Solo en los puntuados que hoy fallan."
+								}
+							},
+							"required": ["id", "axis", "strength", "title", "status"]
+						}
+					},
+					"declaredAps": {
+						"type": "integer",
+						"nullable": true,
+						"description": "APS que el sitio declara en su /.well-known/brand.json. null si no publica uno usable."
+					},
+					"claims": { "type": "integer", "description": "Cuántos claims declara su brand.json." },
+					"signatureVerified": {
+						"type": "boolean",
+						"description": "¿La firma Ed25519 de su brand.json verifica contra el keys.json que el propio sitio publica?"
+					},
+					"auditedAt": { "type": "string", "format": "date-time" }
+				},
+				"required": [
+					"url",
+					"score",
+					"band",
+					"businessType",
+					"requirements",
+					"declaredAps",
+					"claims",
+					"signatureVerified",
+					"auditedAt"
+				]
+			},
+			"AosLeadRequest": {
+				"type": "object",
+				"properties": {
+					"email": { "type": "string", "format": "email", "maxLength": 320 },
+					"name": { "type": "string", "maxLength": 200 },
+					"company": { "type": "string", "maxLength": 200 },
+					"url": {
+						"type": "string",
+						"maxLength": 2048,
+						"description": "URL auditada, cuando el lead sale del resultado de un audit."
+					},
+					"score": { "type": "integer", "minimum": 0, "maximum": 100 }
+				},
+				"required": ["email"]
 			}
 		},
 		"responses": {
@@ -605,6 +679,108 @@
 		}
 	},
 	"paths": {
+		"/aos/audit": {
+			"post": {
+				"summary": "Audit a URL against the AOS/APS standard",
+				"description": "Public and anonymous on purpose: no API key and no session. Runs the same audit engine as the worker over any http/https URL and adds what the site declares about itself in /.well-known/brand.json — its declared APS, how many claims it publishes, and whether its Ed25519 signature verifies against the keys.json it serves. Persists nothing. Limited per IP and per day; requests that point at internal networks are rejected, and the 429 carries Retry-After plus the RateLimit-* headers.",
+				"operationId": "auditAosUrl",
+				"tags": ["AOS"],
+				"security": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/AosAuditRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Audit result",
+						"headers": {
+							"RateLimit-Policy": { "schema": { "type": "string" } },
+							"RateLimit": { "schema": { "type": "string" } },
+							"RateLimit-Limit": { "schema": { "type": "integer" } },
+							"RateLimit-Remaining": { "schema": { "type": "integer" } },
+							"RateLimit-Reset": { "schema": { "type": "integer" } }
+						},
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/AosAuditResponse" }
+							}
+						}
+					},
+					"400": { "$ref": "#/components/responses/ValidationError" },
+					"429": {
+						"description": "Daily limit reached. Carries Retry-After and the RateLimit-* headers.",
+						"headers": {
+							"Retry-After": { "schema": { "type": "integer" }, "description": "Seconds until the quota resets." },
+							"RateLimit-Policy": { "schema": { "type": "string" } },
+							"RateLimit": { "schema": { "type": "string" } },
+							"RateLimit-Limit": { "schema": { "type": "integer" } },
+							"RateLimit-Remaining": { "schema": { "type": "integer" } },
+							"RateLimit-Reset": { "schema": { "type": "integer" } }
+						},
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/Error" }
+							}
+						}
+					},
+					"504": { "description": "The audit did not finish inside the endpoint's total time budget." },
+					"500": { "$ref": "#/components/responses/InternalServerError" }
+				}
+			}
+		},
+		"/aos/lead": {
+			"post": {
+				"summary": "Leave a contact email from the extension",
+				"description": "Public and anonymous. Stores the lead for follow-up and answers only { ok: true }. Shares the per-IP daily limit and the service-wide daily cap with /aos/audit.",
+				"operationId": "createAosLead",
+				"tags": ["AOS"],
+				"security": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/AosLeadRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Lead stored",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": { "ok": { "type": "boolean" } },
+									"required": ["ok"]
+								}
+							}
+						}
+					},
+					"400": { "$ref": "#/components/responses/ValidationError" },
+					"429": {
+						"description": "Daily limit reached. Carries Retry-After and the RateLimit-* headers.",
+						"headers": {
+							"Retry-After": { "schema": { "type": "integer" }, "description": "Seconds until the quota resets." },
+							"RateLimit-Policy": { "schema": { "type": "string" } },
+							"RateLimit": { "schema": { "type": "string" } },
+							"RateLimit-Limit": { "schema": { "type": "integer" } },
+							"RateLimit-Remaining": { "schema": { "type": "integer" } },
+							"RateLimit-Reset": { "schema": { "type": "integer" } }
+						},
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/Error" }
+							}
+						}
+					},
+					"500": { "$ref": "#/components/responses/InternalServerError" }
+				}
+			}
+		},
 		"/tools/analyze": {
 			"post": {
 				"summary": "Analyze a website",
@@ -1554,10 +1730,26 @@
 														"type": "object",
 														"properties": {
 															"name": { "type": "string", "description": "Competitor name" },
-															"sov": { "type": "number", "minimum": 0, "maximum": 1, "description": "Share of voice (0-1): this competitor's mentions / total mentions (brand + all competitors)" },
-															"visibility": { "type": "number", "minimum": 0, "maximum": 1, "description": "Visibility (0-1): prompt runs mentioning this competitor / total prompt runs" },
-															"promptsWithMentions": { "type": "integer", "description": "Number of prompts where this competitor was mentioned in at least one run" },
-															"promptRunsWithMentions": { "type": "integer", "description": "Number of individual prompt runs where this competitor was mentioned" }
+															"sov": {
+																"type": "number",
+																"minimum": 0,
+																"maximum": 1,
+																"description": "Share of voice (0-1): this competitor's mentions / total mentions (brand + all competitors)"
+															},
+															"visibility": {
+																"type": "number",
+																"minimum": 0,
+																"maximum": 1,
+																"description": "Visibility (0-1): prompt runs mentioning this competitor / total prompt runs"
+															},
+															"promptsWithMentions": {
+																"type": "integer",
+																"description": "Number of prompts where this competitor was mentioned in at least one run"
+															},
+															"promptRunsWithMentions": {
+																"type": "integer",
+																"description": "Number of individual prompt runs where this competitor was mentioned"
+															}
 														},
 														"required": ["name", "sov", "visibility", "promptsWithMentions", "promptRunsWithMentions"]
 													},
@@ -1598,8 +1790,20 @@
 										"promptsWithBrandMentions": 28,
 										"promptRunsWithBrandMentions": 168,
 										"competitors": [
-											{ "name": "Competitor A", "sov": 0.35, "visibility": 0.35, "promptsWithMentions": 45, "promptRunsWithMentions": 98 },
-											{ "name": "Competitor B", "sov": 0.15, "visibility": 0.15, "promptsWithMentions": 20, "promptRunsWithMentions": 42 }
+											{
+												"name": "Competitor A",
+												"sov": 0.35,
+												"visibility": 0.35,
+												"promptsWithMentions": 45,
+												"promptRunsWithMentions": 98
+											},
+											{
+												"name": "Competitor B",
+												"sov": 0.15,
+												"visibility": 0.15,
+												"promptsWithMentions": 20,
+												"promptRunsWithMentions": 42
+											}
 										]
 									}
 								}
@@ -1623,6 +1827,10 @@
 		}
 	},
 	"tags": [
+		{
+			"name": "AOS",
+			"description": "Public, anonymous AOS/APS audit and its lead form"
+		},
 		{
 			"name": "Brands",
 			"description": "Manage brand records"
