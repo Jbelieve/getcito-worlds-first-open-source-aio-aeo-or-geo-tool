@@ -14,11 +14,10 @@
  *   - todo hostname se resuelve por DNS y **cada** dirección resultante se valida, porque un nombre
  *     público puede apuntar a una IP privada.
  *
- * LÍMITE CONOCIDO (TOCTOU / DNS rebinding): entre la resolución que validamos y la que hace `fetch`
- * hay una ventana. Un atacante con un DNS propio puede responder la IP pública acá y la privada
- * después. Cerrarlo del todo requiere fijar la IP resuelta en el conector HTTP (un dispatcher de undici
- * con `connect` propio); mientras eso no exista, el techo global diario y el timeout total son las
- * cotas reales del daño.
+ * Y el pedido se hace con `safeFetch` (`./guarded-http`), no con el `fetch` global: la conexión va
+ * **a la IP que se validó** (lookup fijado en el socket) y ningún redirect se sigue sin volver a
+ * validar. Sin eso queda abierta la ventana del DNS rebinding (TOCTOU), y un 3xx a una dirección
+ * interna entra sin que el guardián vea nunca la URL destino.
  */
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -40,7 +39,18 @@ export interface UrlGuardOptions {
  */
 export type UrlGuardRejectionKind = "invalid" | "blocked" | "unresolved";
 
-export type UrlGuardResult = { ok: true; url: URL } | { ok: false; kind: UrlGuardRejectionKind; reason: string };
+/**
+ * `addresses` son las direcciones que se validaron, en el orden en que las devolvió el DNS. Es la
+ * mitad que le faltaba al guardián: el conector las fija en el socket para que la conexión vaya a la
+ * IP validada y no a una segunda resolución del atacante. Para un literal no hay resolución y trae el
+ * propio literal, que ya se validó en el texto.
+ */
+export type UrlGuardResult =
+	| { ok: true; url: URL; addresses: string[] }
+	| { ok: false; kind: UrlGuardRejectionKind; reason: string };
+
+/** Validación puramente textual: mismo rechazo, pero sin direcciones porque acá no se resolvió nada. */
+export type UrlTextGuardResult = { ok: true; url: URL } | { ok: false; kind: UrlGuardRejectionKind; reason: string };
 
 const defaultLookup: LookupFn = (hostname) => dnsLookup(hostname, { all: true });
 
@@ -237,7 +247,7 @@ function blockedHostnameReason(hostname: string): string | null {
  * Validación puramente textual: protocolo, credenciales, hostname y, si es un literal, la IP.
  * No resuelve DNS — eso lo hace `assertSafeAuditUrl`.
  */
-export function validateAuditUrl(raw: string): UrlGuardResult {
+export function validateAuditUrl(raw: string): UrlTextGuardResult {
 	let url: URL;
 	try {
 		url = new URL(raw);
@@ -279,7 +289,8 @@ export async function assertSafeAuditUrl(raw: string, options?: UrlGuardOptions)
 	if (textual.ok === false) return textual;
 
 	const hostname = textual.url.hostname.startsWith("[") ? textual.url.hostname.slice(1, -1) : textual.url.hostname;
-	if (isIP(hostname) !== 0) return textual;
+	// Un literal no se resuelve: la IP que se validó es la que se escribe, y es la que se fija.
+	if (isIP(hostname) !== 0) return { ...textual, addresses: [hostname] };
 
 	const lookup = options?.lookup ?? defaultLookup;
 	let addresses: Array<{ address: string; family: number }>;
@@ -298,5 +309,5 @@ export async function assertSafeAuditUrl(raw: string, options?: UrlGuardOptions)
 		}
 	}
 
-	return textual;
+	return { ...textual, addresses: addresses.map((entry) => entry.address) };
 }
