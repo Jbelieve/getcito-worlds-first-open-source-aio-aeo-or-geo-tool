@@ -1,0 +1,24 @@
+apps/web/src/env.d.ts
+  h_c5ca005a78c880 86
+apps/web/src/lib/aos/public-audit.ts
+  h_c5ca005a78c880 29,32-40,53-65,83,87-95,99-136,138-142,186-223
+apps/web/src/routes/api/v1/aos/audit.ts
+  h_c5ca005a78c880 88-93
+apps/web/src/routes/api/v1/aos/lead.ts
+  h_c5ca005a78c880 38
+packages/config/src/env-registry.ts
+  h_c5ca005a78c880 379,400-406
+turbo.json
+  h_c5ca005a78c880 60-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "128a31257a341cd2ec40d0db91f652b30249c4f0",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
