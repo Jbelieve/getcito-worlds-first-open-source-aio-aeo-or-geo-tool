@@ -17,7 +17,8 @@ humano desde el dev console.
 La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.2.1.zip`) la
 dice sola.
 
-La 2.2.1 arregla **dos textos que ve el usuario y que decían cosas falsas**, los dos en el popup:
+La 2.2.1 arregla **dos textos que ve el usuario y que decían cosas falsas** y **un bloque que se veía
+cuando no correspondía**, los tres en el popup:
 
 - El **429** decía *"Son 20 auditorías por IP y por día"* con una constante propia. Ese 20 es el
   default del servidor, no el cupo: el cupo lo define una env y viaja en la cabecera `RateLimit-Limit`
@@ -29,6 +30,11 @@ La 2.2.1 arregla **dos textos que ve el usuario y que decían cosas falsas**, lo
   localhost, metadatos de nube*). Eso le da un mapa a quien prueba y a un usuario normal no le dice
   nada. Ahora dice sólo que esa dirección **queda afuera por seguridad**. La distinción con
   `invalid_url` ("no se pudo interpretar la dirección") se mantiene.
+- En un sitio **sin perfil firmado** quedaba a la vista un **pill vacío** donde iría el badge
+  Agent-Preferred: la regla que oculta el badge perdía contra el `display` propio del badge, así que
+  se veía un óvalo sin texto —parece un badge que no cargó—. Ahora, sin perfil publicado, **no hay
+  badge**: se ve el bloque "Perfil firmado del sitio" con "Sin perfil firmado" y nada más. Cuando la
+  firma **sí** verifica, el badge se ve exactamente igual que antes.
 
 No cambia nada más: ni la marca, ni el pedido al endpoint (la URL completa de la pestaña), ni el
 resto de lo que el popup muestra.
