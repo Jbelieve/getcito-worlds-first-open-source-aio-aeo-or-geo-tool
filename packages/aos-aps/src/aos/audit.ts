@@ -1,4 +1,5 @@
 import { type ApsBreakdown, computeApsScore, parseBrandProfile } from "../preference";
+import { safeFetch } from "./guarded-http";
 import {
 	DISCOVERY_FILES,
 	type DiscoveryFiles,
@@ -19,12 +20,21 @@ import {
 	type StandardsResult,
 } from "./requirements";
 import { verifyBrandSignature } from "./signature";
-import { assertSafeAuditUrl } from "./ssrf";
+import { assertSafeAuditUrl, type LookupFn } from "./ssrf";
 
 export interface AosAuditInput {
 	url: string;
 	timeoutMs?: number;
+	/**
+	 * Resolutor inyectable para los tests. El motor en producción usa el DNS del sistema, y la IP que
+	 * ese resolutor devuelve en la validación es la que se fija en el socket: cambiarla después no
+	 * cambia el destino.
+	 */
+	lookup?: LookupFn;
 }
+
+/** Opciones que viajan a cada pedido: hoy, el resolutor inyectado por los tests. */
+type FetchOptions = { lookup?: LookupFn };
 
 export interface AosAuditResult {
 	url: string;
@@ -54,16 +64,16 @@ const USER_AGENT = "BeAOS-AOS-Audit/0.1 (+https://be-aos.believe-global.com)";
  * El guardián anti-SSRF vive en `./ssrf` y lo comparten el endpoint público, el worker y el MCP:
  * una sola definición de "destino interno" para que no quede abierto en un camino y tapado en otro.
  */
-async function assertSafeUrl(raw: string): Promise<URL> {
-	const result = await assertSafeAuditUrl(raw);
+async function assertSafeUrl(raw: string, fetch?: FetchOptions): Promise<URL> {
+	const result = await assertSafeAuditUrl(raw, fetch);
 	if (result.ok === false) throw new Error(result.reason);
 	return result.url;
 }
 
 /** A URL taken from the audited content (a declared MCP endpoint) needs its own guard. */
-async function isSafeTarget(raw: string): Promise<boolean> {
+async function isSafeTarget(raw: string, fetch?: FetchOptions): Promise<boolean> {
 	try {
-		await assertSafeUrl(raw);
+		await assertSafeUrl(raw, fetch);
 		return true;
 	} catch {
 		return false;
@@ -80,15 +90,23 @@ interface Probe {
 /**
  * Probes do not follow redirects, exactly like the Maasy audit: a 3xx means the file is not served
  * at that path, and following it could turn an SPA catch-all into a false positive.
+ *
+ * El pedido sale por `safeFetch`, no por el `fetch` global: la conexión va a la IP que ya validó el
+ * guardián (no a una segunda resolución del atacante) y un `Location` hacia una dirección interna
+ * nunca se sigue.
  */
-async function probe(url: string, timeoutMs: number, method = "GET", payload?: unknown): Promise<Probe | null> {
+async function probe(
+	url: string,
+	timeoutMs: number,
+	method = "GET",
+	payload?: unknown,
+	fetchOptions: FetchOptions = {},
+): Promise<Probe | null> {
 	try {
-		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), timeoutMs);
-		const response = await fetch(url, {
+		const response = await safeFetch(url, {
 			method,
-			redirect: "manual",
-			signal: controller.signal,
+			timeoutMs,
+			lookup: fetchOptions.lookup,
 			headers: {
 				"user-agent": USER_AGENT,
 				accept: "*/*",
@@ -96,13 +114,11 @@ async function probe(url: string, timeoutMs: number, method = "GET", payload?: u
 			},
 			body: payload ? JSON.stringify(payload) : undefined,
 		});
-		const body = await response.text();
-		clearTimeout(timer);
 		return {
 			ok: response.ok,
 			status: response.status,
 			contentType: response.headers.get("content-type") ?? "",
-			body,
+			body: response.text(),
 		};
 	} catch {
 		return null;
@@ -119,11 +135,17 @@ function isJsonObject(response: Probe | null): boolean {
  * itself, the well-known descriptors, the mcp.<domain> subdomain, and the endpoint the site declares
  * in its own llms.txt — which is how an MCP hosted elsewhere still counts.
  */
-async function findMcpOrOpenApi(base: URL, html: string, llmsTxtBody: string, timeoutMs: number): Promise<boolean> {
+async function findMcpOrOpenApi(
+	base: URL,
+	html: string,
+	llmsTxtBody: string,
+	timeoutMs: number,
+	fetchOptions: FetchOptions = {},
+): Promise<boolean> {
 	if (/application\/vnd\.mcp|"openapi":\s*"3/i.test(html)) return true;
 
 	for (const path of ["/.well-known/mcp", "/.well-known/openapi.json", "/.well-known/ai-plugin.json"]) {
-		const response = await probe(new URL(path, base).toString(), timeoutMs);
+		const response = await probe(new URL(path, base).toString(), timeoutMs, "GET", undefined, fetchOptions);
 		if (response === null) continue;
 		if (isMcpOrOpenApiDescriptor(response.ok, response.contentType, safeJson(response.body))) return true;
 	}
@@ -131,8 +153,14 @@ async function findMcpOrOpenApi(base: URL, html: string, llmsTxtBody: string, ti
 	try {
 		const hostname = base.hostname.replace(/^www\./, "");
 		const mcpUrl = `https://mcp.${hostname}`;
-		if (await isSafeTarget(mcpUrl)) {
-			const response = await probe(mcpUrl, timeoutMs, "POST", { jsonrpc: "2.0", id: 1, method: "tools/list" });
+		if (await isSafeTarget(mcpUrl, fetchOptions)) {
+			const response = await probe(
+				mcpUrl,
+				timeoutMs,
+				"POST",
+				{ jsonrpc: "2.0", id: 1, method: "tools/list" },
+				fetchOptions,
+			);
 			if (response !== null && isMcpJsonRpcPayload(safeJson(response.body))) return true;
 		}
 	} catch {
@@ -141,8 +169,14 @@ async function findMcpOrOpenApi(base: URL, html: string, llmsTxtBody: string, ti
 
 	if (llmsTxtBody.length > 0) {
 		const declared = extractMcpEndpoint(llmsTxtBody);
-		if (declared !== null && (await isSafeTarget(declared))) {
-			const response = await probe(declared, timeoutMs, "POST", { jsonrpc: "2.0", id: 1, method: "tools/list" });
+		if (declared !== null && (await isSafeTarget(declared, fetchOptions))) {
+			const response = await probe(
+				declared,
+				timeoutMs,
+				"POST",
+				{ jsonrpc: "2.0", id: 1, method: "tools/list" },
+				fetchOptions,
+			);
 			if (response !== null && isMcpJsonRpcPayload(safeJson(response.body))) return true;
 		}
 	}
@@ -179,16 +213,20 @@ function safeJson(body: string | undefined): unknown {
 	}
 }
 
-async function probeMarkdownNegotiation(base: URL, timeoutMs: number): Promise<boolean> {
+async function probeMarkdownNegotiation(
+	base: URL,
+	timeoutMs: number,
+	fetchOptions: FetchOptions = {},
+): Promise<boolean> {
 	try {
-		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), timeoutMs);
-		const response = await fetch(base.toString(), {
-			redirect: "follow",
-			signal: controller.signal,
+		// Este probe es el único que sigue redirects (así lo hace el audit de Maasy). Ahora sigue
+		// `safeFetch`: cada salto se valida otra vez, hasta cinco, y un `Location` interno se rechaza.
+		const response = await safeFetch(base.toString(), {
+			timeoutMs,
+			followRedirects: true,
+			lookup: fetchOptions.lookup,
 			headers: { "user-agent": USER_AGENT, accept: "text/markdown" },
 		});
-		clearTimeout(timer);
 		if (response.ok === false) return false;
 		return (response.headers.get("content-type") ?? "").toLowerCase().includes("markdown");
 	} catch {
@@ -205,27 +243,42 @@ function bandFromScore(score: number): string {
 
 export async function runAosAudit(input: AosAuditInput): Promise<AosAuditResult> {
 	const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-	const base = await assertSafeUrl(input.url);
+	// El resolutor inyectado viaja a cada pedido: la validación y la conexión usan el mismo, y la IP
+	// que devuelve la validación es la que se fija en el socket.
+	const fetchOptions: FetchOptions = input.lookup === undefined ? {} : { lookup: input.lookup };
+	const base = await assertSafeUrl(input.url, fetchOptions);
 	const at = (path: string) => new URL(path, base).toString();
 
-	const homepage = await probe(base.toString(), timeoutMs);
+	const homepage = await probe(base.toString(), timeoutMs, "GET", undefined, fetchOptions);
 	const html = homepage?.body ?? "";
 
-	const llmsTxt = await probe(at("/llms.txt"), timeoutMs);
-	const agentsMd = await probe(at("/AGENTS.md"), timeoutMs);
-	const robots = await probe(at("/robots.txt"), timeoutMs);
-	const sitemap = await probe(at("/sitemap.xml"), timeoutMs);
-	const agentCard = await probe(at("/.well-known/agent-card.json"), timeoutMs);
-	const agentPermissions = await probe(at("/.well-known/agent-permissions.json"), timeoutMs);
-	const mcpServerCard = await probe(at("/.well-known/mcp/server-card.json"), timeoutMs);
-	const brandJsonResponse = await probe(at("/.well-known/brand.json"), timeoutMs);
-	const keysJson = await probe(at("/.well-known/keys.json"), timeoutMs);
-	const httpMessageSignatures = await probe(at("/.well-known/http-message-signatures-directory"), timeoutMs);
-	const nlwebAsk = await probe(at("/ask"), timeoutMs);
+	const llmsTxt = await probe(at("/llms.txt"), timeoutMs, "GET", undefined, fetchOptions);
+	const agentsMd = await probe(at("/AGENTS.md"), timeoutMs, "GET", undefined, fetchOptions);
+	const robots = await probe(at("/robots.txt"), timeoutMs, "GET", undefined, fetchOptions);
+	const sitemap = await probe(at("/sitemap.xml"), timeoutMs, "GET", undefined, fetchOptions);
+	const agentCard = await probe(at("/.well-known/agent-card.json"), timeoutMs, "GET", undefined, fetchOptions);
+	const agentPermissions = await probe(
+		at("/.well-known/agent-permissions.json"),
+		timeoutMs,
+		"GET",
+		undefined,
+		fetchOptions,
+	);
+	const mcpServerCard = await probe(at("/.well-known/mcp/server-card.json"), timeoutMs, "GET", undefined, fetchOptions);
+	const brandJsonResponse = await probe(at("/.well-known/brand.json"), timeoutMs, "GET", undefined, fetchOptions);
+	const keysJson = await probe(at("/.well-known/keys.json"), timeoutMs, "GET", undefined, fetchOptions);
+	const httpMessageSignatures = await probe(
+		at("/.well-known/http-message-signatures-directory"),
+		timeoutMs,
+		"GET",
+		undefined,
+		fetchOptions,
+	);
+	const nlwebAsk = await probe(at("/ask"), timeoutMs, "GET", undefined, fetchOptions);
 
 	const discoveryEntries = await Promise.all(
 		DISCOVERY_FILES.map(async (file) => {
-			const response = await probe(at(file.path), timeoutMs);
+			const response = await probe(at(file.path), timeoutMs, "GET", undefined, fetchOptions);
 			return [
 				file.key,
 				isValidDiscoveryFile(file.json, response?.ok === true, response?.contentType ?? "", response?.body ?? ""),
@@ -234,18 +287,18 @@ export async function runAosAudit(input: AosAuditInput): Promise<AosAuditResult>
 	);
 	const discoveryFiles: DiscoveryFiles = Object.fromEntries(discoveryEntries);
 
-	const hasMcpOrOpenApi = await findMcpOrOpenApi(base, html, llmsTxt?.body ?? "", timeoutMs);
+	const hasMcpOrOpenApi = await findMcpOrOpenApi(base, html, llmsTxt?.body ?? "", timeoutMs, fetchOptions);
 	const businessType = classifyBusinessType({ hasOpenApi: hasMcpOrOpenApi });
 
 	// The Claims & Proofs layer: the signature covers the exact served bytes, so verification
 	// receives the same text that was parsed instead of re-fetching it.
 	const profile = parseBrandProfile(safeJson(brandJsonResponse?.body));
-	const signatureValid = await verifyBrandSignature(base, timeoutMs, brandJsonResponse?.body);
+	const signatureValid = await verifyBrandSignature(base, timeoutMs, brandJsonResponse?.body, fetchOptions);
 	const aps = isJsonObject(brandJsonResponse)
 		? computeApsScore(profile, { signedProvenanceVerified: signatureValid })
 		: null;
 
-	const markdownNegotiation = await probeMarkdownNegotiation(base, timeoutMs);
+	const markdownNegotiation = await probeMarkdownNegotiation(base, timeoutMs, fetchOptions);
 	const discoveredTypes = jsonLdTypes(html);
 	const PROOF_TYPES = ["CreativeWork", "CaseStudy", "Review", "Article"];
 	const proofTypes = discoveredTypes.filter((type) => PROOF_TYPES.includes(type));

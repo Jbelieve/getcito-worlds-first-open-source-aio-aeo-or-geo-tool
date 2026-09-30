@@ -1,4 +1,6 @@
 import { createPublicKey, verify as verifySignature } from "node:crypto";
+import { safeFetch } from "./guarded-http";
+import type { LookupFn } from "./ssrf";
 
 /**
  * Agent-side verification of /.well-known/brand.json. Spec: aos-aps-standard spec/signing.md
@@ -7,26 +9,43 @@ import { createPublicKey, verify as verifySignature } from "node:crypto";
  *   body  = fetch(/.well-known/brand.json)          # exact bytes
  *   pub   = fetch(sig.public_key_url).keys[kid == sig.kid].public_key
  *   valid = Ed25519.verify(sig.value, body, pub)
+ *
+ * Los pedidos son al mismo origen que ya validó el guardián, pero salen por `safeFetch` y no por el
+ * `fetch` global: un 302 de `/.well-known/keys.json` a `http://169.254.169.254/` es un SSRF con la URL
+ * destino elegida por el sitio auditado, y con el `fetch` global entraba sin validación.
+ * (El `public_key_url` del spec no se sigue a propósito: la clave se busca en el `keys.json` del mismo
+ * origen, así que la firma nunca puede mandarnos a buscar una clave a otro lado.)
  */
 
 const USER_AGENT = "BeAOS-AOS-Audit/0.1 (+https://beaos.believe-global.com)";
 const SPKI_ED25519_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 
-async function fetchText(url: string, timeoutMs: number): Promise<string | null> {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), timeoutMs);
+/**
+ * Firmas y opciones de la verificación.
+ *
+ * `lookup` es el resolutor inyectable de los tests. `fetchText` existe por una razón concreta: estas
+ * pruebas levantan un servidor en `127.0.0.1`, y el guardián —con razón— no deja pedir la loopback.
+ * El guardián no se relaja para el test: se inyecta el pedido, y el test sigue probando lo que tiene
+ * que probar (que la firma Ed25519 verifique sobre los bytes servidos), no el guardián.
+ */
+export interface SignatureVerifyOptions {
+	lookup?: LookupFn;
+	fetchText?: (url: string, timeoutMs: number, lookup?: LookupFn) => Promise<string | null>;
+}
+
+/** Sale por el guardián: conexión a la IP validada, y cada redirect revalidado. */
+async function fetchText(url: string, timeoutMs: number, lookup?: LookupFn): Promise<string | null> {
 	try {
-		const response = await fetch(url, {
-			redirect: "follow",
-			signal: controller.signal,
+		const response = await safeFetch(url, {
+			timeoutMs,
+			followRedirects: true,
+			lookup,
 			headers: { "user-agent": USER_AGENT, accept: "*/*" },
 		});
 		if (response.ok === false) return null;
-		return await response.text();
+		return response.text();
 	} catch {
 		return null;
-	} finally {
-		clearTimeout(timer);
 	}
 }
 
@@ -64,21 +83,31 @@ export interface SignatureVerification {
 /**
  * Verifies the detached signature. `brandBody` is the exact served text of brand.json when the
  * caller already fetched it: re-fetching could verify different bytes than the ones reported.
+ *
+ * `lookup` es el resolutor inyectable de los tests: la clave del arreglo anti-rebinding es que la
+ * validación y la conexión usen el mismo, y que la conexión vaya a la IP validada.
  */
 export async function verifyBrandSignatureDetailed(
 	base: URL,
 	timeoutMs: number,
 	brandBody?: string,
+	options: SignatureVerifyOptions = {},
 ): Promise<SignatureVerification> {
-	const body = brandBody ?? (await fetchText(new URL("/.well-known/brand.json", base).toString(), timeoutMs));
+	const fetchFile = options.fetchText ?? fetchText;
+	const body =
+		brandBody ?? (await fetchFile(new URL("/.well-known/brand.json", base).toString(), timeoutMs, options.lookup));
 	if (body === null || body.length === 0) return { valid: false, kid: null, reason: "brand.json not served" };
 
-	const signatureBody = await fetchText(new URL("/.well-known/brand.json.sig", base).toString(), timeoutMs);
+	const signatureBody = await fetchFile(
+		new URL("/.well-known/brand.json.sig", base).toString(),
+		timeoutMs,
+		options.lookup,
+	);
 	if (signatureBody === null || signatureBody.length === 0) {
 		return { valid: false, kid: null, reason: "brand.json.sig not served" };
 	}
 
-	const keysBody = await fetchText(new URL("/.well-known/keys.json", base).toString(), timeoutMs);
+	const keysBody = await fetchFile(new URL("/.well-known/keys.json", base).toString(), timeoutMs, options.lookup);
 	if (keysBody === null || keysBody.length === 0) return { valid: false, kid: null, reason: "keys.json not served" };
 
 	try {
@@ -113,7 +142,12 @@ export async function verifyBrandSignatureDetailed(
 	}
 }
 
-export async function verifyBrandSignature(base: URL, timeoutMs: number, brandBody?: string): Promise<boolean> {
-	const result = await verifyBrandSignatureDetailed(base, timeoutMs, brandBody);
+export async function verifyBrandSignature(
+	base: URL,
+	timeoutMs: number,
+	brandBody?: string,
+	options: SignatureVerifyOptions = {},
+): Promise<boolean> {
+	const result = await verifyBrandSignatureDetailed(base, timeoutMs, brandBody, options);
 	return result.valid;
 }

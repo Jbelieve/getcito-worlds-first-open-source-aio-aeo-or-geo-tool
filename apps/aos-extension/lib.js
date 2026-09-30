@@ -184,16 +184,40 @@ export function humanWait(seconds) {
 }
 
 /**
- * El texto de cada error, en castellano y sin jerga. `status` es el HTTP y `retryAfterSeconds` lo
- * que dijo el servidor que hay que esperar (puede faltar). Nunca se muestra un alert técnico.
- * El caso 0 es "no se pudo llegar": red caída, DNS, extensión sin permiso.
+ * El texto de cada error, en castellano y sin jerga.
+ *
+ * `status` es el HTTP, `code` es el `code` del cuerpo del 400 (si vino) y `retryAfterSeconds` lo que
+ * dijo el servidor que hay que esperar (puede faltar). Nunca se muestra un alert técnico. El caso 0
+ * es "no se pudo llegar": red caída, DNS, extensión sin permiso.
+ *
+ * **El 400 no es un solo error.** El servidor distingue dos motivos y los manda en `code`:
+ *   · `invalid_url` — no se pudo interpretar la dirección (un error de forma);
+ *   · `blocked_url` — la dirección queda afuera por seguridad (un destino interno).
+ * Antes los dos caían en el mismo texto, y por eso un error de parseo se le mostraba al usuario
+ * como si hubiera auditado una dirección interna. Cuando el `code` no viene (un servidor viejo, o un
+ * 400 que no es del guardián) se dice la verdad sin inventar el motivo: se pudo ni interpretar ni
+ * confirmar.
  */
-export function auditErrorText(status, retryAfterSeconds = null) {
+export function auditErrorText(status, { code = null, retryAfterSeconds = null } = {}) {
 	if (status === 400) {
+		if (code === "invalid_url") {
+			return {
+				title: "No se pudo interpretar la dirección",
+				detail:
+					"No pudimos leer esa dirección como una URL. Probá con una dirección completa, con su https:// (por ejemplo, https://ejemplo.com/precios).",
+			};
+		}
+		if (code === "blocked_url") {
+			return {
+				title: "Esa dirección queda afuera por seguridad",
+				detail:
+					"El endpoint solo audita sitios http(s) públicos. Las direcciones internas, localhost y los metadatos de nube quedan afuera por seguridad.",
+			};
+		}
 		return {
 			title: "No se puede auditar esa dirección",
 			detail:
-				"El endpoint solo audita sitios http(s) públicos. Las direcciones internas, localhost y los metadatos de nube quedan afuera por seguridad.",
+				"El endpoint rechazó la dirección y no dijo por qué. Puede ser una dirección que no se pudo interpretar o un sitio público que no está permitido auditar; el detalle está en la consola.",
 		};
 	}
 	if (status === 429) {
@@ -473,38 +497,54 @@ export async function setCachedAudit(domain, data) {
 	await chrome.storage.local.set({ [`beaos_cache_${domain}`]: { t: Date.now(), data } });
 }
 
+/**
+ * Cuerpo de error del endpoint → lo que el popup necesita para decidir qué decir.
+ *
+ * El `message` del servidor se conserva para la consola, pero el texto que ve el usuario sale de
+ * `auditErrorText`, que decide por `status` + `code`. El `code` se lee tal cual viene: la extensión
+ * no lo reinterpreta ni lo adivina, porque si el servidor no lo manda, lo correcto es decir que no
+ * se sabe en vez de suponer que fue una dirección interna.
+ */
+export function parseAuditFailure({ status, headers, body } = {}) {
+	const message = typeof body?.message === "string" ? body.message : null;
+	const code = typeof body?.code === "string" ? body.code : null;
+	return {
+		ok: false,
+		status,
+		/** `invalid_url` (no se pudo interpretar) o `blocked_url` (queda afuera por seguridad). */
+		code,
+		retryAfterSeconds: readRetryAfter(headers),
+		error: message,
+	};
+}
+
 // --- red (envoltorios delgados sobre las funciones puras de arriba) ----------
 
 /**
  * Audita una URL contra el endpoint público de BeAOS.
  *
- * Devuelve `{ ok: true, data }` o `{ ok: false, status, retryAfterSeconds, error }`. El status 0 es
- * "no se pudo llegar" (red, DNS, permiso). El detalle técnico crudo va a la consola; el texto que
- * ve el usuario sale de `auditErrorText`.
+ * Recibe la **URL completa** de la pestaña (con esquema y con path), no el dominio: el endpoint exige
+ * una URL parseable y el path es parte de lo que se mide.
+ *
+ * Devuelve `{ ok: true, data }` o `{ ok: false, status, code, retryAfterSeconds, error }`. El status
+ * 0 es "no se pudo llegar" (red, DNS, permiso), y ahí `code` es `null` porque no hubo respuesta. El
+ * detalle técnico crudo va a la consola; el texto que ve el usuario sale de `auditErrorText`.
  */
 export async function auditUrl(url) {
 	try {
 		const resp = await fetch(AUDIT_ENDPOINT, auditRequestInit(url));
 		if (!resp.ok) {
-			const detail = await resp
-				.json()
-				.then((body) => (typeof body?.message === "string" ? body.message : null))
-				.catch(() => null);
-			return {
-				ok: false,
-				status: resp.status,
-				retryAfterSeconds: readRetryAfter(resp.headers),
-				error: detail,
-			};
+			const body = await resp.json().catch(() => null);
+			return parseAuditFailure({ status: resp.status, headers: resp.headers, body });
 		}
 		const data = await resp.json().catch(() => null);
 		if (data === null || typeof data !== "object") {
-			return { ok: false, status: resp.status, retryAfterSeconds: null, error: "respuesta ilegible" };
+			return { ok: false, status: resp.status, code: null, retryAfterSeconds: null, error: "respuesta ilegible" };
 		}
 		return { ok: true, data };
 	} catch (error) {
 		console.error("[BeAOS] el audit falló:", error);
-		return { ok: false, status: 0, retryAfterSeconds: null, error: String(error) };
+		return { ok: false, status: 0, code: null, retryAfterSeconds: null, error: String(error) };
 	}
 }
 

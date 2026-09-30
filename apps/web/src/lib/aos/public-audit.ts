@@ -9,7 +9,7 @@ import {
 	type AosAuditResult,
 	type AxisBreakdown,
 	type RequirementResult,
-	type UrlGuardResult,
+	type UrlTextGuardResult,
 	validateAuditUrl,
 } from "@workspace/aos-aps/aos";
 import { z } from "zod";
@@ -198,9 +198,59 @@ export function withRateLimitHeaders(response: Response, decision: QuotaDecision
 /**
  * Validación de la URL pública: la del guardián anti-SSRF, sin aflojar nada. Vive acá para que la
  * ruta y sus tests tengan un único punto de entrada.
+ *
+ * La forma sí se tolera: un dominio pelado (`ejemplo.com`, `ejemplo.com/precios`) entra como
+ * `https://ejemplo.com`. El destino, no: sigue pasando por el guardián completo.
+ *
+ * Devuelve el resultado **textual** (`UrlTextGuardResult`), no el de `assertSafeAuditUrl`: acá no se
+ * resolvió DNS, así que no hay direcciones validadas que prometer.
  */
-export function validatePublicAuditUrl(raw: string): UrlGuardResult {
+export function validatePublicAuditUrl(raw: string): UrlTextGuardResult {
 	return validateAuditUrl(raw);
+}
+
+/**
+ * Códigos del rechazo de una dirección, para el cuerpo del 400.
+ *
+ * Existen porque los dos motivos son **distintos y no se pueden confundir**: `invalid_url` es "no
+ * pudimos interpretar eso como una dirección" (un error de forma, que el usuario arregla
+ * escribiéndola bien) y `blocked_url` es "esa dirección queda afuera por seguridad" (un destino
+ * interno, que no se arregla reescribiéndolo). El texto solo ya se confundía: la extensión 2.1.0
+ * mapeaba *cualquier* 400 al texto del guardián, así que un error de parseo se le mostraba al
+ * usuario como si hubiera auditado `localhost`.
+ *
+ * Va **al lado** de `error` y `message`, no en su lugar: el contrato de éxito y las claves que ya
+ * viajaban quedan igual.
+ */
+export type PublicAuditErrorCode = "invalid_url" | "blocked_url";
+
+export interface PublicAuditUrlRejection {
+	code: PublicAuditErrorCode;
+	message: string;
+}
+
+/**
+ * Traduce el rechazo del guardián a lo que el 400 le dice al cliente.
+ *
+ * `blocked` no publica el motivo real: contarlo revelaría qué resolvió nuestro DNS. `unresolved` se
+ * trata igual que `blocked` de cara al cliente —desde afuera, "no resuelve" y "resuelve a algo
+ * interno" no se distinguen— y el detalle queda en el log del servidor.
+ */
+export function classifyPublicAuditUrlFailure(failure: {
+	kind: "invalid" | "blocked" | "unresolved";
+	reason: string;
+}): PublicAuditUrlRejection {
+	if (failure.kind === "invalid") {
+		return {
+			code: "invalid_url",
+			message:
+				"No pudimos interpretar esa dirección. Probá con una URL (https://ejemplo.com) o un dominio (ejemplo.com).",
+		};
+	}
+	return {
+		code: "blocked_url",
+		message: "No auditamos URLs que apunten a una red interna.",
+	};
 }
 
 /** Cuerpo del audit público. */

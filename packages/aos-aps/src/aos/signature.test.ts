@@ -1,5 +1,5 @@
-import { createServer, type Server } from "node:http";
 import { generateKeyPairSync } from "node:crypto";
+import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { generateAgentAssets } from "../assets";
@@ -42,15 +42,35 @@ async function serve(files: Record<string, string>): Promise<{ base: URL; close:
 	};
 }
 
+/**
+ * Pedido sin guardián, solo para el test.
+ *
+ * El servidor de la prueba escucha en `127.0.0.1`, y el guardián anti-SSRF —con razón— no deja pedir
+ * la loopback. La salida no es relajar el guardián sino inyectar el pedido: estos tests prueban que la
+ * firma Ed25519 verifique sobre los bytes servidos, no el guardián. El camino de producción sale por
+ * `safeFetch`, y el guardián tiene sus propios tests.
+ */
+async function localFetchText(url: string, timeoutMs: number): Promise<string | null> {
+	try {
+		const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+		if (response.ok === false) return null;
+		return await response.text();
+	} catch {
+		return null;
+	}
+}
+
+const INJECTED = { fetchText: localFetchText };
+
 describe("verifyBrandSignatureDetailed", () => {
 	it("verifies the detached signature an agent would fetch", async () => {
 		const { base, close } = await serve(bundle(newSigningKey()));
 		try {
-			const result = await verifyBrandSignatureDetailed(base, 2000);
+			const result = await verifyBrandSignatureDetailed(base, 2000, undefined, INJECTED);
 			expect(result.valid).toBe(true);
 			expect(result.reason).toBeNull();
 			expect(result.kid).not.toBeNull();
-			expect(await verifyBrandSignature(base, 2000)).toBe(true);
+			expect(await verifyBrandSignature(base, 2000, undefined, INJECTED)).toBe(true);
 		} finally {
 			await close();
 		}
@@ -61,7 +81,7 @@ describe("verifyBrandSignatureDetailed", () => {
 		files["/.well-known/brand.json"] = `${files["/.well-known/brand.json"]} `;
 		const { base, close } = await serve(files);
 		try {
-			const result = await verifyBrandSignatureDetailed(base, 2000);
+			const result = await verifyBrandSignatureDetailed(base, 2000, undefined, INJECTED);
 			expect(result.valid).toBe(false);
 			expect(result.reason).toBe("signature does not verify");
 		} finally {
@@ -76,7 +96,7 @@ describe("verifyBrandSignatureDetailed", () => {
 		files["/.well-known/keys.json"] = JSON.stringify(keys);
 		const { base, close } = await serve(files);
 		try {
-			const result = await verifyBrandSignatureDetailed(base, 2000);
+			const result = await verifyBrandSignatureDetailed(base, 2000, undefined, INJECTED);
 			expect(result.valid).toBe(false);
 			expect(result.reason).toBe("no published key matches kid");
 		} finally {
@@ -89,7 +109,9 @@ describe("verifyBrandSignatureDetailed", () => {
 		delete files["/.well-known/brand.json.sig"];
 		const { base, close } = await serve(files);
 		try {
-			expect((await verifyBrandSignatureDetailed(base, 2000)).reason).toBe("brand.json.sig not served");
+			expect((await verifyBrandSignatureDetailed(base, 2000, undefined, INJECTED)).reason).toBe(
+				"brand.json.sig not served",
+			);
 		} finally {
 			await close();
 		}
@@ -99,7 +121,9 @@ describe("verifyBrandSignatureDetailed", () => {
 		withoutBrand["/x"] = "";
 		const second = await serve(withoutBrand);
 		try {
-			expect((await verifyBrandSignatureDetailed(second.base, 2000)).reason).toBe("brand.json not served");
+			expect((await verifyBrandSignatureDetailed(second.base, 2000, undefined, INJECTED)).reason).toBe(
+				"brand.json not served",
+			);
 		} finally {
 			await second.close();
 		}

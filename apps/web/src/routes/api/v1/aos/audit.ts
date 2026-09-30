@@ -15,6 +15,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { assertSafeAuditUrl, runAosAudit } from "@workspace/aos-aps/aos";
 import {
+	classifyPublicAuditUrlFailure,
 	clientKeyFromHeaders,
 	decidePublicQuota,
 	type PublicAuditResponse,
@@ -57,21 +58,30 @@ export const Route = createFileRoute("/api/v1/aos/audit")({
 					const limits = publicAuditLimits();
 
 					// 1. Validación barata y textual: si la URL está mal no gastamos cupo ni salimos a la red.
+					//    Un dominio pelado se interpreta como `https://…` acá y sigue el camino normal: se
+					//    tolera la forma, nunca el destino.
 					const textual = validatePublicAuditUrl(body.url);
 					if (textual.ok === false) {
-						throw new ApiError(400, "Bad Request", textual.reason);
+						const rejection = classifyPublicAuditUrlFailure(textual);
+						// El `code` distingue "no se pudo interpretar" de "queda afuera por seguridad". Sin él,
+						// la extensión 2.1.0 le mostraba a un error de parseo el texto del guardián anti-SSRF.
+						return Response.json(
+							{ error: "Bad Request", message: rejection.message, code: rejection.code },
+							{ status: 400 },
+						);
 					}
 
 					// 2. El guardián anti-SSRF, con resolución DNS: el hostname tiene que resolver a
 					//    direcciones públicas, no alcanza con que el texto no diga "localhost".
 					const safe = await assertSafeAuditUrl(body.url);
 					if (safe.ok === false) {
+						const rejection = classifyPublicAuditUrlFailure(safe);
 						// Un destino interno se rechaza sin contarle al cliente qué resolvió nuestro DNS.
-						if (safe.kind === "blocked") {
-							console.warn(`[aos-public] audit rechazado (${safe.kind}): ${safe.reason}`);
-							throw new ApiError(400, "Bad Request", "No auditamos URLs que apunten a una red interna.");
-						}
-						throw new ApiError(400, "Bad Request", safe.reason);
+						console.warn(`[aos-public] audit rechazado (${safe.kind}): ${safe.reason}`);
+						return Response.json(
+							{ error: "Bad Request", message: rejection.message, code: rejection.code },
+							{ status: 400 },
+						);
 					}
 
 					// 3. El cupo. Se gasta recién cuando el pedido es auditable de verdad.

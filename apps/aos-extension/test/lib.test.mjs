@@ -37,6 +37,7 @@ import {
 	mapSubScores,
 	NO_EVIDENCE_TEXT,
 	NO_PROFILE_TEXT,
+	parseAuditFailure,
 	readRetryAfter,
 } from "../lib.js";
 
@@ -230,28 +231,52 @@ describe("requisito diagnostic sin gain", () => {
 
 describe("el texto de cada error", () => {
 	it("un 429 y un 400 dicen cosas distintas", () => {
-		const cupo = auditErrorText(429, 3600);
-		const rechazo = auditErrorText(400);
+		const cupo = auditErrorText(429, { retryAfterSeconds: 3600 });
+		const rechazo = auditErrorText(400, { code: "blocked_url" });
 		assert.notEqual(cupo.title, rechazo.title);
 		assert.notEqual(cupo.detail, rechazo.detail);
 	});
 
-	it("el 400 explica que la dirección no es auditable, sin jerga", () => {
-		const r = auditErrorText(400);
-		assert.match(r.title, /No se puede auditar esa dirección/);
-		assert.match(r.detail, /http\(s\)/);
-		assert.match(r.detail, /internas/);
+	/**
+	 * El segundo defecto del bug: la extensión mapeaba *cualquier* 400 al texto del guardián, así que
+	 * un error de parseo se le mostraba a Jorge como si hubiera auditado una dirección interna.
+	 */
+	it("los dos 400 que el servidor distingue dicen cosas distintas y verdaderas", () => {
+		const noSePudoLeer = auditErrorText(400, { code: "invalid_url" });
+		const afuera = auditErrorText(400, { code: "blocked_url" });
+
+		assert.match(noSePudoLeer.title, /interpretar/);
+		assert.match(noSePudoLeer.detail, /https:\/\//, "le dice cómo escribirla bien");
+		assert.equal(
+			/no es pública|internas|localhost|metadatos/.test(noSePudoLeer.detail),
+			false,
+			"un error de parseo NO puede hablar de direcciones internas",
+		);
+
+		assert.match(afuera.title, /seguridad/);
+		assert.match(afuera.detail, /http\(s\)/);
+		assert.match(afuera.detail, /internas/);
+
+		assert.notEqual(noSePudoLeer.title, afuera.title);
+		assert.notEqual(noSePudoLeer.detail, afuera.detail);
+	});
+
+	it("un 400 sin `code` (servidor viejo) no inventa el motivo", () => {
+		const sinCodigo = auditErrorText(400);
+		assert.match(sinCodigo.detail, /no dijo por qué/);
+		// No afirma que la dirección sea interna ni que esté mal escrita: no sabe cuál de las dos es.
+		assert.equal(/por seguridad/.test(sinCodigo.detail), false);
 	});
 
 	it("el 429 dice cuándo puede volver, leyendo el Retry-After", () => {
-		const unaHora = auditErrorText(429, 3600);
+		const unaHora = auditErrorText(429, { retryAfterSeconds: 3600 });
 		assert.match(unaHora.title, /cupo por hoy/);
 		assert.match(unaHora.detail, /20 auditorías por IP y por día/);
 		assert.match(unaHora.detail, /en 1 h/, "traduce los segundos a algo legible");
 	});
 
 	it("si el 429 no trae Retry-After, igual dice cuándo: la medianoche UTC", () => {
-		const sinHeader = auditErrorText(429, null);
+		const sinHeader = auditErrorText(429, { retryAfterSeconds: null });
 		assert.match(sinHeader.detail, /medianoche UTC/);
 		assert.equal(/undefined|null|NaN/.test(sinHeader.detail), false);
 	});
@@ -262,12 +287,56 @@ describe("el texto de cada error", () => {
 		assert.match(lento.title, /tardó demasiado/);
 		assert.match(generico.title, /No se pudo medir/);
 		assert.match(generico.detail, /500/);
-		const titulos = [auditErrorText(400), auditErrorText(429), lento, generico].map((e) => e.title);
+		const titulos = [
+			auditErrorText(400, { code: "invalid_url" }),
+			auditErrorText(400, { code: "blocked_url" }),
+			auditErrorText(429),
+			lento,
+			generico,
+		].map((e) => e.title);
 		assert.equal(new Set(titulos).size, titulos.length, "cada caso tiene su propio título");
 	});
 
 	it("el estado 0 es 'no se pudo llegar', no un error del sitio", () => {
 		assert.match(auditErrorText(0).title, /No se pudo llegar al servicio/);
+	});
+});
+
+describe("parseAuditFailure", () => {
+	it("conserva el `code` que manda el servidor, que es lo que separa los dos 400", () => {
+		const parseo = parseAuditFailure({
+			status: 400,
+			headers: headers({}),
+			body: { error: "Bad Request", message: "No pudimos interpretar esa dirección.", code: "invalid_url" },
+		});
+		assert.equal(parseo.ok, false);
+		assert.equal(parseo.status, 400);
+		assert.equal(parseo.code, "invalid_url");
+	});
+
+	it("un rechazo del guardián llega como `blocked_url` y no como un parseo", () => {
+		const bloqueada = parseAuditFailure({
+			status: 400,
+			headers: headers({}),
+			body: { error: "Bad Request", message: "No auditamos URLs que apunten a una red interna.", code: "blocked_url" },
+		});
+		assert.equal(bloqueada.code, "blocked_url");
+		assert.equal(
+			auditErrorText(bloqueada.status, { code: bloqueada.code }).title,
+			"Esa dirección queda afuera por seguridad",
+		);
+	});
+
+	it("un 429 sigue leyendo el Retry-After, y sin `code` queda en null", () => {
+		const cupo = parseAuditFailure({ status: 429, headers: headers({ "Retry-After": "3600" }), body: null });
+		assert.equal(cupo.retryAfterSeconds, 3600);
+		assert.equal(cupo.code, null);
+	});
+
+	it("un cuerpo ilegible no rompe: status y code nulos, sin inventar", () => {
+		const raro = parseAuditFailure({ status: 500, headers: headers({}), body: undefined });
+		assert.equal(raro.code, null);
+		assert.equal(raro.error, null);
 	});
 });
 
@@ -281,6 +350,49 @@ describe("armar el request", () => {
 		const cabeceras = Object.keys(init.headers).map((h) => h.toLowerCase());
 		assert.equal(cabeceras.includes("authorization"), false, "ya no hay Bearer");
 		assert.equal(cabeceras.includes("apikey"), false, "ya no hay apikey de Supabase");
+	});
+
+	/**
+	 * EL TEST QUE FALTABA, y que habría cazado el bug que dejó la 2.1.0 inservible.
+	 *
+	 * Lo que se prueba es el contrato entre las dos puntas: **lo que el popup le manda al endpoint
+	 * tiene que ser una URL completa**, con esquema `http(s)://` y con el path de la pestaña. Con el
+	 * dominio pelado (lo que mandaba la 2.1.0) el endpoint contesta 400 y la extensión no funciona
+	 * contra ninguna web.
+	 */
+	describe("el cuerpo del audit sale de la pestaña, no del dominio pelado", () => {
+		/** Un tab como el que devuelve `chrome.tabs.query`, parado en una página con path. */
+		const tab = { url: "https://bescore.believe-global.com/precios?plan=pro" };
+		const dominio = domainFromUrl(tab.url);
+
+		it("el dominio pelado que se usa para el header NO es una URL parseable", () => {
+			// Es el bug, escrito como aserción: esto es lo que mandaba la 2.1.0 y lo que el endpoint
+			// rechaza. Si algún día el dominio pelado vuelve a viajar en el cuerpo, este test lo dice.
+			assert.equal(dominio, "bescore.believe-global.com");
+			assert.throws(() => new URL(dominio), "el dominio pelado no es una URL");
+			assert.equal(auditRequestBody(dominio).url, "bescore.believe-global.com");
+		});
+
+		it("el cuerpo lleva la URL completa: con esquema y con el path de la pestaña", () => {
+			const init = auditRequestInit(tab.url);
+			const cuerpo = JSON.parse(init.body);
+			assert.equal(cuerpo.url, "https://bescore.believe-global.com/precios?plan=pro");
+			assert.match(cuerpo.url, /^https?:\/\//, "con esquema: el endpoint exige una URL parseable");
+			assert.equal(new URL(cuerpo.url).pathname, "/precios", "con el path: no se audita la home en su lugar");
+			assert.notEqual(cuerpo.url, dominio, "y nunca el dominio pelado");
+		});
+
+		it("el popup pide el audit con la URL de la pestaña, no con el dominio", () => {
+			// Guardia estática del cableado: el popup no tiene compilador que lo agarre, y volver a
+			// `auditUrl(currentDomain)` reintroduce el bug entero.
+			const POPUP = readFileSync(new URL("../popup.js", import.meta.url), "utf8");
+			assert.match(POPUP, /auditUrl\(currentUrl\)/, "el audit va con la URL completa");
+			assert.equal(/auditUrl\(currentDomain\)/.test(POPUP), false, "y nunca con el dominio pelado");
+			assert.match(POPUP, /currentUrl = tab\.url/, "`currentUrl` es la URL de la pestaña tal cual");
+			// El dominio sigue existiendo, pero solo para el header y para la clave del caché.
+			assert.match(POPUP, /getCachedAudit\(currentDomain\)/);
+			assert.match(POPUP, /setCachedAudit\(currentDomain,/);
+		});
 	});
 
 	it("el lead manda solo los campos que existen y un score válido", () => {

@@ -93,9 +93,16 @@ test de cableado prohíbe que cualquier `href` del popup apunte al host de la AP
 El contrato de la respuesta y la semántica de los estados viven en el repo:
 `apps/web/src/lib/aos/public-audit.ts` y `apps/web/src/components/status-tone.tsx`.
 
-Los errores se traducen a un mensaje claro, nunca a un alert técnico: **400** la dirección no es
-auditable (destinos internos, `localhost`, metadatos de nube, esquemas que no son http/https),
-**429** se pasó el cupo y se lee `Retry-After` para decir cuándo puede volver, **504** tardó
+El audit manda la **URL completa de la pestaña** (`tab.url`), con esquema y con path: el path importa,
+porque parado en `https://sitio.com/precios` hay que auditar esa página y no la home. El **dominio**
+(`domainFromUrl`, sin `www.`) se usa solo para el encabezado y para la clave del caché, que es una
+entrada por sitio. El endpoint además tolera un dominio pelado y lo interpreta como `https://…`, así
+que la extensión 2.1.0 —la que manda el dominio— también funciona contra ese servidor.
+
+Los errores se traducen a un mensaje claro, nunca a un alert técnico. El **400** viene con un `code`
+y hay dos motivos distintos que no se confunden: `invalid_url` (no se pudo interpretar la dirección)
+e `blocked_url` (destinos internos, `localhost`, metadatos de nube, esquemas que no son http/https).
+Después: **429** se pasó el cupo y se lee `Retry-After` para decir cuándo puede volver, **504** tardó
 demasiado, cualquier otro un mensaje genérico con el detalle en la consola.
 
 ## Qué muestra el popup

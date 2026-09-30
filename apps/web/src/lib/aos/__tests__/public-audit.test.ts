@@ -1,6 +1,7 @@
 import type { AosAuditResult } from "@workspace/aos-aps/aos";
 import { describe, expect, it } from "vitest";
 import {
+	classifyPublicAuditUrlFailure,
 	clientKeyFromHeaders,
 	DEFAULT_AUDITS_PER_DAY,
 	DEFAULT_AUDITS_PER_DAY_GLOBAL,
@@ -235,6 +236,55 @@ describe("validatePublicAuditUrl", () => {
 
 	it("acepta una IP pública como literal", () => {
 		expect(validatePublicAuditUrl("http://93.184.216.34/").ok).toBe(true);
+	});
+
+	/**
+	 * El arreglo urgente: la extensión 2.1.0 que está en review manda el dominio pelado, y con el
+	 * guardián viejo eso era un 400 para *cualquier* sitio. Si estas dos pruebas pasan, la extensión
+	 * que ya está publicada empieza a funcionar sin subir nada nuevo.
+	 */
+	it("acepta un dominio pelado y lo normaliza a https", () => {
+		const result = validatePublicAuditUrl("bescore.believe-global.com");
+		expect(result.ok).toBe(true);
+		expect(result.ok === true && result.url.toString()).toBe("https://bescore.believe-global.com/");
+	});
+
+	it("conserva el path del dominio pelado: no se audita la home en lugar de la página", () => {
+		const result = validatePublicAuditUrl("bescore.believe-global.com/precios");
+		expect(result.ok).toBe(true);
+		expect(result.ok === true && result.url.toString()).toBe("https://bescore.believe-global.com/precios");
+	});
+
+	it("un dominio pelado interno se rechaza igual que uno con esquema", () => {
+		for (const raw of ["localhost", "localhost:3000", "127.0.0.1", "10.1.2.3", "169.254.169.254"]) {
+			const result = validatePublicAuditUrl(raw);
+			expect(result.ok, raw).toBe(false);
+			expect(result.ok === false && result.kind, raw).toBe("blocked");
+		}
+	});
+});
+
+describe("classifyPublicAuditUrlFailure", () => {
+	it("distingue 'no se pudo interpretar' de 'queda afuera por seguridad'", () => {
+		const noSePudoLeer = classifyPublicAuditUrlFailure({ kind: "invalid", reason: "cualquiera" });
+		const afuera = classifyPublicAuditUrlFailure({ kind: "blocked", reason: "cualquiera" });
+
+		expect(noSePudoLeer.code).toBe("invalid_url");
+		expect(afuera.code).toBe("blocked_url");
+		expect(noSePudoLeer.message).not.toBe(afuera.message);
+		// El texto del parseo habla de la forma; el del bloqueo, de la seguridad. No se confunden.
+		expect(noSePudoLeer.message).toMatch(/interpretar/);
+		expect(afuera.message).toMatch(/red interna/);
+		expect(noSePudoLeer.message).not.toMatch(/red interna/);
+	});
+
+	it("un host que no resuelve se cuenta como bloqueado: desde afuera es lo mismo", () => {
+		expect(classifyPublicAuditUrlFailure({ kind: "unresolved", reason: "ENOTFOUND" }).code).toBe("blocked_url");
+	});
+
+	it("no filtra el motivo real de un rechazo del guardián", () => {
+		const rejection = classifyPublicAuditUrlFailure({ kind: "blocked", reason: '"sitio.com" resuelve a 10.0.0.7' });
+		expect(rejection.message).not.toMatch(/10\.0\.0\.7|resuelve/);
 	});
 });
 
