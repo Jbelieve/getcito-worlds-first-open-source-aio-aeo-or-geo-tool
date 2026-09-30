@@ -1,0 +1,18 @@
+apps/aos-extension/manifest.json
+  h_c5ca005a78c880 4
+apps/aos-extension/store/STORE-LISTING.md
+  h_c5ca005a78c880 14,17-39
+apps/aos-extension/test/extension-wiring.test.mjs
+  h_c5ca005a78c880 6,35,37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e0d6bb318a5603cb554e0a757e89380b03fcbba7",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
