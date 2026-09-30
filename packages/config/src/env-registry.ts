@@ -404,4 +404,11 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description:
 			"true/1 declara que el único camino al origen es Cloudflare, y entonces cf-connecting-ip pasa a ser la identidad del cliente (default: apagado). Encenderlo SOLO después de restringir el firewall a los rangos de Cloudflare: mientras el origen sea alcanzable directo, esa cabecera se puede falsificar y el cupo por IP se evade.",
 	},
+	{
+		name: "AOS_PUBLIC_CORS_ORIGINS",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Lista blanca de orígenes (separados por coma) que pueden leer las respuestas de /api/v1/aos/audit y /api/v1/aos/lead desde un navegador. Default: https://be-aos.believe-global.com, https://www.be-aos.believe-global.com, https://believe-global.com, https://www.believe-global.com. El widget DEBE llamar a esos endpoints desde el navegador del visitante: si la landing lo hace server-side, todos los visitantes salen con la IP del servidor y se comen entre todos el cupo diario por IP.",
+	},
 ];

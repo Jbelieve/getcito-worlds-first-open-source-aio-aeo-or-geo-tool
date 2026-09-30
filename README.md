@@ -299,6 +299,7 @@ Required-column legend: **local** = required in local mode · **wl** = required 
 | `VITE_CHART_COLORS` | client | Comma-separated chart palette override. |
 | `ADMIN_AUTH0_SUB` / `ADMIN_API_KEYS` | server | Admin access (subject claim / bearer tokens). |
 | `DEFAULT_BRAND_DOMAINS` | server | Comma-separated domains added as default brands. |
+| `AOS_PUBLIC_CORS_ORIGINS` | server | Comma-separated whitelist of browser origins allowed to read the public AOS endpoints. Defaults to the BeAOS landing and `believe-global.com` (see [Public AOS endpoints](#public-aos-endpoints-apiv1aosaudit-apiv1aoslead)). |
 | `DBOS_SYSTEM_DATABASE_URL` | server | Override for the DBOS system database URL. |
 
 ## Usage
@@ -359,6 +360,47 @@ Example:
 ```bash
 curl -H "Authorization: Bearer $GETCITO_TOKEN" \
      http://localhost:3001/api/v1/brands
+```
+
+### Public AOS endpoints (`/api/v1/aos/audit`, `/api/v1/aos/lead`)
+
+The public BeAOS surface is the two endpoints the browser extension and the landing page's free
+**"mide tu web"** widget call. They are deliberately anonymous — no API key, no session, no state:
+`POST /api/v1/aos/audit` measures the AOS of any URL the caller sends, and `POST /api/v1/aos/lead`
+stores the email of whoever wants to be contacted. What protects them is a daily quota per IP plus a
+global cap, not a credential.
+
+Both answer CORS for the origins in `AOS_PUBLIC_CORS_ORIGINS` (comma-separated, server scope).
+Default: `https://be-aos.believe-global.com`, `https://www.be-aos.believe-global.com`,
+`https://believe-global.com`, `https://www.believe-global.com`. The list is a whitelist, not `*`:
+the origin is echoed back exactly, an origin that is not on the list gets **no** CORS headers at all
+(the request is still processed — the server is not a gatekeeper), and `Access-Control-Allow-Credentials`
+is never sent, because these endpoints have no cookies or session. `Vary: Origin` is always present so
+a cache can never serve one origin the response built for another.
+
+> [!IMPORTANT]
+> **The widget must call these endpoints from the visitor's browser, not from the landing's backend.**
+> The audit quota is **per IP**. If the landing calls server-side, every visitor arrives with the
+> landing server's IP, the quota becomes a single bucket for the whole internet, and the meter runs
+> out after the first handful of visitors. Calling from the browser means each visitor spends their
+> own IP and the quota spreads by itself — that is what the daily limit is sized for. CORS is what
+> makes the browser call possible; moving the call to the backend "to avoid CORS" breaks the quota.
+> This decision is also written where the whitelist lives: `apps/web/src/lib/aos/public-cors.ts`.
+>
+> The extension is unaffected: it keeps working through its `host_permissions`, which bypass CORS.
+
+```bash
+# Preflight from an allowed origin → 204 with Access-Control-Allow-Origin
+curl -i -X OPTIONS https://beaos.believe-global.com/api/v1/aos/audit \
+  -H "Origin: https://be-aos.believe-global.com" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: content-type"
+
+# POST from an allowed origin → 200, readable by the browser
+curl -i -X POST https://beaos.believe-global.com/api/v1/aos/audit \
+  -H "Origin: https://be-aos.believe-global.com" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://ejemplo.com"}'
 ```
 
 ## Database

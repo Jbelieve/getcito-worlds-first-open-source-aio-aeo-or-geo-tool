@@ -11,6 +11,11 @@
  * servidor termina pidiendo URLs arbitrarias que manda un desconocido.
  *
  * No persiste nada: es una medición al paso, no una marca del sistema.
+ *
+ * **CORS**: la landing pública ("mide tu web") llama a este endpoint **desde el navegador del
+ * visitante**, y por eso el POST y el preflight salen con la lista blanca de `AOS_PUBLIC_CORS_ORIGINS`.
+ * El porqué de que la llamada viva en el navegador —y no en el backend de la landing— está escrito
+ * en `@/lib/aos/public-cors`, que es donde se define la lista. No lo muevas sin leerlo.
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { assertSafeAuditUrl, runAosAudit } from "@workspace/aos-aps/aos";
@@ -26,6 +31,7 @@ import {
 	rateLimitHeaders,
 	validatePublicAuditUrl,
 } from "@/lib/aos/public-audit";
+import { publicCorsPreflightResponse, withPublicCorsHandler } from "@/lib/aos/public-cors";
 import { consumePublicQuota } from "@/lib/aos/public-limit.server";
 import { ApiError, createPublicApiHandler } from "@/lib/api/handler";
 
@@ -52,81 +58,87 @@ function totalTimeout(ms: number): { promise: Promise<never>; cancel: () => void
 export const Route = createFileRoute("/api/v1/aos/audit")({
 	server: {
 		handlers: {
-			POST: createPublicApiHandler({
-				body: publicAuditBody,
-				handle: async ({ body, request }): Promise<Response> => {
-					const limits = publicAuditLimits();
+			// El preflight del navegador: 204, con las cabeceras del contrato solo si el origen está
+			// en la lista blanca. Un origen ajeno recibe el 204 pelado y su navegador corta el POST.
+			OPTIONS: ({ request }) => publicCorsPreflightResponse(request),
 
-					// 1. Validación barata y textual: si la URL está mal no gastamos cupo ni salimos a la red.
-					//    Un dominio pelado se interpreta como `https://…` acá y sigue el camino normal: se
-					//    tolera la forma, nunca el destino.
-					const textual = validatePublicAuditUrl(body.url);
-					if (textual.ok === false) {
-						const rejection = classifyPublicAuditUrlFailure(textual);
-						// El `code` distingue "no se pudo interpretar" de "queda afuera por seguridad". Sin él,
-						// la extensión 2.1.0 le mostraba a un error de parseo el texto del guardián anti-SSRF.
-						return Response.json(
-							{ error: "Bad Request", message: rejection.message, code: rejection.code },
-							{ status: 400 },
-						);
-					}
+			POST: withPublicCorsHandler(
+				createPublicApiHandler({
+					body: publicAuditBody,
+					handle: async ({ body, request }): Promise<Response> => {
+						const limits = publicAuditLimits();
 
-					// 2. El guardián anti-SSRF, con resolución DNS: el hostname tiene que resolver a
-					//    direcciones públicas, no alcanza con que el texto no diga "localhost".
-					const safe = await assertSafeAuditUrl(body.url);
-					if (safe.ok === false) {
-						const rejection = classifyPublicAuditUrlFailure(safe);
-						// Un destino interno se rechaza sin contarle al cliente qué resolvió nuestro DNS.
-						console.warn(`[aos-public] audit rechazado (${safe.kind}): ${safe.reason}`);
-						return Response.json(
-							{ error: "Bad Request", message: rejection.message, code: rejection.code },
-							{ status: 400 },
-						);
-					}
-
-					// 3. El cupo. Se gasta recién cuando el pedido es auditable de verdad.
-					//    `cfOnlyIngress` sale de la env: apagado (lo medido hoy, el origen es alcanzable
-					//    directo) la identidad es el salto que escribe Traefik; encendido, Cloudflare.
-					const snapshot = await consumePublicQuota(
-						clientKeyFromHeaders(request.headers, { cfOnlyIngress: limits.cfOnlyIngress }),
-						limits,
-					);
-					const quota = decidePublicQuota(snapshot);
-					if (quota.allowed === false) {
-						const message =
-							quota.reason === "global_limit"
-								? "El audit público alcanzó su tope diario. Probá mañana."
-								: `Alcanzaste el límite de ${quota.limit} auditorías por día.`;
-						return rateLimitedResponse(quota, message);
-					}
-
-					// 4. El motor, tal como lo corre el worker. No se reescribe nada de la lógica.
-					const { promise: timeout, cancel } = totalTimeout(limits.totalTimeoutMs);
-					let result: Awaited<ReturnType<typeof runAosAudit>>;
-					try {
-						result = await Promise.race([
-							runAosAudit({ url: safe.url.toString(), timeoutMs: limits.requestTimeoutMs }),
-							timeout,
-						]);
-					} catch (error) {
-						if (error instanceof ApiError) {
+						// 1. Validación barata y textual: si la URL está mal no gastamos cupo ni salimos a la red.
+						//    Un dominio pelado se interpreta como `https://…` acá y sigue el camino normal: se
+						//    tolera la forma, nunca el destino.
+						const textual = validatePublicAuditUrl(body.url);
+						if (textual.ok === false) {
+							const rejection = classifyPublicAuditUrlFailure(textual);
+							// El `code` distingue "no se pudo interpretar" de "queda afuera por seguridad". Sin él,
+							// la extensión 2.1.0 le mostraba a un error de parseo el texto del guardián anti-SSRF.
 							return Response.json(
-								{ error: error.error, message: error.message },
-								{ status: error.status, headers: rateLimitHeaders(quota) },
+								{ error: "Bad Request", message: rejection.message, code: rejection.code },
+								{ status: 400 },
 							);
 						}
-						// El motor no falla por un sitio caído (sus probes devuelven null): llegar acá es un
-						// bug nuestro o el caso raro de un DNS que cambió entre la validación y el pedido.
-						console.error(`[aos-public] audit de ${safe.url.toString()} falló:`, error);
-						throw error;
-					} finally {
-						cancel();
-					}
 
-					const payload: PublicAuditResponse = publicAuditResponse(result, new Date());
-					return Response.json(payload, { headers: rateLimitHeaders(quota) });
-				},
-			}),
+						// 2. El guardián anti-SSRF, con resolución DNS: el hostname tiene que resolver a
+						//    direcciones públicas, no alcanza con que el texto no diga "localhost".
+						const safe = await assertSafeAuditUrl(body.url);
+						if (safe.ok === false) {
+							const rejection = classifyPublicAuditUrlFailure(safe);
+							// Un destino interno se rechaza sin contarle al cliente qué resolvió nuestro DNS.
+							console.warn(`[aos-public] audit rechazado (${safe.kind}): ${safe.reason}`);
+							return Response.json(
+								{ error: "Bad Request", message: rejection.message, code: rejection.code },
+								{ status: 400 },
+							);
+						}
+
+						// 3. El cupo. Se gasta recién cuando el pedido es auditable de verdad.
+						//    `cfOnlyIngress` sale de la env: apagado (lo medido hoy, el origen es alcanzable
+						//    directo) la identidad es el salto que escribe Traefik; encendido, Cloudflare.
+						const snapshot = await consumePublicQuota(
+							clientKeyFromHeaders(request.headers, { cfOnlyIngress: limits.cfOnlyIngress }),
+							limits,
+						);
+						const quota = decidePublicQuota(snapshot);
+						if (quota.allowed === false) {
+							const message =
+								quota.reason === "global_limit"
+									? "El audit público alcanzó su tope diario. Probá mañana."
+									: `Alcanzaste el límite de ${quota.limit} auditorías por día.`;
+							return rateLimitedResponse(quota, message);
+						}
+
+						// 4. El motor, tal como lo corre el worker. No se reescribe nada de la lógica.
+						const { promise: timeout, cancel } = totalTimeout(limits.totalTimeoutMs);
+						let result: Awaited<ReturnType<typeof runAosAudit>>;
+						try {
+							result = await Promise.race([
+								runAosAudit({ url: safe.url.toString(), timeoutMs: limits.requestTimeoutMs }),
+								timeout,
+							]);
+						} catch (error) {
+							if (error instanceof ApiError) {
+								return Response.json(
+									{ error: error.error, message: error.message },
+									{ status: error.status, headers: rateLimitHeaders(quota) },
+								);
+							}
+							// El motor no falla por un sitio caído (sus probes devuelven null): llegar acá es un
+							// bug nuestro o el caso raro de un DNS que cambió entre la validación y el pedido.
+							console.error(`[aos-public] audit de ${safe.url.toString()} falló:`, error);
+							throw error;
+						} finally {
+							cancel();
+						}
+
+						const payload: PublicAuditResponse = publicAuditResponse(result, new Date());
+						return Response.json(payload, { headers: rateLimitHeaders(quota) });
+					},
+				}),
+			),
 		},
 	},
 });
