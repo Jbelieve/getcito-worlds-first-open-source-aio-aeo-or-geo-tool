@@ -64,7 +64,7 @@ agentes, lo dejás y el equipo de Believe te contacta.
 
 AOS™ (Agent Operability Score) y APS (Agent Preference Score) son los dos puntajes del estándar
 que BeAOS mide. BeAOS es parte de la infraestructura de marca para la era de agentes que construye
-Believe. Más en beaos.believe-global.com.
+Believe. Más en be-aos.believe-global.com.
 ```
 
 ## Justificación de permisos (campo "Permission justification" — Google lo pide para cada uno)

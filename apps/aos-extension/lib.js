@@ -11,8 +11,24 @@
 // los estados, en `apps/web/src/components/status-tone.tsx`. Si cambia uno, cambia esto.
 
 // --- dónde vive BeAOS ---------------------------------------------------------
+//
+// **Dos hosts, dos papeles, y no son intercambiables:**
+//
+//   `be-aos.believe-global.com` — la web PÚBLICA que ve el usuario ("BeAOS — el estándar de marca
+//                                para agentes de IA"). Es la que va en cualquier enlace del popup.
+//   `beaos.believe-global.com`  — la APP y la API. Ahí viven los endpoints, y ahí apunta el
+//                                `host_permissions` del manifest. Abrirla con el navegador redirige
+//                                a `/auth/login`: es una app con sesión, no una página de marca.
+//
+// El bug que esto evita: un solo `BEAOS_URL` que se usaba para las dos cosas mandaba al usuario a
+// la pantalla de login cuando pedía "ver más sobre BeAOS". Por eso ahora hay dos constantes con
+// nombre explícito y nada que las mezcle.
 
-export const BEAOS_URL = "https://beaos.believe-global.com";
+/** La web pública: la landing que se le muestra a una persona. */
+export const BEAOS_WEB_URL = "https://be-aos.believe-global.com";
+
+/** La API: solo endpoints. Nunca es un enlace para el usuario. */
+export const BEAOS_API_URL = "https://beaos.believe-global.com";
 
 /**
  * Los dos endpoints de BeAOS. Públicos a propósito: **sin credencial**, sin apikey y sin sesión.
@@ -20,8 +36,8 @@ export const BEAOS_URL = "https://beaos.believe-global.com";
  * nada más que el cuerpo. Lo que sostiene el servicio es el límite diario por IP más el tope
  * global del endpoint, no un token.
  */
-export const AUDIT_ENDPOINT = `${BEAOS_URL}/api/v1/aos/audit`;
-export const LEAD_ENDPOINT = `${BEAOS_URL}/api/v1/aos/lead`;
+export const AUDIT_ENDPOINT = `${BEAOS_API_URL}/api/v1/aos/audit`;
+export const LEAD_ENDPOINT = `${BEAOS_API_URL}/api/v1/aos/lead`;
 
 /** Cupo diario por IP del endpoint público. Es el número que se le dice al usuario en un 429. */
 export const AUDITS_PER_DAY = 20;

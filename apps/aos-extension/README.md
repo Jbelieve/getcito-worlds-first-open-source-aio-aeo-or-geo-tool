@@ -70,10 +70,16 @@ publica.
 
 ## Backend
 
-Dos endpoints **públicos a propósito**, en `https://beaos.believe-global.com` y sin credencial: sin
-token, sin sesión y sin apikey. Antes la extensión hablaba con Supabase (Maasy) y mandaba una
-publishable key; ahora no manda nada más que el cuerpo. Lo que sostiene el servicio es el límite
-diario por IP (**20**) más el tope global del endpoint.
+Dos endpoints **públicos a propósito**, en `https://beaos.believe-global.com` (la API) y sin
+credencial: sin token, sin sesión y sin apikey. Antes la extensión hablaba con Supabase (Maasy) y
+mandaba una publishable key; ahora no manda nada más que el cuerpo. Lo que sostiene el servicio es el
+límite diario por IP (**20**) más el tope global del endpoint.
+
+**Dos hosts, dos papeles.** La web pública que ve el usuario es `https://be-aos.believe-global.com`
+(la landing de marca; es la que va en el enlace "Ver más sobre BeAOS"). La app con sesión y la API
+viven en `https://beaos.believe-global.com`, que abierta con el navegador redirige a `/auth/login`.
+En `lib.js` eso son dos constantes con nombre explícito — `BEAOS_WEB_URL` y `BEAOS_API_URL` — y el
+test de cableado prohíbe que cualquier `href` del popup apunte al host de la API.
 
 - `POST /api/v1/aos/audit` — body `{ "url": "<la url de la pestaña>" }`.
 - `POST /api/v1/aos/lead` — body `{ email, name?, company?, url?, score? }` → `{ ok: true }`.

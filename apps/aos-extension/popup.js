@@ -262,7 +262,10 @@ $("lead-submit").addEventListener("click", submitLead);
 $("email-input").addEventListener("keydown", (e) => e.key === "Enter" && submitLead());
 
 // Los enlaces del popup son <a href> de verdad, con `target="_blank"`, así que los abre el navegador
-// y no hacen falta manejadores acá. Las URLs viven en lib.js (BEAOS_URL, STANDARD_REPO_URL,
+// y no hacen falta manejadores acá. Las URLs viven en lib.js (BEAOS_WEB_URL, STANDARD_REPO_URL,
 // BELIEVE_HOME) y el test de cableado verifica que el HTML diga exactamente las mismas.
+//
+// Regla dura de los hosts: **la web para el usuario es `be-aos.…`; la API es `beaos.…`**. El test
+// también prohíbe que un `href` apunte al host de la API, que es lo que mandaba a `/auth/login`.
 
 init();
