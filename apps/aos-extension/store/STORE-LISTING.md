@@ -8,6 +8,18 @@ humano desde el dev console.
 
 ---
 
+## Versión del paquete
+
+```
+2.1.0
+```
+
+La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.1.0.zip`) la
+dice sola. Es un incremento sobre la 2.0.0, no un rediseño: el listado de abajo cambió solo en lo que
+el popup muestra de nuevo (el puntaje por eje y el badge Agent-Preferred).
+
+---
+
 ## Nombre (campo "Name", máx. 45 caracteres)
 
 ```
@@ -43,12 +55,15 @@ acción real — no solo leerlo.
 Con un click, BeAOS audita cualquier web que estés visitando y devuelve las dos medidas:
 
 • Un score de 0 a 100 y su banda (Operable, Intentable, Bloqueado, Inerte).
-• El listado COMPLETO de requisitos, sin recortar: qué es cada uno, si pasa o no, y qué se vio
-  al comprobarlo. Cuando un requisito no aplica a tu tipo de negocio, se dice.
+• El puntaje desglosado por eje (AOS y APS): cuánto saca cada uno, cuántos requisitos pasan sobre
+  los que aplican, y cuánto peso se ganó sobre el que había en juego.
+• El listado COMPLETO de requisitos, sin recortar: qué es cada uno, de qué eje, si pasa o no, y qué
+  se vio al comprobarlo. Cuando un requisito no aplica a tu tipo de negocio, se dice.
 • Cuántos puntos AOS/APS devolvería arreglar cada cosa que falta, ordenado por impacto.
 • Los diagnósticos aparte: se informan y no mueven el score, así que no se les inventan puntos.
 • El perfil firmado del sitio: qué APS declara sobre sí mismo, cuántas pruebas publica y si su
-  firma Ed25519 verifica de verdad contra las claves que él mismo sirve.
+  firma Ed25519 verifica de verdad contra las claves que él mismo sirve. Cuando verifica, el sitio
+  se lleva el badge Agent-Preferred; cuando no, no hay badge.
 
 Y el modo estrella: "Ver en la página". Resalta sobre la web real, en verde y rojo, exactamente
 qué acciones puede ejecutar un agente y cuáles no. Lo que ve un agente, visible para vos.
@@ -64,7 +79,7 @@ agentes, lo dejás y el equipo de Believe te contacta.
 
 AOS™ (Agent Operability Score) y APS (Agent Preference Score) son los dos puntajes del estándar
 que BeAOS mide. BeAOS es parte de la infraestructura de marca para la era de agentes que construye
-Believe. Más en beaos.believe-global.com.
+Believe. Más en be-aos.believe-global.com.
 ```
 
 ## Justificación de permisos (campo "Permission justification" — Google lo pide para cada uno)

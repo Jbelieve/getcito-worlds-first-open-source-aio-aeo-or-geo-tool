@@ -3,7 +3,7 @@
 // que alguien pidió explícitamente:
 //
 //   · que no quede ninguna credencial ni host de Maasy/Supabase en lo que se publica,
-//   · que el manifest sea 2.0.0 y hable con BeAOS,
+//   · que el manifest sea 2.1.0 y hable con BeAOS,
 //   · que el overlay siga estando y sin dependencias del servidor,
 //   · que el popup no le pida al DOM un id que el HTML no tiene (el clásico error de vanilla JS,
 //     que no lo agarra ningún compilador porque no hay compilador).
@@ -32,9 +32,9 @@ const PUBLICADOS = [
 ];
 
 describe("manifest", () => {
-	it("es la versión 2.0.0 y se llama BeAOS", () => {
+	it("es la versión 2.1.0 y se llama BeAOS", () => {
 		assert.equal(MANIFEST.manifest_version, 3);
-		assert.equal(MANIFEST.version, "2.0.0");
+		assert.equal(MANIFEST.version, "2.1.0");
 		assert.match(MANIFEST.name, /^BeAOS/);
 		assert.equal(MANIFEST.name.length <= 45, true, "el nombre tiene que entrar en el campo de la store");
 	});
@@ -79,10 +79,28 @@ describe("sin credencial y sin rastro de Maasy en lo que se publica", () => {
 	}
 
 	it("los dos endpoints son los públicos de BeAOS", async () => {
-		const { AUDIT_ENDPOINT, LEAD_ENDPOINT, BEAOS_URL } = await import("../lib.js");
-		assert.equal(BEAOS_URL, "https://beaos.believe-global.com");
+		const { AUDIT_ENDPOINT, LEAD_ENDPOINT, BEAOS_API_URL } = await import("../lib.js");
+		assert.equal(BEAOS_API_URL, "https://beaos.believe-global.com");
 		assert.equal(AUDIT_ENDPOINT, "https://beaos.believe-global.com/api/v1/aos/audit");
 		assert.equal(LEAD_ENDPOINT, "https://beaos.believe-global.com/api/v1/aos/lead");
+	});
+
+	it("separa el host de la web pública del host de la API: no son intercambiables", async () => {
+		const { BEAOS_API_URL, BEAOS_WEB_URL } = await import("../lib.js");
+		assert.equal(BEAOS_WEB_URL, "https://be-aos.believe-global.com");
+		assert.equal(BEAOS_API_URL, "https://beaos.believe-global.com");
+		assert.notEqual(BEAOS_WEB_URL, BEAOS_API_URL);
+	});
+
+	it("ningún enlace del popup apunta al host de la API, que redirige a /auth/login", async () => {
+		const { BEAOS_API_URL, BEAOS_WEB_URL } = await import("../lib.js");
+		for (const href of [...POPUP_HTML.matchAll(/href="([^"]+)"/g)].map((m) => m[1])) {
+			assert.equal(
+				href.startsWith(BEAOS_API_URL),
+				false,
+				`${href} es un enlace para el usuario y apunta a la app con sesión: tiene que ser ${BEAOS_WEB_URL}`,
+			);
+		}
 	});
 
 	it("el audit ya no manda el `source: extension` de la función de Maasy", () => {
@@ -139,8 +157,8 @@ describe("el popup y el HTML están cableados", () => {
 	});
 
 	it("las URLs del HTML son las mismas que declara lib.js", async () => {
-		const { BEAOS_URL, STANDARD_REPO_URL, BELIEVE_HOME } = await import("../lib.js");
-		for (const url of [BEAOS_URL, STANDARD_REPO_URL, BELIEVE_HOME]) {
+		const { BEAOS_WEB_URL, STANDARD_REPO_URL, BELIEVE_HOME } = await import("../lib.js");
+		for (const url of [BEAOS_WEB_URL, STANDARD_REPO_URL, BELIEVE_HOME]) {
 			assert.ok(POPUP_HTML.includes(`href="${url}"`), `el HTML no apunta a ${url}`);
 		}
 	});

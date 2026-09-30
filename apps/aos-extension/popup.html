@@ -43,6 +43,21 @@
           </div>
         </div>
 
+        <!-- 2. el desglose del número de arriba: el puntaje por eje que calcula el motor. -->
+        <div class="block block-axes hidden" id="axes-block">
+          <div class="block-hd">
+            <span class="eyebrow">Puntajes por eje</span>
+            <span class="eyebrow">Del motor</span>
+          </div>
+          <div class="axes" id="axes"></div>
+          <p class="block-note">
+            El desglose por niveles de la extensión vieja (inventario, N1, N2, N3, confiabilidad) es de
+            otro rubric que este motor no corre: acá el desglose es por eje del estándar, con los
+            mismos pesos que hacen el score. El detalle con evidencia está en el checklist de abajo,
+            que dice el eje de cada requisito.
+          </p>
+        </div>
+
         <div class="block">
           <div class="block-hd">
             <span class="eyebrow">Lo que ve un agente</span>
@@ -63,6 +78,8 @@
             <span class="aps-claims" id="aps-claims"></span>
           </div>
           <p class="aps-sig" id="aps-sig"></p>
+          <!-- El badge Agent-Preferred: aparece SOLO cuando la firma Ed25519 verifica de verdad. -->
+          <p class="badge hidden" id="badge"></p>
         </div>
 
         <!-- Aparición 2 del cian: qué hacer ahora. -->
@@ -86,6 +103,16 @@
           <ul class="list" id="diags"></ul>
         </div>
 
+        <!-- El Bot Beacon: el tráfico agéntico real. Se muestra siempre, y hoy dice que no hay fuente:
+             un número inventado acá sería peor que el hueco. -->
+        <div class="block block-beacon">
+          <div class="block-hd">
+            <span class="eyebrow">Bot Beacon</span>
+            <span class="eyebrow" id="beacon-band"></span>
+          </div>
+          <p class="beacon-text" id="beacon-text"></p>
+        </div>
+
         <div class="lead hidden" id="lead">
           <p class="lead-q">¿Quieres que tu web sea operable y preferida por agentes?</p>
           <div class="lead-row">
@@ -96,7 +123,7 @@
             No se pudo enviar. Probá de nuevo en un rato o escribinos a hola@believe-global.com.
           </p>
           <div class="lead-links">
-            <a class="lead-more" id="beaos-more" href="https://beaos.believe-global.com" target="_blank" rel="noopener">Ver más sobre BeAOS →</a>
+            <a class="lead-more" id="beaos-more" href="https://be-aos.believe-global.com" target="_blank" rel="noopener">Ver más sobre BeAOS →</a>
             <a class="lead-more" id="standard-more" href="https://github.com/BELIEVE-IT-GROUP/aos-aps-standard" target="_blank" rel="noopener">El estándar AOS/APS →</a>
             <a class="lead-more" id="believe-more" href="https://believe-global.com" target="_blank" rel="noopener">Believe →</a>
           </div>

@@ -7,6 +7,7 @@
 import { createHash } from "node:crypto";
 import {
 	type AosAuditResult,
+	type AxisBreakdown,
 	type RequirementResult,
 	type UrlGuardResult,
 	validateAuditUrl,
@@ -230,18 +231,66 @@ export const publicLeadBody = z.object({
 /** Requerimiento tal como lo devuelve el motor, con los diagnósticos incluidos. */
 export type PublicAuditRequirements = RequirementResult[];
 
+/** El desglose por eje, tal cual lo calcula el motor. El endpoint no lo recalcula ni lo redondea. */
+export type PublicAuditBreakdown = AxisBreakdown[];
+
+/**
+ * Tráfico agéntico real observado sobre la URL auditada.
+ *
+ * **HOY SIEMPRE ES `null`, y es a propósito.** En Maasy este bloque salía de su propio instrumento:
+ * una tabla `bot_beacon_hits` que se llenaba con los user-agents que pasaban por los sitios que
+ * Maasy instrumenta (clasificados por `_shared/bot-detection.ts`: GPTBot, Claude-User…) más los
+ * intentos terminales de `aos_operator_tasks`, agregados por dominio por la función
+ * `bot_beacon_summary(domain, days)`.
+ *
+ * Eso es dato **de Maasy, no del sitio**: existe solo para dominios por los que ya pasó su tráfico.
+ * BeAOS no tiene ningún ingest de tráfico agéntico — ni tabla, ni middleware, ni clasificador de
+ * user-agents — así que para una URL arbitraria no hay nada que medir. Devolver ceros, o un número
+ * derivado de otra cosa, sería inventar un dato de venta. El hueco se declara: el campo existe, está
+ * tipado, y su valor es `null` mientras no haya una fuente real que lo llene.
+ *
+ * Lo que sí es real y verificable sobre el perfil del sitio es `declaredAps`, `claims` y
+ * `signatureVerified`, que sí viajan.
+ */
+export interface PublicBotBeacon {
+	windowDays: number;
+	/** Hits de crawl de agentes IA en la ventana. */
+	crawlHits: number;
+	distinctAgents: number;
+	topAgents: { agentName: string; category: string | null; hits: number }[];
+	/** Intentos de operación con agente, y cuántos terminaron mal. */
+	operationAttempts: number;
+	operationFailures: number;
+}
+
 export interface PublicAuditResponse {
 	url: string;
 	score: number;
 	band: string;
 	businessType: AosAuditResult["businessType"];
 	requirements: PublicAuditRequirements;
-	/** APS que el sitio declara en su `/.well-known/brand.json`; `null` si no lo publica. */
+	/**
+	 * Sub-scores por eje, del motor. `aosStandards` es el mismo número que `score` (el AOS es el
+	 * puntaje de operabilidad); `apsStandards` es el APS **medido** sobre los requisitos del estándar
+	 * y NO es lo mismo que `declaredAps`, que es lo que el sitio declara sobre sí mismo.
+	 */
+	aosStandards: number;
+	apsStandards: number;
+	/** El desglose por eje: inventario del peso ganado y del que aplica, por eje. */
+	breakdown: PublicAuditBreakdown;
+	/**
+	 * APS que el sitio declara en su `/.well-known/brand.json`; `null` si no lo publica.
+	 */
 	declaredAps: number | null;
 	/** Cuántos claims declara su brand.json. Cero si no publica ninguno. */
 	claims: number;
 	/** ¿La firma Ed25519 de su brand.json verifica contra el `keys.json` que él mismo publica? */
 	signatureVerified: boolean;
+	/**
+	 * Tráfico agéntico observado. **Siempre `null` hoy**: BeAOS no instrumenta el tráfico de sitios
+	 * de terceros. El campo viaja para que el hueco sea explícito y verificable en vez de silencioso.
+	 */
+	botBeacon: PublicBotBeacon | null;
 	auditedAt: string;
 }
 
@@ -250,6 +299,10 @@ export interface PublicAuditResponse {
  *
  * Devuelve exactamente lo que el motor midió más lo que el sitio publica sobre sí mismo: nada de
  * esto es dato privado nuestro, y por eso el endpoint puede ser anónimo.
+ *
+ * Todo lo que se agrega es **aditivo**: los campos que la extensión 2.0.0 ya leía (`url`, `score`,
+ * `band`, `businessType`, `requirements`, `declaredAps`, `claims`, `signatureVerified`, `auditedAt`)
+ * conservan nombre y forma.
  */
 export function publicAuditResponse(result: AosAuditResult, auditedAt: Date): PublicAuditResponse {
 	return {
@@ -259,9 +312,14 @@ export function publicAuditResponse(result: AosAuditResult, auditedAt: Date): Pu
 		businessType: result.businessType,
 		// Los diagnósticos viajan con los puntuados, igual que en la fila que guarda el worker.
 		requirements: [...result.standards.requirements, ...result.extended],
+		aosStandards: result.standards.aos_standards,
+		apsStandards: result.standards.aps_standards,
+		breakdown: result.standards.breakdown,
 		declaredAps: result.aps?.aps ?? null,
 		claims: result.aps?.claims ?? 0,
 		signatureVerified: result.standards.signature_verified,
+		// Sin ingest de tráfico agéntico no hay dato. Ver `PublicBotBeacon`.
+		botBeacon: null,
 		auditedAt: auditedAt.toISOString(),
 	};
 }

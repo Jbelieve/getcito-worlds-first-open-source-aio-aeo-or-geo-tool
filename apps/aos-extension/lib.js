@@ -11,8 +11,24 @@
 // los estados, en `apps/web/src/components/status-tone.tsx`. Si cambia uno, cambia esto.
 
 // --- dónde vive BeAOS ---------------------------------------------------------
+//
+// **Dos hosts, dos papeles, y no son intercambiables:**
+//
+//   `be-aos.believe-global.com` — la web PÚBLICA que ve el usuario ("BeAOS — el estándar de marca
+//                                para agentes de IA"). Es la que va en cualquier enlace del popup.
+//   `beaos.believe-global.com`  — la APP y la API. Ahí viven los endpoints, y ahí apunta el
+//                                `host_permissions` del manifest. Abrirla con el navegador redirige
+//                                a `/auth/login`: es una app con sesión, no una página de marca.
+//
+// El bug que esto evita: un solo `BEAOS_URL` que se usaba para las dos cosas mandaba al usuario a
+// la pantalla de login cuando pedía "ver más sobre BeAOS". Por eso ahora hay dos constantes con
+// nombre explícito y nada que las mezcle.
 
-export const BEAOS_URL = "https://beaos.believe-global.com";
+/** La web pública: la landing que se le muestra a una persona. */
+export const BEAOS_WEB_URL = "https://be-aos.believe-global.com";
+
+/** La API: solo endpoints. Nunca es un enlace para el usuario. */
+export const BEAOS_API_URL = "https://beaos.believe-global.com";
 
 /**
  * Los dos endpoints de BeAOS. Públicos a propósito: **sin credencial**, sin apikey y sin sesión.
@@ -20,8 +36,8 @@ export const BEAOS_URL = "https://beaos.believe-global.com";
  * nada más que el cuerpo. Lo que sostiene el servicio es el límite diario por IP más el tope
  * global del endpoint, no un token.
  */
-export const AUDIT_ENDPOINT = `${BEAOS_URL}/api/v1/aos/audit`;
-export const LEAD_ENDPOINT = `${BEAOS_URL}/api/v1/aos/lead`;
+export const AUDIT_ENDPOINT = `${BEAOS_API_URL}/api/v1/aos/audit`;
+export const LEAD_ENDPOINT = `${BEAOS_API_URL}/api/v1/aos/lead`;
 
 /** Cupo diario por IP del endpoint público. Es el número que se le dice al usuario en un 429. */
 export const AUDITS_PER_DAY = 20;
@@ -62,6 +78,31 @@ export const NO_PROFILE_TEXT = "El sitio no publica /.well-known/brand.json: no 
 
 /** Cuando el endpoint no manda evidencia: es lo que se vio al comprobar y puede faltar. */
 export const NO_EVIDENCE_TEXT = "Sin evidencia registrada.";
+
+/** Cómo se llama cada eje. El eje es del estándar; la segunda mitad dice qué mide. */
+export const AXIS_TEXT = { AOS: "AOS · operabilidad", APS: "APS · preferencia" };
+
+/**
+ * El badge Agent-Preferred. **Solo cuando la firma Ed25519 verifica de verdad**
+ * (`signatureVerified === true`): no es un adorno, certifica que el perfil firmado del sitio se pudo
+ * comprobar contra las claves que él mismo publica. Cuando no verifica, no hay badge — no hay una
+ * versión "apagada" del badge, porque un badge apagado seguiría diciendo Agent-Preferred.
+ */
+export const BADGE_LABEL = "Agent-Preferred";
+export const BADGE_VERIFIED_TEXT = "perfil firmado verificado";
+
+/**
+ * El Bot Beacon: el tráfico agéntico real que recibió el sitio. La extensión vieja lo mostraba, y
+ * esto es lo que hay que decir cuando no hay dato — que es siempre, hoy.
+ *
+ * En Maasy salía de su propio instrumento de tráfico (una tabla de hits por dominio, con el
+ * user-agent clasificado) más los intentos terminales de su operador. Eso es dato **de Maasy sobre
+ * los sitios que instrumenta**, no algo que se pueda medir de una URL arbitraria. BeAOS no tiene
+ * ningún ingest de tráfico, así que el bloque se muestra declarando el hueco: un cero acá se leería
+ * como "no te visitó ningún agente", que sería un dato falso.
+ */
+export const BOT_BEACON_NO_SOURCE_TEXT =
+	"BeAOS mide el estándar de un sitio, no su tráfico. No tenemos el tráfico agéntico real de esta web, así que acá no hay número — y no lo inventamos.";
 
 // --- funciones puras ---------------------------------------------------------
 
@@ -183,6 +224,107 @@ export function auditErrorText(status, retryAfterSeconds = null) {
 	};
 }
 
+/** Un número finito, o `fallback`. La respuesta viene de la red: no se confía en su forma. */
+function finiteNumber(value, fallback = null) {
+	return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/** Un contador: entero y nunca negativo. Un `-1` o un `2.7` no son conteos. */
+function count(value) {
+	return Math.max(0, Math.round(finiteNumber(value, 0)));
+}
+
+/** Un porcentaje, acotado a 0–100 y redondeado. */
+function percent(value) {
+	return Math.max(0, Math.min(100, Math.round(finiteNumber(value, 0))));
+}
+
+/**
+ * Los sub-scores por eje del motor (`aosStandards` / `apsStandards`).
+ *
+ * `null` cuando la respuesta no los trae — la 2.0.0 que está en master hablaba con un endpoint que
+ * solo devolvía el total. **No se recalculan acá**: los pesos del estándar viven en el motor, y un
+ * popup que los reimplemente es la segunda implementación del AOS que se va a separar de la primera.
+ */
+export function mapSubScores(data) {
+	const aos = finiteNumber(data?.aosStandards);
+	const aps = finiteNumber(data?.apsStandards);
+	if (aos === null && aps === null) return null;
+	return {
+		aos: aos === null ? null : percent(aos),
+		aps: aps === null ? null : percent(aps),
+	};
+}
+
+/**
+ * El desglose por eje, mapeado. Es lo que reemplaza al `breakdown` por niveles de la extensión vieja.
+ *
+ * Los cinco niveles de Maasy (inventario, declaración N1, ejecutabilidad DOM N2, ejecución
+ * programática N3, confiabilidad) son del AOS v1, un rubric que este motor **no corre**: no mide DOM,
+ * ni formularios, ni ejecución programática, ni confiabilidad. Inventar esos cinco números sería
+ * mentir con más precisión, así que no se muestran. Lo que el motor sí desglosa —y por lo tanto lo
+ * único que se puede mostrar sin inventar— es el peso de cada eje del estándar.
+ *
+ * Vacío cuando el endpoint no lo manda (respuesta vieja): el bloque no se muestra, no se rellena.
+ */
+export function mapBreakdown(raw) {
+	if (Array.isArray(raw) === false) return [];
+	return raw
+		.filter((entry) => entry?.axis === "AOS" || entry?.axis === "APS")
+		.map((entry) => ({
+			axis: entry.axis,
+			label: AXIS_TEXT[entry.axis],
+			percent: percent(entry.percent),
+			passed: count(entry.passed),
+			failed: count(entry.failed),
+			notApplicable: count(entry.notApplicable),
+			applicable: count(entry.applicable),
+			earnedWeight: count(entry.earnedWeight),
+			maxWeight: count(entry.maxWeight),
+		}));
+}
+
+/**
+ * El Bot Beacon, si algún día hay fuente. Hoy el endpoint manda `null` y esto devuelve `null`.
+ * No se convierte un `null` en ceros: "no medimos" no es "no pasó nada".
+ */
+export function mapBotBeacon(raw) {
+	if (raw === null || typeof raw !== "object") return null;
+	const beacon = {
+		windowDays: count(raw.windowDays),
+		crawlHits: count(raw.crawlHits),
+		distinctAgents: count(raw.distinctAgents),
+		operationAttempts: count(raw.operationAttempts),
+		operationFailures: count(raw.operationFailures),
+		topAgents: (Array.isArray(raw.topAgents) ? raw.topAgents : [])
+			.filter((agent) => typeof agent?.agentName === "string")
+			.map((agent) => ({ agentName: agent.agentName })),
+	};
+	// Un beacon sin un solo número real es, a los ojos del popup, lo mismo que no tenerlo.
+	if (beacon.crawlHits === 0 && beacon.operationAttempts === 0) return null;
+	return beacon;
+}
+
+/**
+ * El Bot Beacon dicho en una línea, con el mismo espíritu que la extensión vieja: "N agentes
+ * intentaron operar, M fallaron" + "X hits de crawl · nombres". Cuando no hay beacon, dice que no
+ * hay fuente en vez de callarse.
+ */
+export function botBeaconText(beacon) {
+	if (beacon === null) return BOT_BEACON_NO_SOURCE_TEXT;
+	const parts = [];
+	if (beacon.operationAttempts > 0) {
+		parts.push(
+			`${beacon.operationAttempts} agentes intentaron operar este dominio, ${beacon.operationFailures} fallaron (${beacon.windowDays} d).`,
+		);
+	}
+	if (beacon.crawlHits > 0) {
+		const names = beacon.topAgents.map((agent) => agent.agentName).join(", ");
+		parts.push(`${beacon.crawlHits} hits de crawl${names.length > 0 ? ` · ${names}` : ""}.`);
+	}
+	return parts.join(" ");
+}
+
 /** Un requisito del motor, mapeado a lo que el popup sabe mostrar. */
 export function mapRequirement(raw) {
 	const status = raw?.status === "pass" || raw?.status === "fail" || raw?.status === "n_a" ? raw.status : "n_a";
@@ -227,6 +369,8 @@ export function mapAps(data) {
 			claimsText: null,
 			signatureText: NO_PROFILE_TEXT,
 			signatureTone: "muted",
+			/** Sin perfil no hay firma que verificar, así que no hay badge. */
+			badge: null,
 		};
 	}
 	const claims = typeof data?.claims === "number" && Number.isFinite(data.claims) ? data.claims : 0;
@@ -242,6 +386,8 @@ export function mapAps(data) {
 			? "La firma Ed25519 verifica contra el keys.json que el sitio publica."
 			: "Publica perfil pero la firma Ed25519 no verifica.",
 		signatureTone: verified ? "primary" : "ink",
+		/** El badge, solo con la firma verificada. Publicar perfil no alcanza. */
+		badge: verified ? { label: BADGE_LABEL, text: BADGE_VERIFIED_TEXT } : null,
 	};
 }
 
@@ -252,6 +398,10 @@ export function mapAps(data) {
  * `diagnostic` por el otro, porque los diagnósticos **se informan y no mueven el score** — mezclarlos
  * haría creer que arreglarlos sube el número. Los `n_a` no aplican a este tipo de negocio y viajan
  * igual, marcados, con su evidencia si la hay.
+ *
+ * Los campos que el endpoint agregó en la 2.1.0 (`aosStandards`, `apsStandards`, `breakdown`) son
+ * **opcionales**: si no vienen, `subScores` queda `null` y `breakdown` queda vacío, y el popup
+ * simplemente no muestra esos bloques. La respuesta vieja no rompe nada y no se rellena a ojo.
  */
 export function mapAuditResponse(data) {
 	const raw = Array.isArray(data?.requirements) ? data.requirements : [];
@@ -263,6 +413,7 @@ export function mapAuditResponse(data) {
 		typeof data?.score === "number" && Number.isFinite(data.score)
 			? Math.max(0, Math.min(100, Math.round(data.score)))
 			: null;
+	const botBeacon = mapBotBeacon(data?.botBeacon);
 	return {
 		url: typeof data?.url === "string" ? data.url : null,
 		score,
@@ -272,6 +423,13 @@ export function mapAuditResponse(data) {
 			level: band?.level ?? "unknown",
 		},
 		businessType: BUSINESS_TYPE_TEXT[data?.businessType] ?? "tipo de negocio sin dato",
+		/** Los sub-scores por eje del motor, o null si la respuesta no los trae. */
+		subScores: mapSubScores(data),
+		/** El desglose por eje del motor. Vacío si la respuesta no lo trae. */
+		breakdown: mapBreakdown(data?.breakdown),
+		/** El tráfico agéntico real: `null` hoy, porque no hay fuente. Ver `BOT_BEACON_NO_SOURCE_TEXT`. */
+		botBeacon,
+		botBeaconText: botBeaconText(botBeacon),
 		scored,
 		diagnostics,
 		/** El plan: los que puntúan, fallan y tienen ganancia, de mayor a menor. Es "qué hacer ahora". */

@@ -1,7 +1,7 @@
 {
-	"url": "https://example.com/",
-	"score": 0,
-	"band": "Agent-Inert",
+	"url": "https://believe-global.com/",
+	"score": 100,
+	"band": "Agent-Operable",
 	"businessType": "brand",
 	"requirements": [
 		{
@@ -9,63 +9,56 @@
 			"axis": "AOS",
 			"strength": "SHOULD",
 			"title": "llms.txt",
-			"status": "fail",
-			"evidence": "/llms.txt responde 404.",
-			"gain": 12.5
+			"status": "pass",
+			"evidence": "/llms.txt responde 200 · text/plain; charset=UTF-8 · 10555 chars."
 		},
 		{
 			"id": "AOS-DISC-03",
 			"axis": "AOS",
 			"strength": "SHOULD",
 			"title": "AGENTS.md",
-			"status": "fail",
-			"evidence": "/AGENTS.md responde 404.",
-			"gain": 12.5
+			"status": "pass",
+			"evidence": "/AGENTS.md responde 200 · text/markdown; charset=UTF-8 · 5319 chars."
 		},
 		{
 			"id": "AOS-DISC-04",
 			"axis": "AOS",
 			"strength": "MUST",
 			"title": "robots.txt + sitemap",
-			"status": "fail",
-			"evidence": "robots.txt no responde · sitemap.xml no responde.",
-			"gain": 18.8
+			"status": "pass",
+			"evidence": "robots.txt responde 200 · sitemap.xml responde 200."
 		},
 		{
 			"id": "AOS-CONT-01",
 			"axis": "AOS",
 			"strength": "SHOULD",
 			"title": "JSON-LD identity",
-			"status": "fail",
-			"evidence": "Ningún bloque JSON-LD en el HTML.",
-			"gain": 12.5
+			"status": "pass",
+			"evidence": "JSON-LD en el HTML con tipos: WebPage, FAQPage."
 		},
 		{
 			"id": "AOS-IDEN-01",
 			"axis": "AOS",
 			"strength": "MUST",
 			"title": "A2A Agent Card",
-			"status": "fail",
-			"evidence": "/.well-known/agent-card.json responde 404.",
-			"gain": 18.8
+			"status": "pass",
+			"evidence": "/.well-known/agent-card.json responde 200 · application/json; charset=UTF-8 · 4357 chars."
 		},
 		{
 			"id": "AOS-IDEN-02",
 			"axis": "AOS",
 			"strength": "SHOULD",
 			"title": "Agent permissions",
-			"status": "fail",
-			"evidence": "/.well-known/agent-permissions.json responde 404.",
-			"gain": 12.5
+			"status": "pass",
+			"evidence": "/.well-known/agent-permissions.json responde 200 · application/json; charset=UTF-8 · 345 chars."
 		},
 		{
 			"id": "AOS-CAPA-01",
 			"axis": "AOS",
 			"strength": "SHOULD",
 			"title": "MCP Server Card",
-			"status": "fail",
-			"evidence": "Ni server-card, ni MCP, ni OpenAPI por las vías que probamos.",
-			"gain": 12.5
+			"status": "pass",
+			"evidence": "/.well-known/mcp/server-card.json responde JSON."
 		},
 		{
 			"id": "AOS-API-01",
@@ -80,36 +73,33 @@
 			"axis": "APS",
 			"strength": "MUST",
 			"title": "brand.json Claims & Proofs",
-			"status": "fail",
-			"evidence": "/.well-known/brand.json responde 404.",
-			"gain": 42.9
+			"status": "pass",
+			"evidence": "/.well-known/brand.json responde 200 · application/json; charset=UTF-8 · 28113 chars."
 		},
 		{
 			"id": "APS-PROV-02",
 			"axis": "APS",
 			"strength": "SHOULD",
 			"title": "Public key (keys.json)",
-			"status": "fail",
-			"evidence": "/.well-known/keys.json responde 404.",
-			"gain": 28.6
+			"status": "pass",
+			"evidence": "/.well-known/keys.json responde 200 · application/json; charset=UTF-8 · 262 chars."
 		},
 		{
 			"id": "APS-PROV-01",
 			"axis": "APS",
 			"strength": "SHOULD",
 			"title": "Ed25519 signature verifies",
-			"status": "fail",
-			"evidence": "Sin firma válida: no pudimos verificar los bytes servidos contra la clave pública.",
-			"gain": 28.6
+			"status": "pass",
+			"evidence": "La firma verifica contra /.well-known/keys.json sobre los bytes servidos."
 		},
 		{
 			"id": "AOS-DISC-02",
 			"axis": "AOS",
 			"strength": "MAY",
 			"title": "llms-full.txt",
-			"status": "fail",
+			"status": "pass",
 			"diagnostic": true,
-			"evidence": "/llms-full.txt no responde."
+			"evidence": "/llms-full.txt responde."
 		},
 		{
 			"id": "AOS-CONT-02",
@@ -125,25 +115,25 @@
 			"axis": "AOS",
 			"strength": "MAY",
 			"title": "Markdown content negotiation",
-			"status": "fail",
+			"status": "pass",
 			"diagnostic": true,
-			"evidence": "Con Accept: text/markdown no devuelve markdown."
+			"evidence": "Con Accept: text/markdown devuelve markdown."
 		},
 		{
 			"id": "AOS-CAPA-02",
 			"axis": "AOS",
 			"strength": "SHOULD",
 			"title": "NLWeb /ask endpoint",
-			"status": "fail",
+			"status": "pass",
 			"diagnostic": true,
-			"evidence": "/ask responde 404."
+			"evidence": "/ask responde 400."
 		},
 		{
 			"id": "APS-CLAIM-02",
 			"axis": "APS",
 			"strength": "MUST",
 			"title": "Mandatory boundary",
-			"status": "fail",
+			"status": "pass",
 			"diagnostic": true
 		},
 		{
@@ -151,7 +141,7 @@
 			"axis": "APS",
 			"strength": "MUST",
 			"title": "Proofs link to claims",
-			"status": "fail",
+			"status": "pass",
 			"diagnostic": true
 		},
 		{
@@ -159,7 +149,7 @@
 			"axis": "APS",
 			"strength": "MUST",
 			"title": "Derived confidence",
-			"status": "fail",
+			"status": "pass",
 			"diagnostic": true
 		},
 		{
@@ -172,33 +162,8 @@
 			"evidence": "/.well-known/http-message-signatures-directory no responde JSON."
 		}
 	],
-	"aosStandards": 0,
-	"apsStandards": 0,
-	"breakdown": [
-		{
-			"axis": "AOS",
-			"passed": 0,
-			"failed": 7,
-			"notApplicable": 1,
-			"applicable": 7,
-			"earnedWeight": 0,
-			"maxWeight": 16,
-			"percent": 0
-		},
-		{
-			"axis": "APS",
-			"passed": 0,
-			"failed": 3,
-			"notApplicable": 0,
-			"applicable": 3,
-			"earnedWeight": 0,
-			"maxWeight": 7,
-			"percent": 0
-		}
-	],
-	"declaredAps": null,
-	"claims": 0,
-	"signatureVerified": false,
-	"botBeacon": null,
-	"auditedAt": "2026-09-30T03:54:52.021Z"
+	"declaredAps": 94,
+	"claims": 6,
+	"signatureVerified": true,
+	"auditedAt": "2026-09-30T03:22:39.918Z"
 }

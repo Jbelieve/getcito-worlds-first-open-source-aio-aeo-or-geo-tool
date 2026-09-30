@@ -232,17 +232,73 @@ export interface RequirementResult {
 export interface StandardsResult {
 	business_type: BusinessType;
 	requirements: RequirementResult[];
+	/**
+	 * El desglose por eje del que salen `aos_standards` y `aps_standards`. Es la MISMA cuenta: los dos
+	 * sub-scores son el `percent` de cada eje de acá, así que no pueden separarse.
+	 */
+	breakdown: AxisBreakdown[];
 	aos_standards: number;
 	aps_standards: number;
 	signature_verified: boolean;
 }
 
-function axisScore(results: RequirementResult[], axis: Axis): number {
-	const applicable = results.filter((r) => r.axis === axis && r.status !== "n_a");
-	if (applicable.length === 0) return 0;
-	const got = applicable.reduce((sum, r) => sum + (r.status === "pass" ? STRENGTH_WEIGHT[r.strength] : 0), 0);
-	const max = applicable.reduce((sum, r) => sum + STRENGTH_WEIGHT[r.strength], 0);
-	return Math.round((got / max) * 100);
+/**
+ * El desglose por eje: de dónde sale cada sub-score.
+ *
+ * Es el equivalente honesto del `breakdown` por niveles de la extensión vieja de Maasy (inventario /
+ * declaración N1 / ejecutabilidad DOM N2 / ejecución programática N3 / confiabilidad). Aquellos
+ * cinco niveles son del AOS v1, un rubric que **este motor no corre**: acá no se mide DOM, ni
+ * formularios, ni ejecución programática, ni confiabilidad por probes — no hay forma de calcularlos
+ * sin inventar números. Lo que sí se puede desglosar sin inventar nada es lo que el score ya usa:
+ * cada eje del estándar, con el peso ganado sobre el peso que aplica.
+ *
+ * Se calcula **acá y no en el cliente** a propósito: el día que cambie `STRENGTH_WEIGHT`, el desglose
+ * cambia con él y el popup sigue mostrando el número del motor. Dos implementaciones del AOS se
+ * separan; una sola, no.
+ *
+ * Solo mira los checks puntuados: los `diagnostic` no pesan y un `n_a` no aplica a este tipo de
+ * negocio, así que ninguno de los dos entra en el denominador.
+ */
+export interface AxisBreakdown {
+	axis: Axis;
+	/** Checks del eje que pasan. */
+	passed: number;
+	/** Checks del eje que fallan. */
+	failed: number;
+	/** Checks del eje que no aplican a este tipo de negocio. */
+	notApplicable: number;
+	/** `passed + failed`: los que entran en el peso. */
+	applicable: number;
+	earnedWeight: number;
+	maxWeight: number;
+	/** El sub-score del eje, 0–100. Es el mismo número que `aos_standards` / `aps_standards`. */
+	percent: number;
+}
+
+/** Orden fijo de los ejes: el desglose no se reordena según quién sacó más. */
+const AXES: readonly Axis[] = ["AOS", "APS"];
+
+export function breakdownByAxis(results: RequirementResult[]): AxisBreakdown[] {
+	return AXES.map((axis) => {
+		const own = results.filter((r) => r.axis === axis);
+		const applicable = own.filter((r) => r.status !== "n_a");
+		const earnedWeight = applicable.reduce(
+			(sum, r) => sum + (r.status === "pass" ? STRENGTH_WEIGHT[r.strength] : 0),
+			0,
+		);
+		const maxWeight = applicable.reduce((sum, r) => sum + STRENGTH_WEIGHT[r.strength], 0);
+		return {
+			axis,
+			passed: applicable.filter((r) => r.status === "pass").length,
+			failed: applicable.filter((r) => r.status === "fail").length,
+			notApplicable: own.length - applicable.length,
+			applicable: applicable.length,
+			earnedWeight,
+			maxWeight,
+			// Sin checks que apliquen no hay nada que medir y el eje vale 0, igual que antes.
+			percent: maxWeight === 0 ? 0 : Math.round((earnedWeight / maxWeight) * 100),
+		};
+	});
 }
 
 function evaluate(
@@ -290,16 +346,24 @@ export function estimateGains(results: RequirementResult[]): RequirementResult[]
 /** The scored evaluation: the same output the Maasy audit produces for the same probes. */
 export function evaluateStandards(probes: Probes, businessType: BusinessType, evidence?: EvidenceMap): StandardsResult {
 	const requirements = estimateGains(evaluate(REQUIREMENTS, probes, businessType, false, evidence));
+	// Los dos sub-scores SALEN del desglose: así el número y su explicación no pueden discrepar.
+	const breakdown = breakdownByAxis(requirements);
+	const axisPercent = (axis: Axis): number => breakdown.find((entry) => entry.axis === axis)?.percent ?? 0;
 	return {
 		business_type: businessType,
 		requirements,
-		aos_standards: axisScore(requirements, "AOS"),
-		aps_standards: axisScore(requirements, "APS"),
+		breakdown,
+		aos_standards: axisPercent("AOS"),
+		aps_standards: axisPercent("APS"),
 		signature_verified: Boolean(probes.signature_valid),
 	};
 }
 
 /** Diagnostic-only evaluation of the rest of the standard. Never feeds a score. */
-export function evaluateExtended(probes: Probes, businessType: BusinessType, evidence?: EvidenceMap): RequirementResult[] {
+export function evaluateExtended(
+	probes: Probes,
+	businessType: BusinessType,
+	evidence?: EvidenceMap,
+): RequirementResult[] {
 	return evaluate(EXTENDED_REQUIREMENTS, probes, businessType, true, evidence);
 }

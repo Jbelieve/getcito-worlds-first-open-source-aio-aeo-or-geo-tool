@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-	EXTENDED_REQUIREMENTS,
-	REQUIREMENTS,
 	classifyBusinessType,
+	EXTENDED_REQUIREMENTS,
 	evaluateExtended,
 	evaluateStandards,
+	REQUIREMENTS,
 } from "./requirements";
 
 /**
@@ -132,6 +132,60 @@ describe("evaluateExtended", () => {
 	});
 });
 
+describe("el desglose por eje", () => {
+	/** Todo pasa menos lo que se diga: sirve para tener pesos conocidos y no adivinar el rubric. */
+	function allPassExcept(...signals: string[]): Record<string, boolean> {
+		const probes: Record<string, boolean> = {};
+		for (const def of REQUIREMENTS) probes[def.signal] = signals.includes(def.signal) === false;
+		return probes;
+	}
+
+	it("los sub-scores SON el percent del desglose, por construcción", () => {
+		const result = evaluateStandards(allPassExcept("robots_sitemap", "brand_json"), "brand");
+		const porcentajes = Object.fromEntries(result.breakdown.map((entry) => [entry.axis, entry.percent]));
+		expect(porcentajes.AOS).toBe(result.aos_standards);
+		expect(porcentajes.APS).toBe(result.aps_standards);
+	});
+
+	it("devuelve los dos ejes, en orden fijo, con el peso del rubric y no un porcentaje recalculado", () => {
+		// brand: AOS-API-01 queda n_a, así que el denominador de AOS es 16 y el de APS 7.
+		const result = evaluateStandards(allPassExcept("robots_sitemap"), "brand");
+		expect(result.breakdown.map((entry) => entry.axis)).toEqual(["AOS", "APS"]);
+
+		const [aos, aps] = result.breakdown;
+		expect(aos).toMatchObject({ maxWeight: 16, earnedWeight: 13, passed: 6, failed: 1, applicable: 7 });
+		expect(aos?.percent).toBe(81);
+		expect(result.aos_standards).toBe(81);
+		expect(aps).toMatchObject({ maxWeight: 7, earnedWeight: 7, passed: 3, failed: 0, applicable: 3 });
+		expect(aps?.percent).toBe(100);
+	});
+
+	it("no cuenta los `n_a` en el peso: quedan contados aparte, sin ensuciar el denominador", () => {
+		const brand = evaluateStandards(allPassExcept(), "brand");
+		const api = evaluateStandards(allPassExcept(), "product_api");
+		expect(brand.breakdown[0]).toMatchObject({ notApplicable: 1, applicable: 7, maxWeight: 16 });
+		expect(api.breakdown[0]).toMatchObject({ notApplicable: 0, applicable: 8, maxWeight: 19 });
+		// El mismo `n_a` no se cuenta como fallado ni como pasado.
+		expect(brand.breakdown[0]?.failed).toBe(0);
+		expect(brand.breakdown[0]?.passed).toBe(7);
+	});
+
+	it("los diagnostics no entran en el desglose: no pesan y no se llevan peso ajeno", () => {
+		const probes = allPassExcept();
+		for (const def of EXTENDED_REQUIREMENTS) probes[def.signal] = false;
+		const conDiagnosticosEnRojo = evaluateStandards(probes, "brand");
+		const todosEnVerde = evaluateStandards(allPassExcept(), "brand");
+		expect(conDiagnosticosEnRojo.breakdown).toEqual(todosEnVerde.breakdown);
+		// El total de aplicables del desglose es exactamente el de los checks puntuados.
+		const aplicables = conDiagnosticosEnRojo.requirements.filter((r) => r.status !== "n_a").length;
+		expect(conDiagnosticosEnRojo.breakdown.reduce((sum, entry) => sum + entry.applicable, 0)).toBe(aplicables);
+	});
+
+	it("sin checks que apliquen el eje vale 0, igual que el sub-score", () => {
+		expect(evaluateStandards({}, "brand").breakdown.map((entry) => entry.percent)).toEqual([0, 0]);
+	});
+});
+
 describe("classifyBusinessType", () => {
 	it("treats an exposed MCP or API as a product surface", () => {
 		expect(classifyBusinessType({ hasOpenApi: true })).toBe("product_api");
@@ -168,9 +222,7 @@ describe("estimateGains / evidencia", () => {
 			// que la igualdad exacta no es alcanzable: se verifica contra el bound real del redondeo.
 			const tolerancia = 0.5 + 0.05 * fallando.length;
 			expect(score).toBeLessThan(100);
-			expect(Math.abs(total - (100 - score)), `${axis}: ${total} vs ${100 - score}`).toBeLessThanOrEqual(
-				tolerancia,
-			);
+			expect(Math.abs(total - (100 - score)), `${axis}: ${total} vs ${100 - score}`).toBeLessThanOrEqual(tolerancia);
 		}
 	});
 
@@ -213,7 +265,9 @@ describe("estimateGains / evidencia", () => {
 	it("adjunta la evidencia que le pasan, sin cambiar el score", () => {
 		const probes = allPass();
 		const sinEvidencia = evaluateStandards(probes, "brand");
-		const conEvidencia = evaluateStandards(probes, "brand", { llms_txt: "/llms.txt responde 200 (text/plain, 812 chars)." });
+		const conEvidencia = evaluateStandards(probes, "brand", {
+			llms_txt: "/llms.txt responde 200 (text/plain, 812 chars).",
+		});
 		expect(conEvidencia.aos_standards).toBe(sinEvidencia.aos_standards);
 		const disc01 = conEvidencia.requirements.find((r) => r.id === "AOS-DISC-01");
 		expect(disc01?.evidence).toContain("/llms.txt responde 200");
