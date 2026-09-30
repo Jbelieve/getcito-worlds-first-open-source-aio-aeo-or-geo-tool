@@ -22,6 +22,11 @@
  * en status-tone.tsx. No hay un séptimo hex.
  *
  * El overlay ("lo que ve un agente") no se toca: sus colores quedan como estaban en content-overlay.js.
+ *
+ * La **tipografía de la marca** también es una sola: Fraunces 500, opsz 144, tracking -0.025em, azul
+ * Believe 700, la última «e» del wordmark girada -18° y su punto cian. Y una sola regla que no se
+ * dobla: **el wordmark nunca va en negro**. La fuente viaja empaquetada (`fonts/`, ver el @font-face
+ * de abajo): cero llamadas a Google Fonts en runtime y funciona sin internet.
  */
 :root {
 	/* Los seis tokens de la marca. */
@@ -43,7 +48,22 @@
 	--radius: 10px;
 	--fuente: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 	--mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	/* El wordmark tiene su propia familia: es Fraunces, pero el corte con opsz/wght variables que
+	   necesita el brandbook, no el Fraunces estático del body. */
+	--wordmark: "Fraunces Wordmark", Fraunces, Georgia, serif;
 	font-synthesis: none;
+}
+
+/* Fraunces variable (OFL), subseteada a los glifos de la marca y empaquetada en `fonts/`. La sirve
+   la propia extensión por chrome-extension://, así que no hay ninguna llamada a un tercero y el
+   popup se ve igual sin internet. La licencia viaja al lado (fonts/OFL.txt) y la receta del subset
+   está en scripts/subset-fraunces-wordmark.sh. Ejes: opsz 9..144 y wght 100..900. */
+@font-face {
+	font-family: "Fraunces Wordmark";
+	src: url("fonts/fraunces-wordmark.woff2") format("woff2");
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
 }
 
 * {
@@ -63,20 +83,75 @@ body {
 	-webkit-font-smoothing: antialiased;
 }
 
-/* --- header --- */
+/* --- header: el lockup de la marca ---
+   `BeAOS` arriba y `by Believe.` abajo, más chica. El wordmark tiene mínimo 32px y de ahí no baja,
+   así que la línea grande va a 44px —1,375× la chica, pero la diferencia se lee mucho más porque
+   una línea es caja alta y la otra no—. El dominio de la pestaña sigue a la derecha, abajo. */
 .hd {
 	display: flex;
-	align-items: baseline;
+	align-items: flex-end;
 	justify-content: space-between;
 	gap: 10px;
 	padding: 14px 16px;
 	border-bottom: 1px solid var(--linea);
 }
-.hd-mark {
-	font-weight: 700;
-	font-size: 17px;
-	letter-spacing: -0.01em;
+.lockup {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	min-width: 0;
+}
+.lockup-name {
+	font-family: var(--wordmark);
+	font-weight: 500;
+	font-variation-settings: "opsz" 144;
+	font-optical-sizing: none;
+	letter-spacing: -0.025em;
+	line-height: 1;
+	font-size: 44px;
 	color: var(--azul);
+}
+/* La línea del wordmark: el tamaño lo pone acá y de 32px no se baja. */
+.lockup-by {
+	font-size: 32px;
+	line-height: 1;
+	margin-top: 4px;
+}
+/* "by" es el conector, no la marca: va en Inter y en mute. El wordmark no se mezcla con otra
+   tipografía, así que esto es lo único que no es Fraunces en el lockup. */
+.lockup-conector {
+	font-family: var(--fuente);
+	font-size: 0.5em;
+	color: var(--ink-suave);
+}
+/* El wordmark "Believe.", en su tratamiento real: Fraunces 500, opsz 144, tracking -0.025em, azul
+   Believe 700, la última «e» girada y el punto cian. Nunca en negro: azul, o blanco sobre azul. */
+.wordmark {
+	font-family: var(--wordmark);
+	font-weight: 500;
+	font-variation-settings: "opsz" 144;
+	font-optical-sizing: none;
+	letter-spacing: -0.025em;
+	white-space: nowrap;
+	color: var(--azul);
+}
+.wordmark-e {
+	display: inline-block;
+	transform: rotate(-18deg);
+	transform-origin: 50% 65%;
+}
+.wordmark-dot {
+	display: inline-block;
+	width: 0.25em;
+	height: 0.25em;
+	margin-left: 0.28em;
+	border-radius: 50%;
+	background: var(--cian);
+	/* El punto se apoya en la línea base como un punto de verdad, con el micro-ajuste óptico del
+	   brandbook hacia el centro de la altura de la x. Es un círculo de CSS, no un glifo. */
+	vertical-align: baseline;
+	position: relative;
+	top: -0.02em;
 }
 .hd-domain {
 	font-family: var(--mono);

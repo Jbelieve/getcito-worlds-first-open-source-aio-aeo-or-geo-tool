@@ -8,7 +8,7 @@
 //   · que el popup no le pida al DOM un id que el HTML no tiene (el clásico error de vanilla JS,
 //     que no lo agarra ningún compilador porque no hay compilador).
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 const EXT = new URL("../", import.meta.url);
@@ -32,11 +32,18 @@ const PUBLICADOS = [
 ];
 
 describe("manifest", () => {
-	it("es la versión 2.1.1 y se llama BeAOS", () => {
+	it("es la versión 2.1.1 y se llama BeAOS by Believe", () => {
 		assert.equal(MANIFEST.manifest_version, 3);
 		assert.equal(MANIFEST.version, "2.1.1");
-		assert.match(MANIFEST.name, /^BeAOS/);
+		// El nombre es el lockup en texto plano: `BeAOS by Believe`. El manifest no renderiza, así que
+		// acá no hay «e» girada ni punto cian — eso vive en el popup. El descriptor que sigue al guion
+		// es lo único que se recortó, para que el nombre entre en el campo de 45 de la store.
+		assert.match(MANIFEST.name, /^BeAOS by Believe/);
 		assert.equal(MANIFEST.name.length <= 45, true, "el nombre tiene que entrar en el campo de la store");
+	});
+
+	it("el tooltip del icono también dice el lockup, y en texto plano", () => {
+		assert.equal(MANIFEST.action.default_title, "BeAOS by Believe");
 	});
 
 	it("explica las dos cosas: AOS y APS", () => {
@@ -163,8 +170,83 @@ describe("el popup y el HTML están cableados", () => {
 		}
 	});
 
-	it("el título del popup dice BeAOS", () => {
-		assert.match(POPUP_HTML, /<title>BeAOS<\/title>/);
+	it("el título del popup dice el lockup", () => {
+		// El `<title>` es lo que Chrome muestra en la barra de tareas: es un nombre, no la marca
+		// dibujada, así que va en texto plano — el mismo que el manifest.
+		assert.match(POPUP_HTML, /<title>BeAOS by Believe<\/title>/);
+	});
+});
+
+describe("el lockup de la marca", () => {
+	const CSS = read("popup.css");
+	/** El bloque de una regla, para poder afirmar sobre sus declaraciones y no sobre todo el archivo. */
+	const bloque = (selector) => {
+		const m = CSS.match(new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`));
+		assert.ok(m, `no encuentro la regla ${selector}`);
+		return m[1];
+	};
+
+	it("el header es el lockup: BeAOS arriba y el wordmark en una línea aparte", () => {
+		assert.match(POPUP_HTML, /class="lockup-name">BeAOS</);
+		assert.match(POPUP_HTML, /class="lockup-conector">by</);
+		// El wordmark no es texto plano: la última «e» va en su span y el punto cian es un círculo.
+		assert.match(POPUP_HTML, /class="wordmark">Believ<span class="wordmark-e">e<\/span>/);
+		assert.match(POPUP_HTML, /class="wordmark-dot"><\/span>/);
+		// La «e» girada es la ÚLTIMA, no la «v»: el error clásico de este wordmark.
+		assert.equal(/wordmark-e">v</.test(POPUP_HTML), false);
+	});
+
+	it("el wordmark no se mezcla: Fraunces 500, opsz 144 y el tracking del brandbook", () => {
+		const wm = bloque(".wordmark");
+		assert.match(wm, /font-family:\s*var\(--wordmark\)/);
+		assert.match(wm, /font-weight:\s*500/);
+		assert.match(wm, /font-variation-settings:\s*"opsz"\s*144/);
+		assert.match(wm, /letter-spacing:\s*-0\.025em/);
+		// La familia --wordmark tiene que ser Fraunces: reemplazarla por Inter es un anti-pattern.
+		assert.match(CSS, /--wordmark:\s*"Fraunces Wordmark",\s*Fraunces/);
+	});
+
+	it("la última «e» gira -18° con el pivote del brandbook", () => {
+		const e = bloque(".wordmark-e");
+		assert.match(e, /rotate\(-18deg\)/);
+		assert.match(e, /transform-origin:\s*50% 65%/);
+		assert.match(e, /display:\s*inline-block/, "sin inline-block el transform no se aplica");
+	});
+
+	it("el punto cian: 0.25em de diámetro, 0.28em de separación, sobre la línea base", () => {
+		const dot = bloque(".wordmark-dot");
+		assert.match(dot, /width:\s*0\.25em/);
+		assert.match(dot, /height:\s*0\.25em/);
+		assert.match(dot, /margin-left:\s*0\.28em/);
+		assert.match(dot, /border-radius:\s*50%/);
+		assert.match(dot, /background:\s*var\(--cian\)/);
+		assert.match(dot, /vertical-align:\s*baseline/);
+	});
+
+	it("el wordmark vive en azul Believe: nunca en negro", () => {
+		for (const selector of [".lockup-name", ".wordmark"]) {
+			assert.match(bloque(selector), /color:\s*var\(--azul\)/, `${selector} tiene que ir en azul Believe`);
+			assert.equal(/color:\s*(#1a1a1a|var\(--ink\))/.test(bloque(selector)), false, `${selector} en tinta`);
+		}
+	});
+
+	it("el wordmark no baja de 32px: la línea grande crece para que la chica quepa", () => {
+		assert.match(bloque(".lockup-by"), /font-size:\s*32px/, "el wordmark tiene mínimo 32px");
+		const grande = Number(bloque(".lockup-name").match(/font-size:\s*(\d+)px/)[1]);
+		assert.ok(grande > 32, `BeAOS tiene que ser más grande que el wordmark, no ${grande}px`);
+	});
+
+	it("la fuente viaja empaquetada, con su licencia al lado y declarada con @font-face local", () => {
+		assert.match(CSS, /@font-face\s*\{[^}]*font-family:\s*"Fraunces Wordmark"/);
+		assert.match(CSS, /src:\s*url\("fonts\/fraunces-wordmark\.woff2"\)\s*format\("woff2"\)/);
+		assert.equal(/fonts\.googleapis|fonts\.gstatic/.test(CSS + POPUP_HTML), false, "nada de Google Fonts");
+		for (const f of ["fonts/fraunces-wordmark.woff2", "fonts/OFL.txt"]) {
+			assert.equal(existsSync(new URL(f, EXT)), true, `falta ${f} en el repo`);
+		}
+		// Y viaja al zip: una extensión que declara un @font-face que el paquete no lleva se ve con
+		// la tipografía equivocada sin que nada falle.
+		const RELEASE = readFileSync(new URL("../../scripts/release-extension.sh", EXT), "utf8");
+		assert.match(RELEASE, /^DIRS=\(icons fonts\)$/m, "el zip tiene que llevar fonts/");
 	});
 });
 

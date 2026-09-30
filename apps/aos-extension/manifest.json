@@ -1,11 +1,11 @@
 {
 	"manifest_version": 3,
-	"name": "BeAOS — Agent Operability & Preference Score",
+	"name": "BeAOS by Believe — Agent Operability Score",
 	"version": "2.1.1",
 	"description": "¿Un agente de IA puede OPERAR tu sitio y además preferirlo? Mide el AOS™ y el APS de cualquier web al instante.",
 	"action": {
 		"default_popup": "popup.html",
-		"default_title": "Medir el AOS™ y el APS de este sitio"
+		"default_title": "BeAOS by Believe"
 	},
 	"permissions": ["activeTab", "storage", "scripting"],
 	"host_permissions": ["https://beaos.believe-global.com/*"],
