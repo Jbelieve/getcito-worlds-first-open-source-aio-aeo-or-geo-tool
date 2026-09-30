@@ -8,6 +8,18 @@ humano desde el dev console.
 
 ---
 
+## Versión del paquete
+
+```
+2.1.0
+```
+
+La versión sale del `manifest.json`, así que el nombre del zip (`dist/beaos-extension-2.1.0.zip`) la
+dice sola. Es un incremento sobre la 2.0.0, no un rediseño: el listado de abajo cambió solo en lo que
+el popup muestra de nuevo (el puntaje por eje y el badge Agent-Preferred).
+
+---
+
 ## Nombre (campo "Name", máx. 45 caracteres)
 
 ```

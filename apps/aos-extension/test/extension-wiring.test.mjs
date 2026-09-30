@@ -3,7 +3,7 @@
 // que alguien pidió explícitamente:
 //
 //   · que no quede ninguna credencial ni host de Maasy/Supabase en lo que se publica,
-//   · que el manifest sea 2.0.0 y hable con BeAOS,
+//   · que el manifest sea 2.1.0 y hable con BeAOS,
 //   · que el overlay siga estando y sin dependencias del servidor,
 //   · que el popup no le pida al DOM un id que el HTML no tiene (el clásico error de vanilla JS,
 //     que no lo agarra ningún compilador porque no hay compilador).
@@ -32,9 +32,9 @@ const PUBLICADOS = [
 ];
 
 describe("manifest", () => {
-	it("es la versión 2.0.0 y se llama BeAOS", () => {
+	it("es la versión 2.1.0 y se llama BeAOS", () => {
 		assert.equal(MANIFEST.manifest_version, 3);
-		assert.equal(MANIFEST.version, "2.0.0");
+		assert.equal(MANIFEST.version, "2.1.0");
 		assert.match(MANIFEST.name, /^BeAOS/);
 		assert.equal(MANIFEST.name.length <= 45, true, "el nombre tiene que entrar en el campo de la store");
 	});
