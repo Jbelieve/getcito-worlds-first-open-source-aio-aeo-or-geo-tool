@@ -1,0 +1,20 @@
+apps/aos-extension/README.md
+  h_c5ca005a78c880 96-105
+apps/aos-extension/lib.js
+  h_c5ca005a78c880 187-199,201,203-216,220,500-520,526-531,537-538,542,547
+apps/aos-extension/popup.js
+  h_c5ca005a78c880 45-50,52-59,323-324,341-342,344,350-351,358-360
+apps/aos-extension/test/lib.test.mjs
+  h_c5ca005a78c880 40,234-235,240-268,272,279,290-296,305-342,355-397
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "db51b6b940cac0dd10c6d0c892d073b8540715b6",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
