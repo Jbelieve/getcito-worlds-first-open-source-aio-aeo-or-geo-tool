@@ -607,8 +607,12 @@ describe("el Bot Beacon", () => {
 		const audit = mapAuditResponse(COMPLETO);
 		assert.equal(audit.botBeacon, null);
 		assert.equal(audit.botBeaconText, BOT_BEACON_NO_SOURCE_TEXT);
-		assert.match(audit.botBeaconText, /no lo inventamos/);
+		// La propiedad que importa es que NO haya un número: un cero se leería como "no te visitó ningún
+		// agente", que es distinto de "no lo sabemos". Antes acá se afirmaba la frase "no lo inventamos",
+		// que era texto nuestro hablándole de nuestra integridad al usuario. Se sacó de la interfaz: el
+		// candado útil es el de los dígitos, no el de la frase.
 		assert.equal(/\d/.test(audit.botBeaconText), false, "el texto del hueco no lleva ningún número");
+		assert.ok(audit.botBeaconText.length < 120, "y se dice en una línea, no en un párrafo");
 	});
 
 	it("un beacon vacío o roto se lee como 'sin dato', nunca como cero agentes", () => {

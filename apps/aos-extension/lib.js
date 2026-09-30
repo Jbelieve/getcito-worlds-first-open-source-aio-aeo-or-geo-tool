@@ -102,7 +102,7 @@ export const BADGE_VERIFIED_TEXT = "perfil firmado verificado";
  * como "no te visitó ningún agente", que sería un dato falso.
  */
 export const BOT_BEACON_NO_SOURCE_TEXT =
-	"BeAOS mide el estándar de un sitio, no su tráfico. No tenemos el tráfico agéntico real de esta web, así que acá no hay número — y no lo inventamos.";
+	"BeAOS mide el estándar de un sitio, no su tráfico.";
 
 // --- funciones puras ---------------------------------------------------------
 
