@@ -1,0 +1,18 @@
+apps/aos-extension/popup.css
+  h_c5ca005a78c880 170,689-706
+apps/aos-extension/store/STORE-LISTING.md
+  h_c5ca005a78c880 20-21,33-37
+apps/aos-extension/test/badge-visibility.test.mjs
+  h_c5ca005a78c880 1-211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "03ff86c86579b7b1a88addb7e127f11435b76001",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
