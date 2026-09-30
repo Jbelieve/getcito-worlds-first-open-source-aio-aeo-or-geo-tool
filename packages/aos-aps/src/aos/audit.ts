@@ -46,7 +46,9 @@ export interface AosAuditResult {
 }
 
 const DEFAULT_TIMEOUT_MS = 8000;
-const USER_AGENT = "BeAOS-AOS-Audit/0.1 (+https://beaos.believe-global.com)";
+// La web publica del estandar, no el host de la app: quien lea este User-Agent en un log tiene que
+// poder entrar sin que lo manden a un login.
+const USER_AGENT = "BeAOS-AOS-Audit/0.1 (+https://be-aos.believe-global.com)";
 
 /**
  * El guardián anti-SSRF vive en `./ssrf` y lo comparten el endpoint público, el worker y el MCP:
