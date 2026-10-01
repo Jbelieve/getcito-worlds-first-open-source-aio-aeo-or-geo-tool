@@ -373,6 +373,15 @@ function AgentPreferencePage() {
 								Modelos:{" "}
 								<span className="font-mono text-foreground">{estimateData.models.join(", ") || "ninguno"}</span>
 							</p>
+							{/*
+							 * El precio del APS_PRICES es lo que decide si la corrida entra o no, y hasta
+							 * ahora no había nada que lo contrastara. Acá se dice de dónde sale el número
+							 * estimado: el real de cada corrida, al lado, es lo que lo corrige.
+							 */}
+							<p className="text-muted-foreground">
+								El estimado sale del precio por llamada de <span className="font-mono">APS_PRICES</span>. El costo real
+								de cada corrida queda guardado abajo, al lado del estimado: si no coinciden, el precio está mal.
+							</p>
 							{estimateData.estimate !== null && estimateData.estimate.missingPrices.length > 0 && (
 								<p className={BLOCKING_TEXT}>
 									Sin precio para <span className="font-mono">{estimateData.estimate.missingPrices.join(", ")}</span>:

@@ -24,6 +24,7 @@ import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { loadAssetBundle } from "@/server/agent-bundle";
+import { costComparisonForRuns } from "@/server/agent-aps-core";
 import {
 	ClaimEntityNotFoundError,
 	getClaim as getClaimCore,
@@ -211,6 +212,11 @@ const listApsRuns: McpTool = {
 					runs.map((run) => run.id),
 				),
 			);
+		// Estimado contra real: el mismo cálculo que usa la pantalla, para que el MCP no
+		// pueda informar un costo distinto del que ve el operador.
+		const costs = await costComparisonForRuns(
+			runs.map((run) => ({ id: run.id, estimatedCostUsd: run.estimatedCostUsd })),
+		);
 		const payload = {
 			runs: runs.map((run) => ({
 				id: run.id,
@@ -220,6 +226,7 @@ const listApsRuns: McpTool = {
 				finishedAt: run.finishedAt?.toISOString() ?? null,
 				partial: run.partial,
 				partialReason: run.partialReason,
+				cost: costs.get(run.id) ?? null,
 				scores: scores
 					.filter((score) => score.runId === run.id)
 					.map((score) => ({

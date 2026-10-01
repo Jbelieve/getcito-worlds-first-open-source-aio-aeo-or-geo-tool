@@ -12,8 +12,14 @@
 import {
 	apsBudgetConfigFromEnv,
 	apsPricesFromEnv,
+	type ApsCostComparison,
 	canRegenerateLibrary,
+	compareEstimatedToActual,
 	GATEWAY_JUDGE_PIPELINE_VERSION,
+	type GatewayCallCost,
+	type GatewayJudgeConfig,
+	type GatewayLibraryInput,
+	type GeneratedLibrary,
 	generateLibraryWithGateway,
 	isLibraryUsable,
 	judgeConfigFromEnv,
@@ -25,6 +31,7 @@ import {
 	type ResolvedLibraryCategory,
 	readGatewayBudget,
 	resolveLibraryCategory,
+	sumProviderCallCosts,
 	validateLibrary,
 } from "@workspace/aos-aps/aps";
 import {
@@ -36,8 +43,9 @@ import {
 	agentBrandEntities,
 } from "@workspace/aos-aps/db/schema";
 import { db } from "@workspace/lib/db/db";
-import { brands } from "@workspace/lib/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { brands, providerCalls } from "@workspace/lib/db/schema";
+import { recordProviderCall } from "@workspace/lib/providers";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
 	generationFailureMessage,
 	generatorInputsFromBrand,
@@ -211,7 +219,16 @@ export async function startApsRunForBrand(data: ApsRunRequestInput): Promise<Sta
 
 	const [run] = await db
 		.insert(agentApsRuns)
-		.values({ brandId: data.brandId, status: "planned", ...prepared.run })
+		.values({
+			brandId: data.brandId,
+			status: "planned",
+			...prepared.run,
+			// `numeric` viaja como string en Postgres y el dominio lo maneja como número: la
+			// conversión se hace acá, en el borde, y en un solo lugar. El estimado se guarda en
+			// la fila de la corrida porque es la mitad que hace falta para poder comparar,
+			// después, contra lo que costó de verdad.
+			estimatedCostUsd: prepared.run.estimatedCostUsd === null ? null : String(prepared.run.estimatedCostUsd),
+		})
 		.returning({ id: agentApsRuns.id });
 
 	const boss = await getBoss();
@@ -234,6 +251,105 @@ export interface PromptLibraryPrompt {
 	kind: string;
 	funnelStage: string | null;
 	enabled: boolean;
+}
+
+/**
+ * Estimado contra real, por corrida.
+ *
+ * Existe porque el estimado y el real se guardan por separado y **nadie los
+ * comparaba**: el precio de `APS_PRICES` sobrevivía sin que hubiera un número que
+ * lo contradijera. Acá se leen las llamadas de cada corrida y se devuelve el
+ * veredicto ya resuelto, para que la pantalla y el MCP no tengan cada uno su
+ * propia versión de la misma cuenta.
+ *
+ * Se lee de `provider_calls` y no solo de las columnas de la corrida porque las
+ * columnas se escriben al cerrar cada etapa: una corrida en curso tiene llamadas
+ * registradas y todavía ningún total. Leer las llamadas es lo que hace que la
+ * comparación sirva **también mientras la corrida está corriendo**.
+ */
+export async function costComparisonForRuns(
+	runs: Array<{ id: string; estimatedCostUsd: string | null }>,
+): Promise<Map<string, ApsCostComparison>> {
+	const result = new Map<string, ApsCostComparison>();
+	if (runs.length === 0) return result;
+	const rows: Array<{ agentApsRunId: string | null; kind: string; costUsd: string | null }> = await db
+		.select({ agentApsRunId: providerCalls.agentApsRunId, kind: providerCalls.kind, costUsd: providerCalls.costUsd })
+		.from(providerCalls)
+		.where(
+			inArray(
+				providerCalls.agentApsRunId,
+				runs.map((run) => run.id),
+			),
+		);
+
+	const byRun = new Map<string, Array<{ kind: string; costUsd: number | null }>>();
+	for (const row of rows) {
+		if (row.agentApsRunId === null) continue;
+		const parsed = row.costUsd === null ? null : Number.parseFloat(row.costUsd);
+		const list = byRun.get(row.agentApsRunId) ?? [];
+		list.push({ kind: row.kind, costUsd: parsed === null || Number.isFinite(parsed) === false ? null : parsed });
+		byRun.set(row.agentApsRunId, list);
+	}
+
+	for (const run of runs) {
+		const calls = byRun.get(run.id) ?? [];
+		const costOf = (filter: (kind: string) => boolean) =>
+			sumProviderCallCosts(calls.filter((call) => filter(call.kind)).map((call) => ({ costUsd: call.costUsd })));
+		const estimated = run.estimatedCostUsd === null ? null : Number.parseFloat(run.estimatedCostUsd);
+		result.set(
+			run.id,
+			compareEstimatedToActual({
+				estimatedUsd: estimated === null || Number.isFinite(estimated) === false ? null : estimated,
+				measurement: costOf((kind) => kind !== "aps_judge"),
+				judge: costOf((kind) => kind === "aps_judge"),
+			}),
+		);
+	}
+	return result;
+}
+
+/**
+ * Genera la biblioteca y registra lo que costó.
+ *
+ * La generación de la biblioteca **también se factura** —es una llamada al gateway
+ * de hasta 32.000 tokens de salida— y hasta ahora no dejaba rastro en ningún
+ * lado: no es una llamada de corrida, así que `provider_calls` no la veía y el
+ * gasto desaparecía. Se registra con `kind: "run"` porque es una llamada de
+ * trabajo sobre la marca (no una investigación de onboarding) y sin
+ * `agent_aps_run_id`, porque pasa **antes** de que exista la corrida: la
+ * biblioteca se genera una vez y se usa en muchas corridas.
+ *
+ * El reporte se dispara apenas llega la respuesta, incluso cuando la generación
+ * falla o sale truncada: esa llamada se pagó igual y es justamente la que más
+ * duele, porque no produjo nada.
+ */
+export async function generateLibraryRecordingCost(
+	input: GatewayLibraryInput,
+	config: GatewayJudgeConfig,
+	brandId: string,
+): Promise<GeneratedLibrary> {
+	let spend: GatewayCallCost | null = null;
+	const generated = await generateLibraryWithGateway(input, config, fetch, (reported) => {
+		spend = reported;
+	});
+	if (spend !== null) {
+		const reported: GatewayCallCost = spend;
+		await recordProviderCall({
+			provider: "gateway",
+			model: config.model,
+			kind: "run",
+			brandId,
+			promptId: null,
+			agentApsRunId: null,
+			success: true,
+			cost: {
+				costUsd: reported.costUsd,
+				pricingSource: reported.pricingSource,
+				...(reported.usage === undefined ? {} : { usage: reported.usage }),
+			},
+		});
+	}
+	return generated;
 }
 
 export interface EnsurePromptLibraryInput {
@@ -390,9 +506,10 @@ export async function ensurePromptLibraryForEntity(data: EnsurePromptLibraryInpu
 	]
 		.filter((part): part is string => typeof part === "string" && part.length > 0)
 		.join(" | ");
-	const generated = await generateLibraryWithGateway(
+	const generated = await generateLibraryRecordingCost(
 		{ brandName: brand.name, industry: category, brief: brief.length > 0 ? brief : null },
 		config,
+		data.brandId,
 	);
 	if (isLibraryUsable(generated) === false) {
 		// La causa concreta, no un genérico: el consumidor de esta puerta es otro agente y un

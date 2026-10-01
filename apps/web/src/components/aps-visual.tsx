@@ -19,6 +19,7 @@ import { IconInfoCircle } from "@tabler/icons-react";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@workspace/ui/components/chart";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { Bar, BarChart, Cell, XAxis, YAxis } from "recharts";
+import { costLineText, formatUsd, type ApsCostComparisonView } from "@/lib/aps/run-cost";
 import { apsBand, BandChip, BLOCKING_TEXT, MONO_LABEL, SIGNAL_BAR } from "@/components/status-tone";
 
 /** The five dimensions, with the weight each one carries. Labels are the product's words. */
@@ -356,6 +357,13 @@ export interface ApsRunView {
 	judgeModelAlias: string;
 	judgeModelVersion: string;
 	measurementVersion: string;
+	/**
+	 * Estimado contra real. Null mientras la corrida no tiene ninguna llamada registrada.
+	 *
+	 * Es la comparación que faltaba: sin esto, el precio por llamada de `APS_PRICES` no tenía con
+	 * qué contrastarse y cualquier valor puesto a mano sobrevivía sin que nadie lo notara.
+	 */
+	cost?: ApsCostComparisonView | null;
 	scores: ApsScoreView[];
 }
 
@@ -372,6 +380,41 @@ export function rollupOf(scores: ApsScoreView[]): { aps: number; band: string } 
 	if (scores.length === 0) return null;
 	const aps = Math.round(scores.reduce((sum, score) => sum + score.aps, 0) / scores.length);
 	return { aps, band: bandFromScore(aps) };
+}
+
+/**
+ * Estimado contra real, en una línea.
+ *
+ * Existe porque la diferencia entre los dos números es lo único que corrige el precio, y hasta
+ * ahora no se veía en ningún lado. Lo que **no** hace es mostrar un total que parece completo: si
+ * alguna llamada quedó sin costo, dice cuántas y aclara que el total está incompleto.
+ */
+export function ApsCostLine({ cost }: { cost: ApsCostComparisonView }) {
+	const text = costLineText(cost);
+	const incomplete = cost.verdict === "incomplete";
+	return (
+		<div className="rounded-md border p-2 text-xs">
+			<p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+				<span className="font-medium text-muted-foreground">Costo:</span>
+				<span>
+					estimado <span className="font-mono">{formatUsd(cost.estimatedUsd)}</span>
+				</span>
+				<span aria-hidden="true">·</span>
+				<span>
+					real <span className="font-mono">{text.real}</span>
+				</span>
+				{cost.ratio !== null && <span className="text-muted-foreground">({cost.ratio.toFixed(2)}×)</span>}
+				<span className="text-muted-foreground">· {text.calls}</span>
+			</p>
+			<p className="pt-1 text-muted-foreground">
+				{text.split}
+				{incomplete
+					? ` El total real es incompleto: ${cost.unpricedCalls} de ${cost.totalCalls} llamadas no reportaron costo, así que la suma de las que sí sabemos no es el total.`
+					: ""}
+			</p>
+			<p className={`pt-1 ${incomplete ? BLOCKING_TEXT : "text-muted-foreground"}`}>{text.note}</p>
+		</div>
+	);
 }
 
 /**
@@ -419,6 +462,13 @@ export function ApsRunBlock({
 				</p>
 			)}
 			{run.error && <p className={`text-xs ${BLOCKING_TEXT}`}>{run.error}</p>}
+
+			{/*
+			 * El estimado contra el real, en la propia corrida. Es el único lugar donde el precio por
+			 * llamada de APS_PRICES se puede contradecir con un número medido: si el real se parece
+			 * al estimado el precio estaba bien, y si no, hay que corregirlo.
+			 */}
+			{run.cost != null && <ApsCostLine cost={run.cost} />}
 
 			{run.scores.length > 0 && expanded && rollup !== null && (
 				<ApsHeadline
