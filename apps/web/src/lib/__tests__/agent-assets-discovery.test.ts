@@ -69,22 +69,49 @@ const OPENAPI_URL = "https://believe-global.com/openapi.json";
 const ORIGIN = "https://believe-global.com";
 
 describe("apiFromOpenApiDocument", () => {
-	it("toma la raiz que la propia API declara", () => {
+	it("toma la raiz que la propia API declara, y omite la doc que nadie declaro", () => {
+		// Este test consagraba la convencion `${origin}/developers` como documentacion. Estaba mal por la
+		// misma razon que el endpoint del MCP: el dominio no declara donde vive la doc. El OpenAPI no tiene
+		// ningun campo de documentacion, asi que la unica fuente es el `Link rel="service-doc"` del home;
+		// sin esa declaracion la clave se omite y el agente no recibe una URL que nadie prometio.
 		const document = { openapi: "3.1.0", servers: [{ url: "https://api.believe-global.com/v1" }] };
-		expect(apiFromOpenApiDocument(document, OPENAPI_URL, ORIGIN)).toEqual({
+		const api = apiFromOpenApiDocument(document, OPENAPI_URL, ORIGIN);
+		expect(api).toEqual({
 			apiUrl: "https://api.believe-global.com/v1",
 			openApiUrl: OPENAPI_URL,
-			apiDocsUrl: `${ORIGIN}/developers`,
 		});
+		expect(api).not.toHaveProperty("apiDocsUrl");
 	});
 
-	it("resuelve un server relativo contra el origen", () => {
+	it("resuelve un server relativo (path-absoluto) contra la URL del documento", () => {
 		const document = { openapi: "3.0.0", servers: [{ url: "/api/v2" }] };
 		expect(apiFromOpenApiDocument(document, OPENAPI_URL, ORIGIN)?.apiUrl).toBe(`${ORIGIN}/api/v2`);
 	});
 
-	it("sin servers cae al prefijo convencional del origen", () => {
-		expect(apiFromOpenApiDocument({ openapi: "3.1.0" }, OPENAPI_URL, ORIGIN)?.apiUrl).toBe(`${ORIGIN}/api/v1`);
+	it("un server relativo se resuelve contra el documento, no contra el origen", () => {
+		// La spec de OpenAPI dice que un `servers[].url` relativo se resuelve contra la URL donde se sirve
+		// el documento. Resolverlo contra el origen publicaba OTRA direccion inventada —tambien armada con
+		// el dominio— cuando el documento vive bajo un prefijo: `v2` en `/api/openapi.json` es `/api/v2`,
+		// no `/v2`.
+		const document = { openapi: "3.0.0", servers: [{ url: "v2" }] };
+		const apiUrl = apiFromOpenApiDocument(document, `${ORIGIN}/api/openapi.json`, ORIGIN)?.apiUrl;
+		expect(apiUrl).toBe(`${ORIGIN}/api/v2`);
+		expect(apiUrl).not.toBe(`${ORIGIN}/v2`);
+	});
+
+	it("sin `servers[0].url` la entrada se omite: no se cae al prefijo convencional del origen", () => {
+		// Este test se llamaba "sin servers cae al prefijo convencional del origen" y consagraba
+		// `${origin}/api/v1`. Estaba mal: el prefijo lo elegia BeAOS a partir del dominio, no el sitio. Un
+		// `api-catalog` que promete una API en una direccion que nadie declaro manda al agente a llamar un
+		// endpoint que puede no existir — el mismo error que publicar la landing como endpoint del MCP.
+		expect(apiFromOpenApiDocument({ openapi: "3.1.0" }, OPENAPI_URL, ORIGIN)).toBeUndefined();
+		expect(apiFromOpenApiDocument({ openapi: "3.1.0", servers: [] }, OPENAPI_URL, ORIGIN)).toBeUndefined();
+		expect(
+			apiFromOpenApiDocument({ openapi: "3.1.0", servers: [{ url: "   " }] }, OPENAPI_URL, ORIGIN),
+		).toBeUndefined();
+		expect(
+			apiFromOpenApiDocument({ openapi: "3.1.0", servers: ["no-es-un-objeto"] }, OPENAPI_URL, ORIGIN),
+		).toBeUndefined();
 	});
 
 	it("la doc y el estado salen del Link del home cuando existen", () => {
@@ -95,7 +122,7 @@ describe("apiFromOpenApiDocument", () => {
 	});
 
 	it("sin estado declarado el campo se omite, no se inventa", () => {
-		const document = { openapi: "3.1.0" };
+		const document = { openapi: "3.1.0", servers: [{ url: `${ORIGIN}/api` }] };
 		expect(apiFromOpenApiDocument(document, OPENAPI_URL, ORIGIN)).not.toHaveProperty("apiStatusUrl");
 	});
 
@@ -149,15 +176,78 @@ describe("declaredApi", () => {
 			calls.push(url);
 			if (url === `${ORIGIN}/openapi.json`) return new Response("no", { status: 404 });
 			if (url === `${ORIGIN}/.well-known/openapi.json`) {
-				return new Response(JSON.stringify({ openapi: "3.1.0" }), { status: 200 });
+				// Este test asertaba `${ORIGIN}/api/v1` porque el documento no declaraba `servers`: o sea que
+				// pasaba por la convencion inventada y no por la ubicacion del archivo. El documento declara
+				// su raiz, que es lo unico que puede declarar una API; la busqueda de candidatos es lo que se
+				// prueba aca.
+				return new Response(JSON.stringify({ openapi: "3.1.0", servers: [{ url: `${ORIGIN}/api` }] }), {
+					status: 200,
+				});
 			}
 			return new Response("", { status: 200 });
 		});
 
 		const api = await declaredApi(ORIGIN);
 		expect(api?.openApiUrl).toBe(`${ORIGIN}/.well-known/openapi.json`);
-		expect(api?.apiUrl).toBe(`${ORIGIN}/api/v1`);
+		expect(api?.apiUrl).toBe(`${ORIGIN}/api`);
 		expect(calls).toContain(`${ORIGIN}/openapi.json`);
+	});
+
+	it("un OpenAPI que no declara su raiz no declara ninguna API", async () => {
+		// El otro lado del mismo bug: el archivo existe, es OpenAPI de verdad, pero nadie declaro en que
+		// direccion vive la API. `servers` es la unica fuente, y sin el no hay entrada que publicar.
+		const calls: string[] = [];
+		vi.stubGlobal("fetch", async (input: unknown) => {
+			const url = String(input);
+			calls.push(url);
+			if (url.endsWith("/openapi.json")) {
+				return new Response(JSON.stringify({ openapi: "3.1.0" }), { status: 200 });
+			}
+			return new Response("", { status: 404 });
+		});
+
+		expect(await declaredApi(ORIGIN)).toBeUndefined();
+		expect(calls).toContain(`${ORIGIN}/openapi.json`);
+		expect(calls).toContain(`${ORIGIN}/.well-known/openapi.json`);
+	});
+
+	it("con `servers` declarado el catalogo usa ESA url, no una convencion", async () => {
+		const apiUrl = "https://api.believe-global.com/v1";
+		vi.stubGlobal("fetch", async (input: unknown) => {
+			const url = String(input);
+			if (url === `${ORIGIN}/openapi.json`) {
+				return new Response(JSON.stringify({ openapi: "3.1.0", servers: [{ url: apiUrl }] }), { status: 200 });
+			}
+			return new Response("", { status: 404 });
+		});
+
+		const api = await declaredApi(ORIGIN);
+		expect(api?.apiUrl).toBe(apiUrl);
+
+		const assets = generateAgentAssets({
+			name: "Believe",
+			websiteUrl: ORIGIN,
+			apiUrl: api?.apiUrl,
+			openApiUrl: api?.openApiUrl,
+		});
+		const catalog = assets.find((asset) => asset.path === "/.well-known/api-catalog");
+		// Los dos lados del linkset (el `item` y el `anchor` de la entrada) dicen la URL declarada.
+		expect(catalog?.content).toContain(`"anchor": "${apiUrl}"`);
+		expect(catalog?.content).toContain(`"href": "${apiUrl}"`);
+		expect(catalog?.content).not.toContain(`${ORIGIN}/api/v1`);
+		expect(catalog?.content).not.toContain("/developers");
+	});
+
+	it("sin raiz declarada no hay api-catalog ni `/api/v1` en el sitio del bundle", async () => {
+		vi.stubGlobal("fetch", async (input: unknown) => {
+			const url = String(input);
+			if (url.endsWith("/openapi.json")) return new Response(JSON.stringify({ openapi: "3.1.0" }), { status: 200 });
+			return new Response("", { status: 404 });
+		});
+
+		expect(await declaredApi(ORIGIN)).toBeUndefined();
+		const assets = generateAgentAssets({ name: "Believe", websiteUrl: ORIGIN });
+		expect(assets.some((asset) => asset.path === "/.well-known/api-catalog")).toBe(false);
 	});
 
 	it("sin API declarada no devuelve nada", async () => {

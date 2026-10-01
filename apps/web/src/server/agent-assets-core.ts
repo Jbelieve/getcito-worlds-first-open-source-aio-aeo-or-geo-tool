@@ -113,11 +113,16 @@ export function linkByRel(links: ParsedLink[], rel: string): string | undefined 
 	return undefined;
 }
 
-/** Resuelve una URL declarada contra el origen. Un valor relativo vale; uno inventado no. */
-function resolveUrl(value: unknown, origin: string): string | undefined {
+/**
+ * Resuelve una URL declarada contra una base. Un valor relativo vale; uno inventado no.
+ *
+ * La base la elige el contrato del campo que la declara: un `Link` del home (RFC 8288) se resuelve
+ * contra el propio home, y un `servers[].url` de OpenAPI contra la URL del documento.
+ */
+function resolveUrl(value: unknown, base: string): string | undefined {
 	if (typeof value !== "string" || value.trim().length === 0) return undefined;
 	try {
-		return new URL(value.trim(), origin).toString();
+		return new URL(value.trim(), base).toString();
 	} catch {
 		return undefined;
 	}
@@ -126,14 +131,22 @@ function resolveUrl(value: unknown, origin: string): string | undefined {
 /**
  * La API que la marca declara en su descripcion OpenAPI, ya derivada.
  *
- * `apiDocsUrl` cae en `/developers` cuando la marca no la declara: es la convencion que la propia
- * consigna pide, no un endpoint que inventemos. `apiStatusUrl` solo viaja si la marca lo declaro en un
- * `Link rel="status"`: sin dato no se emite, y el generador ya sabe omitir campos que faltan.
+ * `apiUrl` sale de `servers[0].url` —la raiz que la propia API declara— y por eso es obligatorio: sin esa
+ * declaracion el documento describe una API pero no dice donde vive, y el `api-catalog` no emite la
+ * entrada. Antes se caia a `${origin}/api/v1`, un prefijo que elegia BeAOS a partir del dominio: un
+ * catalogo que promete una API en una direccion que nadie declaro manda al agente a llamar un endpoint
+ * que puede no existir.
+ *
+ * `apiDocsUrl` y `apiStatusUrl` solo viajan si el sitio los declaro en un `Link` de su home: `/developers`
+ * era la misma convencion inventada, no una declaracion. El generador ya sabe omitir campos que faltan.
+ *
+ * Un `servers[0].url` relativo se resuelve contra la URL del documento, no contra el origen: la spec de
+ * OpenAPI lo define asi, y con el origen un `v2` servido bajo `/api/` publicaba `/v2`.
  */
 export interface DeclaredApi {
 	apiUrl: string;
 	openApiUrl: string;
-	apiDocsUrl: string;
+	apiDocsUrl?: string;
 	apiStatusUrl?: string;
 }
 
@@ -142,7 +155,8 @@ export interface DeclaredApi {
  *
  * Devolver `undefined` cuando el JSON no trae `openapi` es la regla del bundle: un documento que
  * responde 200 pero no es una descripcion de API no declara ninguna API, y el `api-catalog` (RFC 9727)
- * no puede emitirse por el solo hecho de que exista una URL.
+ * no puede emitirse por el solo hecho de que exista una URL. Lo mismo vale cuando el documento es
+ * OpenAPI pero no declara su raiz en `servers`.
  */
 export function apiFromOpenApiDocument(
 	document: unknown,
@@ -155,20 +169,25 @@ export function apiFromOpenApiDocument(
 	const record = document as Record<string, unknown>;
 	if (typeof record.openapi !== "string" || record.openapi.trim().length === 0) return undefined;
 
-	// `servers[0].url` es la raiz que la propia API declara; si no la hay, se cae al prefijo
-	// convencional del origen en vez de inventar un host.
+	// `servers[0].url` es la raiz que la propia API declara, y la unica fuente posible del endpoint: si no
+	// la declara, se omite la entrada en vez de completarla con el prefijo convencional del origen. Un
+	// valor relativo se resuelve contra la URL del documento, que es lo que manda la spec de OpenAPI:
+	// resolverlo contra el origen publicaba otra direccion que tampoco nadie declaro.
 	const servers = Array.isArray(record.servers) ? record.servers : [];
 	const firstServer = servers.find(
 		(server): server is Record<string, unknown> => typeof server === "object" && server !== null,
 	);
-	const apiUrl = resolveUrl(firstServer?.url, origin) ?? `${origin}/api/v1`;
+	const apiUrl = resolveUrl(firstServer?.url, openApiUrl);
+	if (apiUrl === undefined) return undefined;
 
-	const docsUrl = resolveUrl(declaredDocsUrl, origin) ?? `${origin}/developers`;
+	// El `Link` del home sí se resuelve contra el origen: la RFC 8288 resuelve sus destinos contra la URI
+	// del pedido, que es el home.
+	const docsUrl = resolveUrl(declaredDocsUrl, origin);
 	const statusUrl = resolveUrl(declaredStatusUrl, origin);
 	return {
 		apiUrl,
 		openApiUrl,
-		apiDocsUrl: docsUrl,
+		...(docsUrl === undefined ? {} : { apiDocsUrl: docsUrl }),
 		...(statusUrl === undefined ? {} : { apiStatusUrl: statusUrl }),
 	};
 }
@@ -207,8 +226,10 @@ export async function declaredSecurityContact(websiteUrl: string | undefined): P
  * La API que el sitio YA declara, descubierta como el MCP: primero el `Link rel="service-desc"` del
  * home, despues `/openapi.json` y `/.well-known/openapi.json`.
  *
- * Sin API declarada no se pasa nada y el `api-catalog` no se emite. El generador exige `apiUrl` y
- * `openApiUrl` juntos: un catalogo sin descripcion no lleva a ninguna parte.
+ * Las tres ubicaciones son candidatos que se **piden**: solo cuenta el documento que responde con una
+ * descripcion OpenAPI, y aun asi la entrada se emite unicamente si ese documento declara su raiz en
+ * `servers`. El generador exige `apiUrl` y `openApiUrl` juntos —un catalogo sin descripcion no lleva a
+ * ninguna parte— y `apiUrl` nunca se completa con una convencion.
  */
 export async function declaredApi(websiteUrl: string | undefined): Promise<DeclaredApi | undefined> {
 	if (websiteUrl === undefined) return undefined;
