@@ -9,6 +9,7 @@
  * anything is persisted.
  */
 
+import { type ProviderUsage, usageFromResponse } from "@workspace/lib/providers/token-usage";
 import { type ApsJudge, judgePrompt } from "./judge";
 import {
 	CATEGORY_PLACEHOLDER,
@@ -200,7 +201,37 @@ export function judgeConfigFromEnv(env: Record<string, string | undefined> = pro
 }
 
 /** Reports what each call actually cost, so a run can carry its real spend beside its estimate. */
-export type SpendReporter = (usd: number) => void;
+export type SpendReporter = (spend: GatewayCallCost) => void;
+
+/**
+ * Lo que el gateway sabe de una llamada: lo que facturó y lo que consumió.
+ *
+ * Son dos cosas distintas y por eso viajan juntas en vez de un solo número. El
+ * costo es el número facturado —con márgenes y descuentos— y es el que se
+ * guarda en `cost_usd`. Los tokens son el consumo: el gateway sí los reporta
+ * (a diferencia de los modelos de medición), y el razonamiento se guarda aparte
+ * porque es costo puro y en la biblioteca se comió el presupuesto entero.
+ *
+ * `costUsd` es `null` cuando el gateway no lo informó, **nunca `0`**: `0`
+ * afirmaría que la llamada salió gratis.
+ */
+export interface GatewayCallCost {
+	costUsd: number | null;
+	pricingSource: "gateway_header" | null;
+	usage?: ProviderUsage;
+}
+
+/**
+ * El consumo del cuerpo de una respuesta del gateway, cuando lo trae.
+ *
+ * El gateway es LiteLLM, que responde en formato OpenAI: `usage.prompt_tokens` /
+ * `usage.completion_tokens`, y para los modelos que razonan
+ * `completion_tokens_details.reasoning_tokens`. Se usa el mismo extractor que
+ * los proveedores directos para no tener dos traducciones de lo mismo.
+ */
+function gatewayUsageFromPayload(payload: unknown): ProviderUsage | undefined {
+	return usageFromResponse(payload);
+}
 
 export function gatewayJudge(
 	config: GatewayJudgeConfig,
@@ -213,6 +244,7 @@ export function gatewayJudge(
 		pipelineVersion: GATEWAY_JUDGE_PIPELINE_VERSION,
 		analyze: async ({ brandName, promptText, response }) => {
 			let payload: unknown;
+			let spend: number | null = null;
 			try {
 				const result = await fetchImpl(endpoint(config.url), {
 					method: "POST",
@@ -230,11 +262,21 @@ export function gatewayJudge(
 				});
 				if (result.ok === false) return null;
 				// The billed cost of this exact call, when the gateway reports it.
-				const spend = gatewaySpendFromHeaders(result.headers);
-				if (spend !== null && onSpend !== undefined) onSpend(spend);
+				spend = gatewaySpendFromHeaders(result.headers);
 				payload = await result.json();
 			} catch {
 				return null;
+			}
+
+			// El costo y el consumo se reportan recién acá, con el cuerpo ya leído: el
+			// costo vive en el header y los tokens en el cuerpo, y hasta hace poco el
+			// header se tiraba a la basura sin que nadie lo notara.
+			if (onSpend !== undefined) {
+				onSpend({
+					costUsd: spend,
+					pricingSource: spend === null ? null : "gateway_header",
+					usage: gatewayUsageFromPayload(payload),
+				});
 			}
 
 			const choice = (payload as { choices?: Array<{ message?: { content?: unknown }; finish_reason?: unknown }> })
@@ -358,15 +400,22 @@ function asLibraryPrompt(value: unknown): LibraryPromptInput | null {
 /**
  * Asks the gateway for a candidate library. La causa de la falla viaja en `failure`: quien llama
  * puede decir qué pasó en vez de un genérico que manda a buscar el problema donde no está.
+ *
+ * `onSpend` recibe el costo y el consumo de la llamada. Una generación truncada o sin prompts
+ * usables **igual se facturó**, así que el reporte sale apenas llega la respuesta y no depende de
+ * que la biblioteca haya salido bien: sin eso, el gasto que más duele —el que no produjo nada— es
+ * el único que no queda registrado.
  */
 export async function generateLibraryWithGateway(
 	input: GatewayLibraryInput,
 	config: GatewayJudgeConfig,
 	fetchImpl: typeof fetch = fetch,
+	onSpend?: SpendReporter,
 ): Promise<GeneratedLibrary> {
 	const total = input.total ?? LIBRARY_TARGET_TOTAL;
 	const failure = (reason: LibraryFailure): GeneratedLibrary => ({ prompts: [], rejected: [], failure: reason });
 	let payload: unknown;
+	let cost: GatewayCallCost | null = null;
 	try {
 		const response = await fetchImpl(endpoint(config.url), {
 			method: "POST",
@@ -382,11 +431,22 @@ export async function generateLibraryWithGateway(
 				],
 			}),
 		});
+		// El costo se lee ANTES de mirar si la respuesta sirvió: una generación
+		// truncada o sin prompts usables igual se facturó, y ese gasto es
+		// exactamente el que no se estaba registrando. Los tokens viajan en el
+		// cuerpo, así que el costo se arma recién con el cuerpo leído.
 		if (response.ok === false) return failure("http_error");
 		payload = await response.json();
+		const spend = gatewaySpendFromHeaders(response.headers);
+		cost = {
+			costUsd: spend,
+			pricingSource: spend === null ? null : "gateway_header",
+			usage: gatewayUsageFromPayload(payload),
+		};
 	} catch {
 		return failure("network_error");
 	}
+	if (onSpend !== undefined && cost !== null) onSpend(cost);
 
 	const choice = (payload as { choices?: Array<{ message?: { content?: unknown }; finish_reason?: unknown }> })
 		?.choices?.[0];

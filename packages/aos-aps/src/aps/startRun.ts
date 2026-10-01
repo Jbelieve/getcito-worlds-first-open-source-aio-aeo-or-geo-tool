@@ -7,7 +7,7 @@
  */
 
 import type { ApsBudgetConfig, ProviderPrice } from "../worker/budget";
-import { type ApsRunPlan, type ApsQueryJob, planApsRun } from "./runPlan";
+import { type ApsQueryJob, type ApsRunPlan, planApsRun } from "./runPlan";
 
 export interface ApsLibraryPrompt {
 	id: string;
@@ -48,6 +48,14 @@ export interface PreparedApsRun {
 		repetitionsReduced: boolean;
 		plannedCalls: number;
 		capacidadAccion: number | null;
+		/**
+		 * Lo que la corrida estimó costar, en USD, tal como lo aprobó el operador.
+		 *
+		 * Viaja en la fila de la corrida para que el estimado y el real queden
+		 * **guardados juntos**: sin esto, el estimado solo existía en la respuesta
+		 * HTTP del momento y no había con qué comparar lo que después costó.
+		 */
+		estimatedCostUsd: number | null;
 		scoringVersion: string;
 		measurementVersion: string;
 		judgeModelAlias: string;
@@ -116,6 +124,7 @@ export function prepareApsRun(input: PrepareApsRunInput): PreparedApsRun {
 			repetitionsReduced: plan.repetitionsReduced,
 			plannedCalls: plan.plannedCalls,
 			capacidadAccion: input.capacidadAccion,
+			estimatedCostUsd: plan.decision.estimate.totalUsd,
 			scoringVersion: plan.versions.scoringVersion,
 			measurementVersion: plan.versions.measurementVersion,
 			judgeModelAlias: plan.versions.judgeModelAlias,
