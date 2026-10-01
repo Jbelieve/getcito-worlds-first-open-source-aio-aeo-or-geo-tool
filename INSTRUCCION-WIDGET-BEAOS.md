@@ -57,8 +57,9 @@ const data = await res.json();
       "diagnostic": false                 // true = NO mueve el score
     }
   ],
-  "aosStandards": 100,       // lo que MEDIMOS de operabilidad (0..100)
-  "apsStandards": 100,       // lo que MEDIMOS de preferencia (0..100)
+  "aosStandards": 100,       // requisitos del eje AOS del estándar que cumple el sitio (0..100)
+  "apsStandards": 100,       // APS DEL ESTÁNDAR: requisitos del eje APS que cumple el sitio.
+                             // NO es una medición contra modelos, y NO es declaredAps.
   "breakdown": [             // por eje, con los pesos reales
     { "axis": "AOS", "passed": 7, "failed": 0, "notApplicable": 1, "applicable": 7,
       "earnedWeight": 16, "maxWeight": 16, "percent": 100 }
@@ -91,7 +92,7 @@ El criterio completo está en **`AOS-VISTA.md`** (repo de BeAOS). Estas siete so
 2. **`evidence` puede faltar, y cuando está SE MUESTRA.** Es lo que hace que el listado se vea robusto en vez de un sí/no pelado. Ejemplo real: `/llms.txt responde 200 · text/plain · 10555 chars`.
 3. **`gain` solo existe en los que puntúan y fallan.** Si no viene, no se muestra un `+0`.
 4. **Los `diagnostic: true` van SEPARADOS y SIN PUNTOS.** No mueven el score: se informan. **No les inventes una ganancia.**
-5. **`declaredAps` NO es `apsStandards`.** Uno es lo que el sitio **declara** (94 en believe-global.com), el otro lo que **nosotros medimos**. Van etiquetados distinto: *"Perfil firmado del sitio"* vs *"APS medido"*. **Sumarlos o mezclarlos es un error.**
+5. **`declaredAps` NO es `apsStandards`.** Uno es lo que el sitio **declara** (94 en believe-global.com), el otro es el **APS del estándar**: cuántos requisitos del eje APS cumple el sitio. Van etiquetados distinto: *"Perfil firmado del sitio"* vs *"APS del estándar"*. **Sumarlos o mezclarlos es un error.** Y hay un **tercero** que no viene por acá: el **APS medido** (una corrida real contra modelos, que cuesta plata). Llamar "APS medido" a `apsStandards` es exactamente el error que este punto previene.
 6. **`botBeacon` es `null` siempre.** Se dice el hueco **con palabras y SIN UN SOLO DÍGITO**: *"BeAOS mide el estándar de un sitio, no su tráfico."* **Un `0` se lee como "no te visitó ningún agente", que es distinto de "no lo sabemos".**
 7. **El badge "perfil firmado verificado" SOLO con `signatureVerified === true`.** Sin versión "apagada": un badge apagado igual afirmaría que está verificado.
 

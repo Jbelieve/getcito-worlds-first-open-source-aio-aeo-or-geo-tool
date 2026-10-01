@@ -76,8 +76,15 @@ export const NO_PROFILE_TEXT = "El sitio no publica /.well-known/brand.json: no 
 /** Cuando el endpoint no manda evidencia: es lo que se vio al comprobar y puede faltar. */
 export const NO_EVIDENCE_TEXT = "Sin evidencia registrada.";
 
-/** Cómo se llama cada eje. El eje es del estándar; la segunda mitad dice qué mide. */
-export const AXIS_TEXT = { AOS: "AOS · operabilidad", APS: "APS · preferencia" };
+/**
+ * Cómo se llama cada eje. El eje es del estándar; la segunda mitad dice qué mide.
+ *
+ * El eje APS se llama **del estándar** y no "preferencia" a secas: el número es cuántos requisitos del
+ * eje cumple el sitio, no una medición contra modelos. En este mismo popup conviven "APS del estándar"
+ * y "APS declarado", y hay un tercero —el medido— que no sale de acá. Decirle "preferencia" a un
+ * chequeo del sitio es lo que hacía que los tres parecieran el mismo número.
+ */
+export const AXIS_TEXT = { AOS: "AOS · operabilidad", APS: "APS · del estándar" };
 
 /**
  * El badge Agent-Preferred. **Solo cuando la firma Ed25519 verifica de verdad**
@@ -98,8 +105,7 @@ export const BADGE_VERIFIED_TEXT = "perfil firmado verificado";
  * ningún ingest de tráfico, así que el bloque se muestra declarando el hueco: un cero acá se leería
  * como "no te visitó ningún agente", que sería un dato falso.
  */
-export const BOT_BEACON_NO_SOURCE_TEXT =
-	"BeAOS mide el estándar de un sitio, no su tráfico.";
+export const BOT_BEACON_NO_SOURCE_TEXT = "BeAOS mide el estándar de un sitio, no su tráfico.";
 
 // --- funciones puras ---------------------------------------------------------
 

@@ -1,22 +1,22 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
-import { useBrand } from "@/hooks/use-brands";
-import { getAosAuditsFn, startAosAuditFn } from "@/server/agent-ops";
+import { useEffect, useState } from "react";
 import {
-	type AosRequirement,
 	AosChecklist,
 	AosJourney,
 	AosNextStep,
+	type AosRequirement,
 	AosScoreRing,
 	AosStatusPill,
 	aosDiagnosis,
 	stageSummaries,
 } from "@/components/aos-visual";
-import { BLOCKING_TEXT, aosBand, levelFromScore, toneOf } from "@/components/status-tone";
+import { aosBand, BLOCKING_TEXT, levelFromScore, toneOf } from "@/components/status-tone";
+import { useBrand } from "@/hooks/use-brands";
+import { getAosAuditsFn, startAosAuditFn } from "@/server/agent-ops";
 
 export const Route = createFileRoute("/_authed/app/$brand/agent-ops")({
 	component: AgentOpsPage,
@@ -79,8 +79,8 @@ function AgentOpsPage() {
 			<div>
 				<h1 className="text-3xl font-bold">AOS</h1>
 				<p className="text-muted-foreground">
-					Agent Operability Score: si un agente puede encontrarte, entenderte, operarte y verificarte. Mismo número
-					que la auditoría de Maasy.
+					Agent Operability Score: si un agente puede encontrarte, entenderte, operarte y verificarte. Mismo número que
+					la auditoría de Maasy.
 				</p>
 			</div>
 
@@ -112,9 +112,13 @@ function AgentOpsPage() {
 									<p className="text-sm">{aosDiagnosis(score ?? 0, failing)}</p>
 									<p className="text-xs text-muted-foreground">
 										{stagesDone} de {stages.length} etapas hacia “el agente te prefiere”
-										{latest.businessType === "product_api" ? " · se evalúa como producto/API" : " · se evalúa como marca"}
+										{latest.businessType === "product_api"
+											? " · se evalúa como producto/API"
+											: " · se evalúa como marca"}
 										{" · "}
-										{failing.length === 0 ? "sin pendientes" : `${failing.length} ${failing.length === 1 ? "pendiente" : "pendientes"}`}
+										{failing.length === 0
+											? "sin pendientes"
+											: `${failing.length} ${failing.length === 1 ? "pendiente" : "pendientes"}`}
 									</p>
 									<Button variant="outline" size="sm" asChild>
 										<a href={latest.url} target="_blank" rel="noreferrer">
@@ -130,8 +134,8 @@ function AgentOpsPage() {
 						<CardHeader>
 							<CardTitle>El camino de un agente</CardTitle>
 							<CardDescription>
-								Cada etapa se puntúa con los requerimientos que le importan a ese paso. Los puntos salen del rubric;
-								lo que no puntúa se marca como tal.
+								Cada etapa se puntúa con los requerimientos que le importan a ese paso. Los puntos salen del rubric; lo
+								que no puntúa se marca como tal.
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-6">
@@ -144,8 +148,8 @@ function AgentOpsPage() {
 						<CardHeader>
 							<CardTitle>Detalle técnico</CardTitle>
 							<CardDescription>
-								Estándar AOS/APS v0.1.0 · {latest.businessType === "product_api" ? "marca / producto-API" : "marca / servicio"} ·
-								{" "}
+								Estándar AOS/APS v0.1.0 ·{" "}
+								{latest.businessType === "product_api" ? "marca / producto-API" : "marca / servicio"} ·{" "}
 								{signatureVerified ? "firma Ed25519 verificada" : "sin firma verificable"}
 							</CardDescription>
 						</CardHeader>
@@ -162,26 +166,33 @@ function AgentOpsPage() {
 									</p>
 									<div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs sm:grid-cols-4">
 										<span className="text-muted-foreground">
-											Cobertura de proofs: <span className="font-medium text-foreground">{latest.apsBreakdown.proof_coverage}</span>
+											Cobertura de proofs:{" "}
+											<span className="font-medium text-foreground">{latest.apsBreakdown.proof_coverage}</span>
 										</span>
 										<span className="text-muted-foreground">
-											Boundaries: <span className="font-medium text-foreground">{latest.apsBreakdown.boundary_coverage}</span>
+											Boundaries:{" "}
+											<span className="font-medium text-foreground">{latest.apsBreakdown.boundary_coverage}</span>
 										</span>
 										<span className="text-muted-foreground">
-											Fuerza de evidencia: <span className="font-medium text-foreground">{latest.apsBreakdown.evidence_strength}</span>
+											Fuerza de evidencia:{" "}
+											<span className="font-medium text-foreground">{latest.apsBreakdown.evidence_strength}</span>
 										</span>
 										<span className="text-muted-foreground">
-											Smoke penalty: <span className="font-medium text-foreground">{latest.apsBreakdown.smoke_penalty}</span>
+											Smoke penalty:{" "}
+											<span className="font-medium text-foreground">{latest.apsBreakdown.smoke_penalty}</span>
 										</span>
 									</div>
 									<p className="text-xs text-muted-foreground">
 										{latest.apsBreakdown.claims} claims · {latest.apsBreakdown.proofs} proofs ·{" "}
-										{latest.apsBreakdown.unproven_claims} sin proof · {latest.apsBreakdown.claims_without_boundary} sin boundary real
+										{latest.apsBreakdown.unproven_claims} sin proof · {latest.apsBreakdown.claims_without_boundary} sin
+										boundary real
 										{latest.apsBreakdown.signed_provenance_applied ? " · la firma válida sube la evidencia a 0.8" : ""}
 									</p>
 									<p className="text-xs text-muted-foreground">
-										Esto es lo que el sitio <span className="font-medium text-foreground">declara</span>. El APS de la sección APS
-										mide además si los modelos te <span className="font-medium text-foreground">prefieren</span> de verdad.
+										Esto es lo que el sitio <span className="font-medium text-foreground">declara</span> en su perfil
+										firmado. El APS de la pantalla APS es otro número: el de una corrida real contra modelos, que mide
+										si te <span className="font-medium text-foreground">prefieren</span> de verdad y cuesta plata.
+										Ninguno de los dos es el "APS del estándar" del audit público, que cuenta requisitos del estándar.
 									</p>
 								</div>
 							)}

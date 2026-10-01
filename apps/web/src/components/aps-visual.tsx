@@ -6,17 +6,20 @@
  * distribution, and where the score comes from dimension by dimension — so a marketer can see why
  * the number is what it is instead of trusting a lone figure.
  *
- * Dos APS conviven y no hay que confundirlas: el APS del perfil declarado (claims y proofs, que se
- * calcula sin costo) y el APS medido contra modelos reales, que es el que se muestra acá.
+ * "APS" son **tres** números y acá se muestran dos: el **APS declarado** (lo que el sitio firma en su
+ * perfil: claims y proofs, que se calcula sin costo) y el **APS medido** contra modelos reales, que es
+ * el que se muestra. El tercero —el **APS del estándar** (`apsStandards`: cuántos requisitos del eje APS
+ * cumple el sitio)— no sale de acá: vive en el audit público y en la extensión.
  *
  * El color no decora: el número va en tinta de marca, la banda lleva la rampa azul, y el cian es el
  * subrayado del número — la única señal de la sección. Ver status-tone.tsx.
  */
-import { Bar, BarChart, Cell, XAxis, YAxis } from "recharts";
-import { ChartContainer, ChartTooltip, type ChartConfig } from "@workspace/ui/components/chart";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
+
 import { IconInfoCircle } from "@tabler/icons-react";
-import { BandChip, BLOCKING_TEXT, MONO_LABEL, SIGNAL_BAR, apsBand } from "@/components/status-tone";
+import { type ChartConfig, ChartContainer, ChartTooltip } from "@workspace/ui/components/chart";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
+import { Bar, BarChart, Cell, XAxis, YAxis } from "recharts";
+import { apsBand, BandChip, BLOCKING_TEXT, MONO_LABEL, SIGNAL_BAR } from "@/components/status-tone";
 
 /** The five dimensions, with the weight each one carries. Labels are the product's words. */
 const DIMENSIONS: Array<{ key: string; label: string; weight: number; hint: string }> = [
@@ -54,10 +57,20 @@ const DIMENSIONS: Array<{ key: string; label: string; weight: number; hint: stri
 
 const SUB_METRICS: Array<{ key: string; label: string; percent: boolean; hint: string }> = [
 	{ key: "coverage", label: "Cobertura", percent: true, hint: "Proporción de respuestas donde aparecés." },
-	{ key: "recommendationRate", label: "Recomendación", percent: true, hint: "Proporción donde te recomiendan explícitamente." },
+	{
+		key: "recommendationRate",
+		label: "Recomendación",
+		percent: true,
+		hint: "Proporción donde te recomiendan explícitamente.",
+	},
 	{ key: "sovPosWeight", label: "Posición", percent: true, hint: "Peso por lugar: 1º vale 1, 2º la mitad, y así." },
 	{ key: "sentimentAvg", label: "Sentimiento", percent: true, hint: "Tono de la narrativa cuando aparecés (0-100)." },
-	{ key: "groundingRate", label: "Grounding", percent: true, hint: "Respuestas con fuentes citables verificadas contra el texto." },
+	{
+		key: "groundingRate",
+		label: "Grounding",
+		percent: true,
+		hint: "Respuestas con fuentes citables verificadas contra el texto.",
+	},
 	{
 		key: "competitorBreadth",
 		label: "Amplitud competitiva",
@@ -106,8 +119,8 @@ export function ApsDistributionChart({ samples, aps }: { samples: number[]; aps:
 		return (
 			<div className="rounded-md border border-dashed bg-muted/40 p-3 text-xs text-muted-foreground">
 				La distribución necesita <span className="font-medium text-foreground">2 o más repeticiones</span> por prompt.
-				Con una sola, todas las remuestras dan el mismo valor ({aps}), así que no hay varianza que mostrar. El
-				puntaje sigue siendo válido: es la foto de esa corrida.
+				Con una sola, todas las remuestras dan el mismo valor ({aps}), así que no hay varianza que mostrar. El puntaje
+				sigue siendo válido: es la foto de esa corrida.
 			</div>
 		);
 	}
@@ -116,7 +129,8 @@ export function ApsDistributionChart({ samples, aps }: { samples: number[]; aps:
 		<div className="space-y-1">
 			<div className="flex items-center justify-between text-xs">
 				<span className="flex items-center gap-1 font-medium text-muted-foreground">
-					Distribución de {samples.length} remuestras <InfoHint text="Bootstrap sobre la varianza de las repeticiones: remuestrea una respuesta por prompt, 500 veces, y recalcula el APS." />
+					Distribución de {samples.length} remuestras{" "}
+					<InfoHint text="Bootstrap sobre la varianza de las repeticiones: remuestrea una respuesta por prompt, 500 veces, y recalcula el APS." />
 				</span>
 				<span className={MONO_LABEL}>P10 · P50 · P90</span>
 			</div>
@@ -138,11 +152,7 @@ export function ApsDistributionChart({ samples, aps }: { samples: number[]; aps:
 					/>
 					<Bar dataKey="count" radius={[2, 2, 0, 0]}>
 						{bins.map((bin) => (
-							<Cell
-								key={bin.range}
-								fill="var(--primary)"
-								fillOpacity={Math.abs(bin.from - aps) <= 3 ? 0.95 : 0.35}
-							/>
+							<Cell key={bin.range} fill="var(--primary)" fillOpacity={Math.abs(bin.from - aps) <= 3 ? 0.95 : 0.35} />
 						))}
 					</Bar>
 				</BarChart>
@@ -159,14 +169,27 @@ export function ApsMiniBand({ aps, p10, p90 }: { aps: number; p10: number | null
 	const width = Math.max(2, clamp(p90) - left);
 	return (
 		<span className="relative inline-block h-1.5 w-16 shrink-0 rounded-full bg-muted align-middle">
-			<span className="absolute inset-y-0 rounded-full bg-primary/25" style={{ left: `${left}%`, width: `${width}%` }} />
+			<span
+				className="absolute inset-y-0 rounded-full bg-primary/25"
+				style={{ left: `${left}%`, width: `${width}%` }}
+			/>
 			<span className="absolute inset-y-[-2px] w-0.5 rounded-full bg-primary" style={{ left: `${clamp(aps)}%` }} />
 		</span>
 	);
 }
 
 /** The band, minimal: a rail from P10 to P90 with the point score marked. */
-export function ApsBand({ aps, p10, p50, p90 }: { aps: number; p10: number | null; p50: number | null; p90: number | null }) {
+export function ApsBand({
+	aps,
+	p10,
+	p50,
+	p90,
+}: {
+	aps: number;
+	p10: number | null;
+	p50: number | null;
+	p90: number | null;
+}) {
 	if (p10 === null || p50 === null || p90 === null) return null;
 	const left = Math.max(0, Math.min(100, p10));
 	const right = Math.max(0, Math.min(100, p90));
@@ -176,9 +199,16 @@ export function ApsBand({ aps, p10, p50, p90 }: { aps: number; p10: number | nul
 	return (
 		<div className="space-y-1">
 			<div className="relative h-2 w-full rounded-full bg-muted">
-				<div className="absolute inset-y-0 rounded-full bg-primary/25" style={{ left: `${left}%`, width: `${width}%` }} />
+				<div
+					className="absolute inset-y-0 rounded-full bg-primary/25"
+					style={{ left: `${left}%`, width: `${width}%` }}
+				/>
 				<div className="absolute inset-y-[-2px] w-0.5 bg-primary/70" style={{ left: `${mid}%` }} title={`P50 ${p50}`} />
-				<div className="absolute inset-y-[-3px] w-1 rounded-full bg-primary" style={{ left: `${point}%` }} title={`APS ${aps}`} />
+				<div
+					className="absolute inset-y-[-3px] w-1 rounded-full bg-primary"
+					style={{ left: `${point}%` }}
+					title={`APS ${aps}`}
+				/>
 			</div>
 			<div className="flex justify-between">
 				<span className={MONO_LABEL}>P10 {p10}</span>
@@ -351,7 +381,15 @@ export function rollupOf(scores: ApsScoreView[]): { aps: number; band: string } 
  * Una corrida parcial se dice, no se pinta: el estado va en la etiqueta mono, porque el color acá
  * está reservado para cuánto hay y no para advertir.
  */
-export function ApsRunBlock({ run, expanded, statusLabel }: { run: ApsRunView; expanded: boolean; statusLabel: string }) {
+export function ApsRunBlock({
+	run,
+	expanded,
+	statusLabel,
+}: {
+	run: ApsRunView;
+	expanded: boolean;
+	statusLabel: string;
+}) {
 	const rollup = rollupOf(run.scores);
 	return (
 		<div className="space-y-3 border-b pb-6 last:border-b-0 last:pb-0">
@@ -389,7 +427,8 @@ export function ApsRunBlock({ run, expanded, statusLabel }: { run: ApsRunView; e
 					recommendationProbability={
 						run.scores.some((score) => score.recommendationProbability !== null)
 							? Math.round(
-									run.scores.reduce((sum, score) => sum + (score.recommendationProbability ?? 0), 0) / run.scores.length,
+									run.scores.reduce((sum, score) => sum + (score.recommendationProbability ?? 0), 0) /
+										run.scores.length,
 								)
 							: null
 					}

@@ -65,8 +65,8 @@ se dice de dónde sale.
   "band": "Agent-Inert",                 // Agent-Operable | Agent-Attemptable | Agent-Blocked | Agent-Inert
   "businessType": "brand",               // brand | product_api
   "requirements": [ /* ver 2.4 */ ],     // los que puntúan + los diagnostic, en el orden del estándar
-  "aosStandards": 0,                     // sub-score por eje, medido por el motor
-  "apsStandards": 0,                     // sub-score por eje, medido por el motor
+  "aosStandards": 0,                     // sub-score del eje AOS: requisitos del estándar que cumple
+  "apsStandards": 0,                     // sub-score del eje APS: requisitos del estándar, NO medido contra modelos
   "breakdown": [ /* por eje: passed, failed, notApplicable, applicable, earnedWeight, maxWeight, percent */ ],
   "declaredAps": null,                   // APS que el SITIO declara en su brand.json, o null
   "claims": 0,                           // claims que declara su brand.json
@@ -129,7 +129,7 @@ cambiar el criterio y hay que cambiarlo acá primero.
 | Banda | `Agent-Operable` / `Agent-Attemptable` / `Agent-Blocked` / `Agent-Inert` | `Operable` / `Intentable` / `Bloqueado` / `Inerte` |
 | Banda desconocida | cualquier otro string | el string tal cual; si viene vacío o ausente, `Sin dato` |
 | Explicación de la banda | — | Operable: "Un agente puede operar este sitio casi sin fricción." · Intentable: "Un agente puede intentarlo, pero tropieza en partes." · Bloqueado: "Un agente choca contra muros: casi nada es ejecutable." · Inerte: "Invisible para agentes. No hay acciones operables." |
-| Eje | `AOS` / `APS` | `AOS · operabilidad` / `APS · preferencia` |
+| Eje | `AOS` / `APS` | `AOS · operabilidad` / `APS · del estándar` |
 | Tipo de negocio | `brand` / `product_api` | `marca / servicio` / `producto-API`; sin dato: `tipo de negocio sin dato` |
 | Cuándo se midió | `auditedAt` (ISO 8601) | `Medido el 30/09/2026 a las 10:54`, en hora local y corta; si falta o no es una fecha, no se muestra nada |
 | Estado del requisito | `pass` / `fail` / `n_a` | `Pasa` / `No pasa` / `No aplica` |
@@ -219,15 +219,21 @@ Son dos números distintos y van **etiquetados distinto**:
 
 | Campo | Qué es | Cómo se etiqueta |
 |---|---|---|
-| `apsStandards` | el APS que **nosotros medimos** sobre los requisitos del estándar | dentro de "Puntajes por eje", `APS · preferencia` |
+| `apsStandards` | el **APS del estándar**: cuántos requisitos del eje APS cumple el sitio. Es un chequeo del sitio, **no** una medición contra modelos | dentro de "Puntajes por eje", `APS · del estándar` |
 | `declaredAps` | el APS que el sitio **declara** en su `/.well-known/brand.json` | aparte, `APS declarado 94/100`, en "Perfil firmado del sitio" |
 
-*Por qué:* uno es lo que el sitio **dice de sí mismo** y el otro lo que **medimos nosotros**. En una
-respuesta real y verificada pueden diferir: en `audit-believe-global.json` el sitio declara **94** y
-nuestro motor mide **100** sobre los requisitos del estándar. Si los dos se mostraran como "el APS" sin
-decirlo, la vista estaría repitiendo la declaración del sitio como si fuera nuestra medición —justo lo
-contrario del punto de AOS/APS—. Es la misma distinción que entre "lo que declarás" y "lo que
+*Por qué:* uno es lo que el sitio **dice de sí mismo** y el otro lo que **comprobamos en el sitio**. En
+una respuesta real y verificada pueden diferir: en `audit-believe-global.json` el sitio declara **94** y
+nuestro motor encuentra **100** sobre los requisitos del estándar. Si los dos se mostraran como "el APS"
+sin decirlo, la vista estaría repitiendo la declaración del sitio como si fuera nuestra comprobación
+—justo lo contrario del punto de AOS/APS—. Es la misma distinción que entre "lo que declarás" y "lo que
 comprobamos".
+
+**Ojo con la tercera:** "APS medido" es el de una corrida real contra modelos, cuesta plata y **no sale
+de este endpoint**. Llamar "medido" a `apsStandards` —como decía este documento y el comentario del
+código— hacía que los tres números parecieran el mismo. El campo de la API **se sigue llamando
+`apsStandards`**: la extensión y la landing ya lo consumen así. Lo que cambió es la etiqueta y la
+documentación.
 
 Cuando el sitio no publica `brand.json`, `declaredAps` viene `null` y **se dice**: "Sin perfil firmado"
 + el texto de 2.3. **No** se rellena con *"APS 0 / 0 pruebas / firma inválida"*: nadie midió eso.
@@ -334,7 +340,7 @@ Qué tiene que mostrar:
 - `score 100`, banda `Agent-Operable` → `Operable` con "Un agente puede operar este sitio casi sin
   fricción."
 - Puntajes por eje **presentes**: `AOS · operabilidad` 100/100, barra llena y detalle
-  `7 de 7 pasan · peso 16/16 · 1 no aplica`; `APS · preferencia` 100/100 con detalle
+  `7 de 7 pasan · peso 16/16 · 1 no aplica`; `APS · del estándar` 100/100 con detalle
   `3 de 3 pasan · peso 7/7` (sin la parte de "no aplica", porque no hay ninguno).
 - `businessType: brand` → `marca / servicio`; `auditedAt` → `Medido el <día>/<mes>/<año> a las
   <hh>:<mm>` (en la hora local de quien mira, formato corto).
@@ -357,7 +363,7 @@ Qué tiene que mostrar:
 
 - `score 0`, banda `Agent-Inert` → `Inerte` con "Invisible para agentes. No hay acciones operables."
 - Puntajes por eje en **0/100** en los dos: `AOS · operabilidad` con detalle
-  `0 de 7 pasan · peso 0/16 · 1 no aplica` y `APS · preferencia` con `0 de 3 pasan · peso 0/7`.
+  `0 de 7 pasan · peso 0/16 · 1 no aplica` y `APS · del estándar` con `0 de 3 pasan · peso 0/7`.
 - **Sin perfil firmado**: `declaredAps null` → `Sin perfil firmado` + `El sitio no publica
   /.well-known/brand.json: no declara APS.`, **sin badge** y **sin** "APS 0 / 0 pruebas".
 - Checklist: **11 que puntúan: 10 en falta y 1 `n_a`** (`AOS-API-01`, con su evidencia: "No encontramos
