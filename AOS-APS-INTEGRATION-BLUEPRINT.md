@@ -37,7 +37,8 @@ BeAOS aporta lo que Getcito ya tiene: prompts, visibilidad, citas, competidores,
 
 **Estado 2026-09-23:** el contenido está escrito y listo para esa nota, pero **todavía no se cargó en
 SiYuan**. El texto es `MANUAL-AOS-APS.md` (manual de usuario, 314 líneas) más la parte de estado, runbook
-y gotchas que vive en `AOS-APS-ESTADO.md`.
+y gotchas que vive en `AOS-APS-ESTADO.md`. (Nota posterior: los manuales sueltos se unificaron en
+`MANUAL-BEAOS.md`.)
 
 Por qué no se cargó: desde esta máquina **no se llega a SiYuan**. El kernel no está corriendo (el puerto
 6806 no responde) y `~/Library/Application Support/SiYuan` está vacío, así que tampoco hay workspace
