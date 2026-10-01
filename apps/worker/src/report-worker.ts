@@ -1,10 +1,23 @@
-import { db } from "@workspace/lib/db/db";
-import { reports, type Brand, brands, competitors as competitorsSchema, prompts as promptsSchema, promptRuns as promptRunsSchema } from "@workspace/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
 import { RUNS_PER_PROMPT } from "@workspace/lib/constants";
-import { getProvider, parseScrapeTargets, withProviderCallTracking, type ModelConfig } from "@workspace/lib/providers";
+import { db } from "@workspace/lib/db/db";
+import {
+	type Brand,
+	brands,
+	competitors as competitorsSchema,
+	promptRuns as promptRunsSchema,
+	prompts as promptsSchema,
+	reports,
+} from "@workspace/lib/db/schema";
 import { analyzeBrand } from "@workspace/lib/onboarding";
-import { isPromptBranded, computeSystemTags } from "@workspace/lib/tag-utils";
+import {
+	callCostFromResult,
+	getProvider,
+	type ModelConfig,
+	parseScrapeTargets,
+	withProviderCallTracking,
+} from "@workspace/lib/providers";
+import { computeSystemTags, isPromptBranded } from "@workspace/lib/tag-utils";
+import { desc, eq } from "drizzle-orm";
 
 interface CompetitorResult {
 	name: string;
@@ -102,13 +115,13 @@ function selectOptimalPrompts(
 		const totalRuns = candidate.runs.length;
 		const brandMentionCount = candidate.runs.filter((r) => r.brandMentioned).length;
 		const competitorMentionCount = candidate.runs.filter((r) => r.competitorsMentioned.length > 0).length;
-		
+
 		const brandMentionRate = totalRuns > 0 ? brandMentionCount / totalRuns : 0;
 		const competitorMentionRate = totalRuns > 0 ? competitorMentionCount / totalRuns : 0;
-		
+
 		// Check if prompt is actually branded (contains brand name/domain)
 		const isActuallyBranded = isPromptBranded(candidate.promptValue, brandName, brandWebsite);
-		
+
 		return {
 			promptValue: candidate.promptValue,
 			brandedPrompt: candidate.brandedPrompt || isActuallyBranded,
@@ -118,11 +131,11 @@ function selectOptimalPrompts(
 			hasCompetitorMention: competitorMentionCount > 0,
 		};
 	});
-	
+
 	// Separate branded and non-branded prompts
 	const nonBrandedPrompts = scoredCandidates.filter((c) => !c.brandedPrompt);
 	const brandedPrompts = scoredCandidates.filter((c) => c.brandedPrompt);
-	
+
 	// Sort non-branded by: 1) has brand mention, 2) competitor mention rate, 3) brand mention rate
 	nonBrandedPrompts.sort((a, b) => {
 		if (a.hasBrandMention !== b.hasBrandMention) {
@@ -133,7 +146,7 @@ function selectOptimalPrompts(
 		}
 		return b.brandMentionRate - a.brandMentionRate;
 	});
-	
+
 	// Sort branded by: 1) brand mention rate, 2) competitor mention rate
 	brandedPrompts.sort((a, b) => {
 		if (Math.abs(a.brandMentionRate - b.brandMentionRate) > 0.1) {
@@ -141,21 +154,21 @@ function selectOptimalPrompts(
 		}
 		return b.competitorMentionRate - a.competitorMentionRate;
 	});
-	
+
 	// Select prompts to meet brand mention requirements
 	const selectedPrompts: string[] = [];
 	let currentBrandMentions = 0;
-	
+
 	// First, add non-branded prompts with brand mentions
 	for (const prompt of nonBrandedPrompts) {
 		if (selectedPrompts.length >= TARGET_PROMPTS_COUNT) break;
-		
+
 		selectedPrompts.push(prompt.promptValue);
 		if (prompt.hasBrandMention) {
 			currentBrandMentions++;
 		}
 	}
-	
+
 	// If we need more prompts or more brand mentions, add branded prompts
 	while (selectedPrompts.length < TARGET_PROMPTS_COUNT && brandedPrompts.length > 0) {
 		const prompt = brandedPrompts.shift()!;
@@ -164,10 +177,10 @@ function selectOptimalPrompts(
 			currentBrandMentions++;
 		}
 	}
-	
+
 	// Log selection summary
 	console.log(`Selected ${selectedPrompts.length} prompts with estimated ${currentBrandMentions} brand mentions`);
-	
+
 	return selectedPrompts;
 }
 
@@ -185,8 +198,8 @@ function analyzeMentions(
 	const brandNameLower = brandName.toLowerCase();
 
 	// Extract domain from brandWebsite using URL constructor
-	const url = new URL(brandWebsite.startsWith('http') ? brandWebsite : `https://${brandWebsite}`);
-	const domain = url.hostname.replace(/^www\./, '').toLowerCase();
+	const url = new URL(brandWebsite.startsWith("http") ? brandWebsite : `https://${brandWebsite}`);
+	const domain = url.hostname.replace(/^www\./, "").toLowerCase();
 
 	// Check for brand mention (brand name or domain)
 	const brandMentioned = contentLower.includes(brandNameLower) || contentLower.includes(domain);
@@ -195,11 +208,13 @@ function analyzeMentions(
 	const competitorsMentioned = competitors
 		.filter((competitor) => {
 			const nameMatch = contentLower.includes(competitor.name.toLowerCase());
-			
+
 			// Extract domain from competitor website
-			const competitorUrl = new URL(competitor.domain.startsWith('http') ? competitor.domain : `https://${competitor.domain}`);
-			const competitorDomain = competitorUrl.hostname.replace(/^www\./, '').toLowerCase();
-			
+			const competitorUrl = new URL(
+				competitor.domain.startsWith("http") ? competitor.domain : `https://${competitor.domain}`,
+			);
+			const competitorDomain = competitorUrl.hostname.replace(/^www\./, "").toLowerCase();
+
 			const domainMatch = contentLower.includes(competitorDomain);
 			return nameMatch || domainMatch;
 		})
@@ -232,6 +247,10 @@ async function runPrompt(
 						webSearch: config.webSearch,
 						version: config.version,
 					}),
+				// Tokens y costo reales que reportó el proveedor, igual que en el
+				// tracking diario: un reporte también gasta y también hay que poder
+				// reconciliarlo contra la factura.
+				callCostFromResult,
 			);
 			const { brandMentioned, competitorsMentioned } = analyzeMentions(
 				result.textContent,
@@ -250,7 +269,9 @@ async function runPrompt(
 				competitorsMentioned,
 			};
 		} catch (err) {
-			job.log(`[Warn] Error running model ${config.model} (provider: ${config.provider}) for prompt "${promptValue}": ${err instanceof Error ? err.message : "Unknown error"}`);
+			job.log(
+				`[Warn] Error running model ${config.model} (provider: ${config.provider}) for prompt "${promptValue}": ${err instanceof Error ? err.message : "Unknown error"}`,
+			);
 			return null;
 		}
 	};
@@ -298,7 +319,7 @@ export async function processReportJob(job: ReportJobContext) {
 		// the prompt generation but still needs competitors.
 		let competitors: CompetitorResult[] = [];
 		let existingPrompts: { prompt: string; brandedPrompt: boolean }[] = [];
-		let suggestion: any = undefined;
+		let suggestion: any;
 
 		const manualCompetitors = job.data.manualCompetitors || [];
 		if (manualCompetitors.length > 0) {
@@ -314,10 +335,10 @@ export async function processReportJob(job: ReportJobContext) {
 			const mappedDbCompetitors = dbCompetitors
 				.filter((c) => c.domains.length > 0)
 				.map((c) => ({ name: c.name, domain: c.domains[0] }));
-			
+
 			// Append DB competitors that aren't already in the manual list (dedupe by domain)
 			for (const c of mappedDbCompetitors) {
-				if (!competitors.some(existing => existing.domain.toLowerCase() === c.domain.toLowerCase())) {
+				if (!competitors.some((existing) => existing.domain.toLowerCase() === c.domain.toLowerCase())) {
 					competitors.push(c);
 				}
 			}
@@ -325,10 +346,10 @@ export async function processReportJob(job: ReportJobContext) {
 			const dbPrompts = await db.query.prompts.findMany({
 				where: eq(promptsSchema.brandId, brandId),
 			});
-			
+
 			existingPrompts = dbPrompts
-				.filter(p => p.enabled)
-				.map(p => ({
+				.filter((p) => p.enabled)
+				.map((p) => ({
 					prompt: p.value.toLowerCase().trim(),
 					brandedPrompt: isPromptBranded(p.value, brandName, brandWebsite),
 				}));
@@ -343,14 +364,14 @@ export async function processReportJob(job: ReportJobContext) {
 				// Always ask for candidate prompts to prevent LLM from returning empty responses entirely
 				maxPrompts: CANDIDATE_PROMPTS_COUNT,
 			});
-			
+
 			if (competitors.length === 0) {
 				competitors = suggestion.competitors
 					.filter((c: any) => c.domains.length > 0)
 					.map((c: any) => ({ name: c.name, domain: c.domains[0] }));
 			}
 		}
-		
+
 		job.updateProgress(35);
 
 		// Step 2: Build candidate prompt list — manual override or analyzeBrand output
@@ -362,9 +383,9 @@ export async function processReportJob(job: ReportJobContext) {
 			: existingPrompts.length > 0
 				? existingPrompts
 				: suggestion.suggestedPrompts.map((p: any) => ({
-					prompt: p.prompt,
-					brandedPrompt: isPromptBranded(p.prompt, brandName, brandWebsite),
-				}));
+						prompt: p.prompt,
+						brandedPrompt: isPromptBranded(p.prompt, brandName, brandWebsite),
+					}));
 
 		if (candidatePrompts.length === 0) {
 			job.log(`No candidate prompts available, report cannot continue`);
@@ -392,10 +413,10 @@ export async function processReportJob(job: ReportJobContext) {
 				competitorsMentioned: string[];
 			}>;
 		}> = [];
-		
+
 		if (job.data.useExistingData && brandId) {
 			job.log(`Using existing database runs for ${candidatePrompts.length} candidate prompts (skipping AI tests)`);
-			
+
 			const dbRuns = await db.query.promptRuns.findMany({
 				where: eq(promptRunsSchema.brandId, brandId),
 				orderBy: [desc(promptRunsSchema.createdAt)],
@@ -422,22 +443,22 @@ export async function processReportJob(job: ReportJobContext) {
 					candidateResults.push({
 						promptValue: candidate.prompt,
 						brandedPrompt: candidate.brandedPrompt,
-						runs: []
+						runs: [],
 					});
 					continue;
 				}
-				
+
 				const promptRunsForCandidate = runCache.get(pid) || [];
-				
+
 				// Group by model, take the most recent
-				const latestByModel = new Map<string, typeof dbRuns[0]>();
+				const latestByModel = new Map<string, (typeof dbRuns)[0]>();
 				for (const run of promptRunsForCandidate) {
 					if (!latestByModel.has(run.model)) {
 						latestByModel.set(run.model, run);
 					}
 				}
 
-				const formattedRuns = Array.from(latestByModel.values()).map(r => ({
+				const formattedRuns = Array.from(latestByModel.values()).map((r) => ({
 					model: r.model,
 					version: r.version,
 					webSearchEnabled: r.webSearchEnabled,
@@ -451,7 +472,7 @@ export async function processReportJob(job: ReportJobContext) {
 				candidateResults.push({
 					promptValue: candidate.prompt,
 					brandedPrompt: candidate.brandedPrompt,
-					runs: formattedRuns
+					runs: formattedRuns,
 				});
 			}
 

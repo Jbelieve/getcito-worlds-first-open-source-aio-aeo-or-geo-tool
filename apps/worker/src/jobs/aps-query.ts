@@ -7,21 +7,29 @@
  * Every provider call goes through the same usage tracking the product already uses, so an APS run
  * shows up in Admin > API Usage like any other run.
  */
-import type { Job, PgBoss } from "pg-boss";
-import { and, eq } from "drizzle-orm";
-import { db } from "@workspace/lib/db/db";
-import { brands } from "@workspace/lib/db/schema";
-import { getProvider, parseScrapeTargets, selectTargetsForBrand, withProviderCallTracking } from "@workspace/lib/providers";
-import { agentApsObservations, agentApsPrompts, agentApsRuns } from "@workspace/aos-aps/db/schema";
+
 import {
-	type MeasurementTargetConfig,
-	type ProviderInvoker,
 	callTimeoutsFromEnv,
 	captureRun,
 	fanOut,
+	type MeasurementTargetConfig,
+	type ProviderInvoker,
 	queryTargetsFrom,
 	withCallTimeouts,
 } from "@workspace/aos-aps/aps";
+import { agentApsObservations, agentApsPrompts, agentApsRuns } from "@workspace/aos-aps/db/schema";
+import { db } from "@workspace/lib/db/db";
+import { brands } from "@workspace/lib/db/schema";
+import {
+	callCostFromResult,
+	getProvider,
+	parseScrapeTargets,
+	selectTargetsForBrand,
+	withProviderCallTracking,
+} from "@workspace/lib/providers";
+import { and, eq } from "drizzle-orm";
+import type { Job, PgBoss } from "pg-boss";
+import { costColumnsFrom, readApsRunRealCost } from "./aps-cost";
 
 export interface ApsQueryData {
 	runId: string;
@@ -68,7 +76,10 @@ export async function apsQueryJob(
 		.orderBy(agentApsPrompts.createdAt);
 
 	if (prompts.length === 0) {
-		await db.update(agentApsRuns).set({ status: "failed", error: "La biblioteca no tiene prompts activos." }).where(eq(agentApsRuns.id, runId));
+		await db
+			.update(agentApsRuns)
+			.set({ status: "failed", error: "La biblioteca no tiene prompts activos." })
+			.where(eq(agentApsRuns.id, runId));
 		return { ok: false, reason: "La biblioteca no tiene prompts activos." };
 	}
 
@@ -82,7 +93,16 @@ export async function apsQueryJob(
 		(async (config, prompt) => {
 			const provider = getProvider(config.provider);
 			const result = await withProviderCallTracking(
-				{ provider: provider.id, model: config.model, kind: "run", brandId: run.brandId, promptId: null },
+				{
+					provider: provider.id,
+					model: config.model,
+					kind: "run",
+					brandId: run.brandId,
+					promptId: null,
+					// La corrida dueña de la llamada: es lo que permite sumar el costo
+					// real de esta corrida después, sin adivinar por fecha ni por marca.
+					agentApsRunId: runId,
+				},
 				() =>
 					provider.run(config.model, prompt, {
 						webSearch: config.webSearch,
@@ -90,6 +110,9 @@ export async function apsQueryJob(
 						targetMarket: brand.targetMarket ?? undefined,
 						targetLanguage: brand.targetLanguage ?? undefined,
 					}),
+				// Los tokens y el costo que reporta el proveedor. Un scraper no reporta
+				// ninguno de los dos y la fila queda con `cost_usd` en null.
+				callCostFromResult,
 			);
 			return typeof result.textContent === "string" ? result.textContent : "";
 		});
@@ -125,7 +148,14 @@ export async function apsQueryJob(
 
 	await db
 		.update(agentApsRuns)
-		.set({ status: "parsing", completedCalls: report.summary.observations })
+		.set({
+			status: "parsing",
+			completedCalls: report.summary.observations,
+			// Lo que costó de verdad la medición, leído de las llamadas ya registradas.
+			// Si algún modelo no reportó costo, la columna queda en null y `unpricedCalls`
+			// dice cuántas faltan: el total incompleto se declara, no se disimula.
+			...costColumnsFrom(await readApsRunRealCost(runId)),
+		})
 		.where(eq(agentApsRuns.id, runId));
 
 	console.log(

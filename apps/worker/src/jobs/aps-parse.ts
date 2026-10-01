@@ -5,19 +5,23 @@
  * raw answer. The grounding the judge claims is verified against the raw text here, so the score
  * never rests on a model's word about itself.
  */
-import type { Job, PgBoss } from "pg-boss";
-import { and, eq, isNull } from "drizzle-orm";
-import { db } from "@workspace/lib/db/db";
-import { brands } from "@workspace/lib/db/schema";
-import { agentApsObservations, agentApsRuns } from "@workspace/aos-aps/db/schema";
+
 import {
 	type ApsJudge,
 	auditRobustness,
 	correctedGrounded,
+	type GatewayCallCost,
 	gatewayJudge,
 	judgeConfigFromEnv,
 	judgeObservations,
 } from "@workspace/aos-aps/aps";
+import { agentApsObservations, agentApsRuns } from "@workspace/aos-aps/db/schema";
+import { db } from "@workspace/lib/db/db";
+import { brands } from "@workspace/lib/db/schema";
+import { recordProviderCall } from "@workspace/lib/providers";
+import { and, eq, isNull } from "drizzle-orm";
+import type { Job, PgBoss } from "pg-boss";
+import { costColumnsFrom, readApsRunRealCost } from "./aps-cost";
 
 export interface ApsParseData {
 	runId: string;
@@ -71,10 +75,17 @@ export async function apsParseJob(
 		.from(agentApsObservations)
 		.where(and(eq(agentApsObservations.runId, runId), isNull(agentApsObservations.analyzedAt)));
 
-	// Every judge call reports what it actually cost, so the run carries its real spend.
-	const judgeCosts: number[] = [];
+	// Cada llamada al juez reporta lo que costó y lo que consumió: se registra en
+	// `provider_calls` como cualquier otra llamada, con `kind: "aps_judge"` para poder
+	// separarla de la medición. Antes de esto el costo del juez se sumaba en memoria y
+	// se perdía al terminar el proceso: quedaba en la fila de la corrida y en ningún
+	// lugar auditable.
+	const judgeSpends: GatewayCallCost[] = [];
 	const judge =
-		deps.judge ?? gatewayJudge(config as NonNullable<ReturnType<typeof judgeConfigFromEnv>>, fetch, (usd) => judgeCosts.push(usd));
+		deps.judge ??
+		gatewayJudge(config as NonNullable<ReturnType<typeof judgeConfigFromEnv>>, fetch, (spend) =>
+			judgeSpends.push(spend),
+		);
 	const report = await judgeObservations(
 		pending.map((row) => ({
 			observationId: row.id,
@@ -118,7 +129,30 @@ export async function apsParseJob(
 			.where(eq(agentApsObservations.id, entry.observationId));
 	}
 
-	const judgeUsd = judgeCosts.reduce((sum, usd) => sum + usd, 0);
+	// Una fila por llamada al juez, con su costo real y sus tokens. Se registran antes de
+	// recalcular el total para que la corrida vea el gasto completo (medición + juez).
+	for (const spend of judgeSpends) {
+		await recordProviderCall({
+			provider: "gateway",
+			model: judge.alias,
+			kind: "aps_judge",
+			brandId: run.brandId,
+			promptId: null,
+			agentApsRunId: runId,
+			success: true,
+			cost: {
+				costUsd: spend.costUsd,
+				pricingSource: spend.pricingSource,
+				...(spend.usage === undefined ? {} : { usage: spend.usage }),
+			},
+		});
+	}
+
+	// El costo real de la corrida, recalculado con las llamadas del juez ya adentro. Se
+	// pisa `estimation` porque lo que había ahí era el estimado que nunca se guardaba y
+	// un `judgeUsd` en memoria; el estimado ahora vive en `estimated_cost_usd`, que es la
+	// columna contra la que se compara.
+	const cost = await readApsRunRealCost(runId);
 	await db
 		.update(agentApsRuns)
 		.set({
@@ -126,13 +160,13 @@ export async function apsParseJob(
 			judgeModelAlias: judge.alias,
 			judgeModelVersion: judge.version,
 			judgePipelineVersion: judge.pipelineVersion,
-			// The billed cost of the judge, beside the estimate the operator approved.
-			estimation: { judgeCalls: judgeCosts.length, actualJudgeUsd: Math.round(judgeUsd * 1e6) / 1e6 },
+			...costColumnsFrom(cost),
 		})
 		.where(eq(agentApsRuns.id, runId));
 
+	const judgeUsd = cost.judge.pricedUsd;
 	console.log(
-		`[aps-parse] run ${runId}: ${report.judged.length} juzgadas, ${report.unjudged.length} sin veredicto, juez USD ${judgeUsd.toFixed(6)}`,
+		`[aps-parse] run ${runId}: ${report.judged.length} juzgadas, ${report.unjudged.length} sin veredicto, juez USD ${judgeUsd.toFixed(6)}${cost.judge.unpricedCalls > 0 ? ` (${cost.judge.unpricedCalls} llamadas sin costo)` : ""}`,
 	);
 	await boss.send("aps-score", { runId });
 	return { ok: true, judged: report.judged.length, unjudged: report.unjudged.length };
