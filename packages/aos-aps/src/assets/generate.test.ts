@@ -1,7 +1,7 @@
 import { generateKeyPairSync, type KeyObject, verify as verifyBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { SigningKey } from "../provenance";
-import { type DeclaredAgentResource, generateAgentAssets } from "./generate";
+import { type DeclaredAgentResource, declaredMcpFromCard, generateAgentAssets } from "./generate";
 
 function newSigningKey(keysUri?: string): { publicKey: KeyObject; signing: SigningKey } {
 	const { privateKey, publicKey } = generateKeyPairSync("ed25519");
@@ -62,6 +62,22 @@ const API = {
 	openApiUrl: "https://believe-global.com/openapi.json",
 	apiDocsUrl: "https://believe-global.com/developers",
 	apiStatusUrl: "https://believe-global.com/api/v1/status",
+};
+
+/**
+ * El fixture REAL: lo que hoy sirve `https://be-aos.believe-global.com`, la landing estatica de BeAOS.
+ * Su `url` es la de la landing y su MCP vive en otro host, declarado dentro de `mcp`.
+ */
+const LANDING_ORIGIN = "https://be-aos.believe-global.com";
+const LANDING_ENDPOINT =
+	"https://esptwxlgdbblvnmdpoao.supabase.co/functions/v1/aos-mcp?site_id=386250c1-01d7-4cb7-94b7-a7f3ba5af8f3";
+const LANDING_CARD = {
+	name: "BeAOS",
+	url: LANDING_ORIGIN,
+	description:
+		"Servidor MCP del Operator de BeAOS: un agente lee el perfil de marca firmado y opera el sitio sin navegador.",
+	provider: { name: "Believe", url: "https://believe-global.com" },
+	mcp: { endpoint: LANDING_ENDPOINT, transport: "http" },
 };
 
 /** Recursos ARD completos: nombre, namespace, media type, url y 2 a 5 consultas representativas. */
@@ -277,6 +293,48 @@ describe("server-card (AOS-CAPA-01)", () => {
 		// Los lectores buscan serverUrl en la raiz: es lo que le faltaba al card del sitio.
 		expect(card.serverUrl).toBe("https://believe-global.com/mcp");
 		expect(card.transport.endpoint).toBe("https://believe-global.com/mcp");
+	});
+
+	it("declara el endpoint del sitio y NO el dominio de la marca", () => {
+		// El caso real: la landing vive en un dominio y su MCP en otro (un Supabase). Si el generador
+		// derivara el endpoint del dominio, publicaria un endpoint que contesta 405.
+		const assets = generateAgentAssets({
+			name: "BeAOS",
+			websiteUrl: LANDING_ORIGIN,
+			dna,
+			mcpUrl: LANDING_ENDPOINT,
+			mcpTransport: "http",
+		});
+		const card = JSON.parse(assetByPath(assets, "/.well-known/mcp/server-card.json")?.content ?? "{}");
+		expect(card.serverUrl).toBe(LANDING_ENDPOINT);
+		expect(card.transport.endpoint).toBe(LANDING_ENDPOINT);
+		expect(card.serverUrl).not.toBe(LANDING_ORIGIN);
+		// El dominio del sitio sigue apareciendo, pero como `websiteUrl`: es identidad, no endpoint.
+		expect(card.websiteUrl).toBe(LANDING_ORIGIN);
+	});
+
+	it("copia el transporte que el sitio declara: si dice http, no decimos streamable-http", () => {
+		const assets = generateAgentAssets({
+			name: "BeAOS",
+			websiteUrl: LANDING_ORIGIN,
+			dna,
+			mcpUrl: LANDING_ENDPOINT,
+			mcpTransport: "http",
+		});
+		const card = JSON.parse(assetByPath(assets, "/.well-known/mcp/server-card.json")?.content ?? "{}");
+		expect(card.transport.type).toBe("http");
+	});
+
+	it("OMITE el transporte cuando el sitio no lo declara: no elegimos un default por el", () => {
+		const assets = generateAgentAssets({
+			name: "Believe",
+			websiteUrl: "https://believe-global.com",
+			dna,
+			mcpUrl: "https://believe-global.com/mcp",
+		});
+		const card = JSON.parse(assetByPath(assets, "/.well-known/mcp/server-card.json")?.content ?? "{}");
+		expect(card.transport).toEqual({ endpoint: "https://believe-global.com/mcp" });
+		expect(card.transport).not.toHaveProperty("type");
 	});
 
 	it("copia los tools que el sitio declara, para que el card diga que se puede llamar", () => {
@@ -799,5 +857,53 @@ describe("ai-catalog.json (ARD)", () => {
 	it("NO se emite sin sitio: sin fqdn no hay identifier urn:air", () => {
 		const assets = generateAgentAssets({ name: "Believe", dna, ardEntries: ARD });
 		expect(assetByPath(assets, "/.well-known/ai-catalog.json")).toBeUndefined();
+	});
+});
+
+describe("declaredMcpFromCard: el endpoint sale del sitio, no de su dominio", () => {
+	it("lee el endpoint que la landing de BeAOS declara dentro de `mcp`", () => {
+		// La landing declara su MCP en `mcp.endpoint`. Antes se leia `url` —la URL de la landing— y el
+		// bundle publicaba un endpoint que contesta 405.
+		expect(declaredMcpFromCard(LANDING_CARD)).toEqual({ url: LANDING_ENDPOINT, transport: "http" });
+	});
+
+	it("un sitio que declara un endpoint distinto de su dominio se respeta", () => {
+		const card = { url: LANDING_ORIGIN, serverUrl: "https://mcp.otro-host.com/mcp" };
+		expect(declaredMcpFromCard(card)).toEqual({ url: "https://mcp.otro-host.com/mcp" });
+	});
+
+	it("lee tambien la forma vieja `transport.endpoint`, y `url` nunca gana", () => {
+		const card = {
+			url: LANDING_ORIGIN,
+			transport: { type: "streamable-http", endpoint: "https://mcp.otro-host.com/mcp" },
+		};
+		expect(declaredMcpFromCard(card)).toEqual({
+			url: "https://mcp.otro-host.com/mcp",
+			transport: "streamable-http",
+		});
+	});
+
+	it("sin endpoint declarado no hay MCP: `url` es la identidad del documento, no el server", () => {
+		expect(declaredMcpFromCard({ url: LANDING_ORIGIN })).toBeUndefined();
+		expect(declaredMcpFromCard({})).toBeUndefined();
+		expect(declaredMcpFromCard(null)).toBeUndefined();
+		expect(declaredMcpFromCard("<html>404</html>")).toBeUndefined();
+		expect(declaredMcpFromCard({ serverUrl: "   ", mcp: { endpoint: "" } })).toBeUndefined();
+	});
+
+	it("copia los tools del card y omite la clave cuando no los publica", () => {
+		expect(
+			declaredMcpFromCard({
+				serverUrl: "https://mcp.otro-host.com/mcp",
+				tools: [{ name: " operate_page ", title: "Operar una pagina" }, { name: "" }, "no-es-un-tool"],
+			}),
+		).toEqual({
+			url: "https://mcp.otro-host.com/mcp",
+			tools: [{ name: "operate_page", title: "Operar una pagina" }],
+		});
+		// Una lista vacia afirma "no hay ninguna": se omite igual que cuando no la conocemos.
+		expect(declaredMcpFromCard({ serverUrl: "https://mcp.otro-host.com/mcp", tools: [] })).toEqual({
+			url: "https://mcp.otro-host.com/mcp",
+		});
 	});
 });
