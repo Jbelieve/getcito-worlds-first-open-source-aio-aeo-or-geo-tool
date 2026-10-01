@@ -19,8 +19,8 @@ import { IconInfoCircle } from "@tabler/icons-react";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@workspace/ui/components/chart";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { Bar, BarChart, Cell, XAxis, YAxis } from "recharts";
-import { costLineText, formatUsd, type ApsCostComparisonView } from "@/lib/aps/run-cost";
 import { apsBand, BandChip, BLOCKING_TEXT, MONO_LABEL, SIGNAL_BAR } from "@/components/status-tone";
+import { type ApsCostComparisonView, costLineText, formatUsd } from "@/lib/aps/run-cost";
 
 /** The five dimensions, with the weight each one carries. Labels are the product's words. */
 const DIMENSIONS: Array<{ key: string; label: string; weight: number; hint: string }> = [

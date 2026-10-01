@@ -34,7 +34,13 @@ import {
 } from "@/lib/aps/library-message";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { getBoss } from "@/lib/boss-client";
-import { estimateApsRunForBrand, generateLibraryRecordingCost, libraryCategoryForEntity, startApsRunForBrand, costComparisonForRuns } from "@/server/agent-aps-core";
+import {
+	costComparisonForRuns,
+	estimateApsRunForBrand,
+	generateLibraryRecordingCost,
+	libraryCategoryForEntity,
+	startApsRunForBrand,
+} from "@/server/agent-aps-core";
 
 const runInput = z.object({
 	brandId: z.string().min(1),
@@ -165,7 +171,9 @@ export const getApsRunsFn = createServerFn({ method: "POST" })
 			.limit(60);
 		// Estimado contra real: la comparación viaja ya resuelta para que la pantalla no
 		// tenga que rehacer la cuenta ni decidir por su cuenta si un total está completo.
-		const costs = await costComparisonForRuns(runs.map((run) => ({ id: run.id, estimatedCostUsd: run.estimatedCostUsd })));
+		const costs = await costComparisonForRuns(
+			runs.map((run) => ({ id: run.id, estimatedCostUsd: run.estimatedCostUsd })),
+		);
 		return runs.map((run) => ({
 			id: run.id,
 			entityId: run.entityId,

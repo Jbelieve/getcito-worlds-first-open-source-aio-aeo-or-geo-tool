@@ -10,9 +10,9 @@
  */
 
 import {
+	type ApsCostComparison,
 	apsBudgetConfigFromEnv,
 	apsPricesFromEnv,
-	type ApsCostComparison,
 	canRegenerateLibrary,
 	compareEstimatedToActual,
 	GATEWAY_JUDGE_PIPELINE_VERSION,
