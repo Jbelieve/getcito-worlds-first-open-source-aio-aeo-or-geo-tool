@@ -17,6 +17,16 @@ export const LIBRARY_TARGET_RANGE = { min: 40, max: 60 } as const;
 /** Mix of the design blueprint: half comparison, a third use case, the rest category. */
 export const LIBRARY_MIX = { comparison: 0.5, use_case: 0.3, category: 0.2 } as const;
 
+/**
+ * El marcador con el que el generador trabaja cuando la marca no declara categoría.
+ *
+ * Vive acá —y no en la pantalla— porque lo usan dos cosas que no pueden discrepar: el prompt que se
+ * le manda al modelo (`buildLibraryPrompt`, en ./gateway) y el mensaje que le explica al operador qué
+ * categoría se usó. Si el texto cambia en un solo lado, la pantalla diría una cosa y el modelo
+ * habría recibido otra.
+ */
+export const CATEGORY_PLACEHOLDER = "marketing/software";
+
 export type PromptKind = keyof typeof LIBRARY_MIX;
 export type FunnelStage = "awareness" | "consideration" | "decision";
 
@@ -27,6 +37,27 @@ export interface LibraryPromptInput {
 	text: string;
 	kind: PromptKind;
 	funnelStage: FunnelStage;
+}
+
+/**
+ * La categoría con la que se calibra la biblioteca, leída de donde la marca **ya** la declara.
+ *
+ * El campo es `industry`, y no es una invención de este módulo: es el que el contexto de marca trae
+ * (`MaasyBrandContext.industry`, la clave de arriba del payload que BeAOS guarda en
+ * `agent_brand_dna_snapshots.payload`) y el mismo que ya viaja al `brand.json` servido como
+ * `brand.industry` en `generateAgentAssets`. Si acá se leyera otro campo, la biblioteca se
+ * calibraría con una categoría distinta de la que la marca declara a los agentes.
+ *
+ * Devuelve `null` —nunca un marcador— cuando la marca no la declara o viene vacía: quien llama
+ * decide qué decir, y decir "no la declaró" es distinto de inventar una. Una biblioteca calibrada
+ * con una categoría falsa sale genérica y después se bloquea 90 días, así que el silencio no es una
+ * opción aceptable.
+ */
+export function categoryFromBrandContext(payload: Record<string, unknown> | null | undefined): string | null {
+	const industry = payload?.industry;
+	if (typeof industry !== "string") return null;
+	const trimmed = industry.trim();
+	return trimmed.length > 0 ? trimmed : null;
 }
 
 export type RejectionReason = "empty" | "names_brand" | "duplicate" | "unknown_kind" | "unknown_funnel_stage";

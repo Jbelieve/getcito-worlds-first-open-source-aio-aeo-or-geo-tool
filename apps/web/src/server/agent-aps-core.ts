@@ -13,6 +13,7 @@ import {
 	apsBudgetConfigFromEnv,
 	apsPricesFromEnv,
 	canRegenerateLibrary,
+	categoryFromBrandContext,
 	GATEWAY_JUDGE_PIPELINE_VERSION,
 	generateLibraryWithGateway,
 	isLibraryUsable,
@@ -30,12 +31,18 @@ import {
 	agentApsPromptLibraries,
 	agentApsPrompts,
 	agentApsRuns,
+	agentBrandDnaSnapshots,
 	agentBrandEntities,
 } from "@workspace/aos-aps/db/schema";
 import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
-import { generationFailureMessage, generatorInputsFromBrand, LIBRARY_ASKED_FOR } from "@/lib/aps/library-message";
+import {
+	generationFailureMessage,
+	generatorInputsFromBrand,
+	LIBRARY_ASKED_FOR,
+	missingCategoryWarning,
+} from "@/lib/aps/library-message";
 import { getBoss } from "@/lib/boss-client";
 
 export interface ApsRunRequestInput {
@@ -236,6 +243,15 @@ export interface EnsurePromptLibraryInput {
 	 * existe, y arranca una serie nueva. `false` respeta el bloqueo y devuelve la activa tal cual.
 	 */
 	force?: boolean;
+	/**
+	 * `true` genera aunque la marca no declare categoría.
+	 *
+	 * Sin este flag, una entidad sin `industry` **no gasta la llamada**: se corta con el aviso de que la
+	 * biblioteca puede salir mal calibrada. Es una decisión, no una traba: generar 50 prompts mal
+	 * calibrados que después se bloquean 90 días es peor que no generarlos, y el llamador que sabe lo
+	 * que hace puede confirmarlo explícitamente.
+	 */
+	confirmMissingCategory?: boolean;
 }
 
 export interface EnsurePromptLibraryResult {
@@ -246,6 +262,8 @@ export interface EnsurePromptLibraryResult {
 	prompts: PromptLibraryPrompt[];
 	/** Candidatos que el gateway propuso y la validación descartó. */
 	rejected: number;
+	/** La categoría con la que se calibró esta biblioteca. `null` cuando la marca no la declara. */
+	category: string | null;
 }
 
 /**
@@ -253,6 +271,29 @@ export interface EnsurePromptLibraryResult {
  * devolvió nada usable). Quien llama lo traduce a la respuesta de su puerta.
  */
 export class PromptLibraryError extends Error {}
+
+/**
+ * La categoría con la que se calibra la biblioteca de una entidad, leída de donde la marca ya la
+ * declara: el campo `industry` del último DNA sincronizado.
+ *
+ * No es un campo nuevo ni una convención de este archivo: es el mismo `dnaPayload.industry` que
+ * `generateAssetsForEntity` publica como `brand.industry` dentro del `brand.json` firmado. Si acá se
+ * leyera otra cosa, la biblioteca se calibraría con una categoría distinta de la que la marca declara
+ * a los agentes.
+ *
+ * Devuelve `null` cuando no hay DNA o la marca no declara industria. **No inventa una**: quien llama
+ * tiene que decir que falta, porque una biblioteca calibrada con una categoría falsa sale genérica y
+ * se bloquea 90 días.
+ */
+export async function libraryCategoryForEntity(brandId: string, entityId: string): Promise<string | null> {
+	const [snapshot] = await db
+		.select({ payload: agentBrandDnaSnapshots.payload })
+		.from(agentBrandDnaSnapshots)
+		.where(and(eq(agentBrandDnaSnapshots.entityId, entityId), eq(agentBrandDnaSnapshots.brandId, brandId)))
+		.orderBy(desc(agentBrandDnaSnapshots.syncedAt))
+		.limit(1);
+	return categoryFromBrandContext(snapshot?.payload as Record<string, unknown> | undefined);
+}
 
 async function readLibraryPrompts(libraryId: string): Promise<PromptLibraryPrompt[]> {
 	const rows = await db
@@ -308,6 +349,9 @@ export async function ensurePromptLibraryForEntity(data: EnsurePromptLibraryInpu
 			created: false,
 			prompts: await readLibraryPrompts(active.id),
 			rejected: 0,
+			// No se genera nada: no hay categoría que informar. La de la biblioteca activa no se guardó
+			// en su momento, así que decir otra cosa sería afirmar algo que no se puede comprobar.
+			category: null,
 		};
 	}
 
@@ -322,6 +366,15 @@ export async function ensurePromptLibraryForEntity(data: EnsurePromptLibraryInpu
 		throw new PromptLibraryError(`No existe la marca "${data.brandId}". Creamela primero con ensure_brand.`);
 	}
 
+	// La categoría con la que se calibra la biblioteca, **antes** de gastar la llamada: es el campo
+	// `industry` del DNA sincronizado. Sin categoría, 50 prompts genéricos se bloquean 90 días y pasan a
+	// ser el instrumento de todas las mediciones, así que se corta acá y se dice qué falta, en vez de
+	// generar y avisar después. Quien sabe lo que hace lo confirma con `confirmMissingCategory`.
+	const category = await libraryCategoryForEntity(data.brandId, data.entityId);
+	if (category === null && data.confirmMissingCategory !== true) {
+		throw new PromptLibraryError(missingCategoryWarning(brand.name));
+	}
+
 	const brief = [
 		brand.shortDescription,
 		(brand.productsAndServices ?? []).join(", "),
@@ -330,7 +383,7 @@ export async function ensurePromptLibraryForEntity(data: EnsurePromptLibraryInpu
 		.filter((part): part is string => typeof part === "string" && part.length > 0)
 		.join(" | ");
 	const generated = await generateLibraryWithGateway(
-		{ brandName: brand.name, industry: null, brief: brief.length > 0 ? brief : null },
+		{ brandName: brand.name, industry: category, brief: brief.length > 0 ? brief : null },
 		config,
 	);
 	if (isLibraryUsable(generated) === false) {
@@ -345,7 +398,7 @@ export async function ensurePromptLibraryForEntity(data: EnsurePromptLibraryInpu
 					askedFor: LIBRARY_ASKED_FOR,
 					failure: generated.failure,
 				},
-				generatorInputsFromBrand(brand),
+				generatorInputsFromBrand(brand, category),
 			),
 		);
 	}
@@ -429,5 +482,6 @@ export async function ensurePromptLibraryForEntity(data: EnsurePromptLibraryInpu
 			enabled: row.enabled,
 		})),
 		rejected: validation.rejected.length,
+		category,
 	};
 }

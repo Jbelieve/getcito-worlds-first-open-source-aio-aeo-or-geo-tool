@@ -235,6 +235,11 @@ const startApsRun: McpTool = {
 				maximum: 5,
 				description: "Repeticiones por prompt y modelo (por defecto 3). El presupuesto puede reducirlas.",
 			},
+			confirmMissingCategory: {
+				type: "boolean",
+				description:
+					"true para generar la biblioteca aunque la marca no declare categoría (`industry` en el DNA). Por defecto false: sin categoría la generación se corta ANTES de gastar la llamada, porque una biblioteca calibrada con el marcador genérico «marketing/software» sale mal calibrada y se bloquea 90 días.",
+			},
 		},
 		required: ["brandId", "entityId"],
 		additionalProperties: false,
@@ -244,12 +249,18 @@ const startApsRun: McpTool = {
 		const entityId = requireUuid(args, "entityId");
 		const models = optionalStringArray(args, "models");
 		const repetitions = optionalInteger(args, "repetitions", { min: 1, max: 5, fallback: 3 });
+		const confirmMissingCategory = optionalBoolean(args, "confirmMissingCategory") ?? false;
 
 		// Antes esto trababa la corrida; ahora la biblioteca se asegura acá. La generación no es silenciosa:
 		// si falla, no se encola nada y el motivo viaja en la respuesta.
 		let libraryGenerated = false;
 		try {
-			const library = await ensurePromptLibraryForEntity({ brandId, entityId, force: false });
+			const library = await ensurePromptLibraryForEntity({
+				brandId,
+				entityId,
+				force: false,
+				confirmMissingCategory,
+			});
 			libraryGenerated = library.created;
 		} catch (error) {
 			if (error instanceof PromptLibraryError) {
@@ -303,7 +314,7 @@ const ensurePromptLibrary: McpTool = {
 	name: "ensure_prompt_library",
 	title: "Asegurar la biblioteca de prompts APS",
 	description:
-		"Genera la biblioteca de prompts APS de una entidad si no tiene una activa, y devuelve los prompts (id, texto, categoría y etapa de funnel). Si ya tiene una activa y no mandás `force`, devuelve esa tal cual con `created: false`: es idempotente y no gasta una generación. Con `force: true` genera una versión nueva, que supersede a la anterior aunque esté dentro del bloqueo de 90 días —cambiar el instrumento arranca una serie nueva—. No existe el estado 'aprobada': la biblioteca queda `active` y la anterior `superseded`. Usala antes de start_aps_run si querés revisar los prompts primero.",
+		"Genera la biblioteca de prompts APS de una entidad si no tiene una activa, y devuelve los prompts (id, texto, categoría y etapa de funnel). Si ya tiene una activa y no mandás `force`, devuelve esa tal cual con `created: false`: es idempotente y no gasta una generación. Con `force: true` genera una versión nueva, que supersede a la anterior aunque esté dentro del bloqueo de 90 días —cambiar el instrumento arranca una serie nueva—. La biblioteca se calibra con la categoría que la marca declara (`industry` del DNA sincronizado): si no la declara, la generación se corta ANTES de gastar la llamada con el aviso de que puede salir mal calibrada, y solo sigue con `confirmMissingCategory: true`. La respuesta trae `calibrationCategory` para que se sepa con qué se calibró. No existe el estado 'aprobada': la biblioteca queda `active` y la anterior `superseded`. Usala antes de start_aps_run si querés revisar los prompts primero.",
 	inputSchema: {
 		type: "object",
 		properties: {
@@ -313,6 +324,11 @@ const ensurePromptLibrary: McpTool = {
 				type: "boolean",
 				description: "true para generar una versión nueva aunque ya haya una activa. Por defecto false.",
 			},
+			confirmMissingCategory: {
+				type: "boolean",
+				description:
+					"true para generar aunque la marca no declare categoría (`industry` en el DNA). Por defecto false: sin categoría la generación se corta ANTES de gastar la llamada, porque una biblioteca calibrada con el marcador genérico «marketing/software» sale mal calibrada y se bloquea 90 días.",
+			},
 		},
 		required: ["brandId", "entityId"],
 		additionalProperties: false,
@@ -321,10 +337,11 @@ const ensurePromptLibrary: McpTool = {
 		const brandId = requireString(args, "brandId");
 		const entityId = requireUuid(args, "entityId");
 		const force = optionalBoolean(args, "force") ?? false;
+		const confirmMissingCategory = optionalBoolean(args, "confirmMissingCategory") ?? false;
 
 		let library: Awaited<ReturnType<typeof ensurePromptLibraryForEntity>>;
 		try {
-			library = await ensurePromptLibraryForEntity({ brandId, entityId, force });
+			library = await ensurePromptLibraryForEntity({ brandId, entityId, force, confirmMissingCategory });
 		} catch (error) {
 			if (error instanceof PromptLibraryError) {
 				return errorResult(`No se pudo asegurar la biblioteca de prompts: ${error.message}`, {
@@ -341,6 +358,10 @@ const ensurePromptLibrary: McpTool = {
 			version: library.version,
 			created: library.created,
 			rejected: library.rejected,
+			// Con qué categoría se calibró esta biblioteca. `null` cuando la marca no la declara y la
+			// generación se confirmó igual: el consumidor tiene que poder saber que el instrumento salió
+			// con el marcador genérico, no con la categoría real.
+			calibrationCategory: library.category,
 			promptCount: library.prompts.length,
 			prompts: library.prompts.map((prompt) => ({
 				id: prompt.id,
@@ -351,7 +372,11 @@ const ensurePromptLibrary: McpTool = {
 			})),
 		};
 		const text = library.created
-			? `Biblioteca v${library.version} generada para la entidad "${entityId}": ${library.prompts.length} prompts (${library.rejected} descartados).`
+			? `Biblioteca v${library.version} generada para la entidad "${entityId}": ${library.prompts.length} prompts (${library.rejected} descartados).${
+					library.category === null
+						? " Se generó SIN categoría declarada: se usó el marcador genérico «marketing/software» como calibración, así que los prompts pueden ser demasiado generales."
+						: ` Calibrada con la categoría "${library.category}".`
+				}`
 			: `La entidad "${entityId}" ya tenía la biblioteca v${library.version} activa: se devuelve tal cual (${library.prompts.length} prompts).`;
 		return textResult(text, payload);
 	},

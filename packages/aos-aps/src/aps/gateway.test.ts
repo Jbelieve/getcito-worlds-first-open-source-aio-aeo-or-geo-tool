@@ -9,8 +9,10 @@ import {
 	judgeConfigFromEnv,
 	LIBRARY_MAX_TOKENS,
 	libraryConfigFromEnv,
+	libraryMaxTokensFromEnv,
 	readGatewayBudget,
 } from "./gateway";
+import { CATEGORY_PLACEHOLDER } from "./library";
 
 const CONFIG = { url: "https://gateway.test/v1", key: "gw-key", model: "believe-deep", version: "deepseek-flash-4.1" };
 
@@ -213,8 +215,35 @@ describe("generateLibraryWithGateway", () => {
 			return libraryResponse([{ text: "x", kind: "category", funnel_stage: "awareness" }]);
 		}) as unknown as typeof fetch;
 		await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, fetchImpl);
-		// Measured: 50 prompts spent ~3.7k reasoning + ~6.3k writing; 4000 truncated it.
-		expect(body.max_tokens).toBe(8000);
+		// El razonamiento se cobra contra este tope y no está acotado: con 8.000 la peor corrida medida
+		// gastó 7.153 (87%) y una corrida mala se corta. El default tiene margen, no es el mínimo.
+		expect(body.max_tokens).toBe(LIBRARY_MAX_TOKENS);
+		expect(LIBRARY_MAX_TOKENS).toBeGreaterThan(8000);
+	});
+
+	it("manda la categoría de la marca en el pedido", async () => {
+		let body = "";
+		const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+			body = String(init?.body);
+			return libraryResponse([{ text: "x", kind: "category", funnel_stage: "awareness" }]);
+		}) as unknown as typeof fetch;
+		await generateLibraryWithGateway({ brandName: "VW", industry: "Camiones y buses" }, libraryConfig, fetchImpl);
+		expect(body).toContain("Camiones y buses");
+		expect(body).not.toContain(CATEGORY_PLACEHOLDER);
+	});
+
+	it("sin categoría declarada dice que usa el marcador, en vez de inventar una categoría", async () => {
+		const bodies: string[] = [];
+		const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+			bodies.push(String(init?.body));
+			return libraryResponse([{ text: "x", kind: "category", funnel_stage: "awareness" }]);
+		}) as unknown as typeof fetch;
+		await generateLibraryWithGateway({ brandName: "F", industry: null }, libraryConfig, fetchImpl);
+		await generateLibraryWithGateway({ brandName: "F", industry: "   " }, libraryConfig, fetchImpl);
+		for (const body of bodies) {
+			expect(body).toContain(CATEGORY_PLACEHOLDER);
+			expect(body).toMatch(/no declara/);
+		}
 	});
 
 	it("accepts a camelCase funnel stage and drops invalid candidates", async () => {
@@ -322,6 +351,37 @@ describe("libraryConfigFromEnv", () => {
 		expect(config?.model).toBe("believe-smart");
 		// La banda se puede cambiar sin tocar la del juez.
 		expect(libraryConfigFromEnv({ ...env, APS_LIBRARY_MODEL: "believe-fast" })?.model).toBe("believe-fast");
+	});
+
+	it("el tope se ajusta por entorno, sin desplegar", async () => {
+		// Es lo que hace falta el día que cambie la banda del modelo o el largo del contexto de marca:
+		// las dos cosas mueven el número y esperar un deploy deja el botón roto mientras tanto.
+		expect(libraryMaxTokensFromEnv({ APS_LIBRARY_MAX_TOKENS: "48000" })).toBe(48000);
+		expect(libraryConfigFromEnv({ ...env, APS_LIBRARY_MAX_TOKENS: "48000" })?.maxTokens).toBe(48000);
+
+		// Un valor explícito manda aunque sea más chico: quien lo pone sabe lo que hace.
+		expect(libraryMaxTokensFromEnv({ APS_LIBRARY_MAX_TOKENS: "4000" })).toBe(4000);
+	});
+
+	it("un valor ausente, vacío o no numérico cae al default medido", () => {
+		expect(libraryMaxTokensFromEnv({})).toBe(LIBRARY_MAX_TOKENS);
+		expect(libraryMaxTokensFromEnv({ APS_LIBRARY_MAX_TOKENS: "  " })).toBe(LIBRARY_MAX_TOKENS);
+		expect(libraryMaxTokensFromEnv({ APS_LIBRARY_MAX_TOKENS: "muchos" })).toBe(LIBRARY_MAX_TOKENS);
+		expect(libraryMaxTokensFromEnv({ APS_LIBRARY_MAX_TOKENS: "0" })).toBe(LIBRARY_MAX_TOKENS);
+		expect(libraryMaxTokensFromEnv({ APS_LIBRARY_MAX_TOKENS: "-1" })).toBe(LIBRARY_MAX_TOKENS);
+	});
+
+	it("el pedido real sale con el tope configurado por entorno", async () => {
+		let body: Record<string, unknown> = {};
+		const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+			body = JSON.parse(String(init?.body));
+			return libraryResponse([{ text: "x", kind: "category", funnel_stage: "awareness" }]);
+		}) as unknown as typeof fetch;
+		const config = libraryConfigFromEnv({ ...env, APS_LIBRARY_MAX_TOKENS: "48000" });
+		expect(config).not.toBeNull();
+		if (config === null) return;
+		await generateLibraryWithGateway({ brandName: "F" }, config, fetchImpl);
+		expect(body.max_tokens).toBe(48000);
 	});
 
 	it("sin gateway no hay configuración de generación", () => {

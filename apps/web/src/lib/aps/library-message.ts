@@ -8,9 +8,18 @@
  * La regla que ordena todo esto: **el número no lo controla el botón**. BeAOS le pide un objetivo al
  * gateway y el gateway devuelve lo que puede (medido: 6 de 50 el 2026-09-23, y 0 cuando el razonamiento
  * se come el tope de tokens). Por eso ninguna frase promete una cantidad: se dice cuántos vinieron.
+ *
+ * La segunda regla: **la categoría se dice, no se supone**. El generador calibra la biblioteca con la
+ * categoría de la marca; cuando la marca no la declara hay que decirlo con todas las letras, porque una
+ * biblioteca calibrada con una categoría falsa sale genérica y después se bloquea 90 días.
  */
 
-import { LIBRARY_TARGET_TOTAL, type LibraryFailure } from "@workspace/aos-aps/aps";
+import {
+	CATEGORY_PLACEHOLDER,
+	LIBRARY_LOCK_DAYS,
+	LIBRARY_TARGET_TOTAL,
+	type LibraryFailure,
+} from "@workspace/aos-aps/aps";
 
 /** Lo que el generador le pide al modelo. No es una promesa: el gateway devuelve lo que puede. */
 export const LIBRARY_ASKED_FOR = LIBRARY_TARGET_TOTAL;
@@ -46,17 +55,24 @@ export interface LibraryGenerationReport {
 	failure: LibraryFailure | null;
 }
 
-/** Los insumos del generador: lo que recibió, lo que le falta y la categoría que usa de marcador. */
+/**
+ * Los insumos del generador: lo que recibió, lo que le falta y con qué categoría calibró.
+ *
+ * La categoría no es un insumo más: es la que decide si la biblioteca habla de esta marca o de una
+ * consultora de marketing genérica. Por eso viaja aparte y con su `null` explícito —"la marca no la
+ * declara"— en vez de esconderse detrás de un marcador.
+ */
 export interface GeneratorInputs {
 	received: string[];
 	missing: string[];
-	categoryPlaceholder: string;
+	/** La categoría que se le pasó al generador. `null` cuando la marca no declara ninguna. */
+	category: string | null;
 }
 
-/** El marcador de categoría con el que trabaja el generador cuando nadie le pasa la categoría real. */
-export const CATEGORY_PLACEHOLDER = "marketing/software";
+/** El marcador con el que trabaja el generador cuando la marca no declara categoría. */
+export { CATEGORY_PLACEHOLDER };
 
-/** Lo que el generador sí consume del proyecto. `industry` no está: ninguna puerta se lo pasa. */
+/** Lo que el generador sí consume del proyecto. La categoría llega aparte, desde el contexto de marca. */
 export interface BrandContextFields {
 	shortDescription: string | null;
 	productsAndServices: string[] | null;
@@ -64,7 +80,7 @@ export interface BrandContextFields {
 }
 
 /** Traduce el contexto de marca a insumos con nombre, para poder decir cuál falta. */
-export function generatorInputsFromBrand(brand: BrandContextFields): GeneratorInputs {
+export function generatorInputsFromBrand(brand: BrandContextFields, category: string | null): GeneratorInputs {
 	const received: string[] = [];
 	const missing: string[] = [];
 	const check = (present: boolean, ok: string, absent: string): void => {
@@ -78,7 +94,8 @@ export function generatorInputsFromBrand(brand: BrandContextFields): GeneratorIn
 		"los productos y servicios de la marca",
 	);
 	check((brand.keywords ?? []).length > 0, "las palabras clave", "las palabras clave de la marca");
-	return { received, missing, categoryPlaceholder: CATEGORY_PLACEHOLDER };
+	const trimmed = category?.trim();
+	return { received, missing, category: trimmed !== undefined && trimmed.length > 0 ? trimmed : null };
 }
 
 /** El título dice lo que hace: pide candidatos, hasta un tope, y no promete la cantidad. */
@@ -95,11 +112,22 @@ export function rejectionSummary(rejected: Array<{ reason: string }>): string | 
 }
 
 /**
+ * La línea de la categoría: **de dónde salió**, no solo cuál fue.
+ *
+ * Antes decía "la categoría tampoco se le pasa: usa «marketing/software» como marcador", como si fuera
+ * un detalle. No lo es: es la diferencia entre una biblioteca calibrada para la marca y 50 prompts
+ * genéricos que se bloquean 90 días. Así que cuando falta, se dice que falta **y** que la biblioteca
+ * puede salir mal calibrada por eso.
+ */
+export function categoryNote(inputs: GeneratorInputs): string {
+	return inputs.category !== null
+		? `La categoría que se le pasó es «${inputs.category}».`
+		: `La marca no declara categoría (\`industry\`), así que el generador usa «${CATEGORY_PLACEHOLDER}» como marcador: la biblioteca puede salir mal calibrada por eso.`;
+}
+
+/**
  * Nombra el insumo que falta. Existe porque el genérico *"no devolvió una biblioteca usable"* ya mandó
  * a un agente a buscar el problema donde no estaba: si falta contexto, hay que decir cuál.
- *
- * La categoría se nombra siempre porque el generador **nunca** la recibe: `buildLibraryPrompt` cae al
- * marcador cuando `industry` viene vacío y ninguna de las dos puertas se lo pasa.
  */
 export function generatorInputsNote(inputs: GeneratorInputs): string {
 	const received = inputs.received.length > 0 ? inputs.received.join(", ") : "contexto de marca";
@@ -107,7 +135,18 @@ export function generatorInputsNote(inputs: GeneratorInputs): string {
 		inputs.missing.length === 0
 			? `El generador recibió ${received}.`
 			: `Al proyecto le falta ${inputs.missing.join(", ")}: el generador no recibió ${received}.`;
-	return `${context} La categoría tampoco se le pasa: usa «${inputs.categoryPlaceholder}» como marcador.`;
+	return `${context} ${categoryNote(inputs)}`;
+}
+
+/**
+ * El aviso de antes de gastar: la generación **no se hizo** y hay que decirlo así.
+ *
+ * Existe porque generar 50 prompts mal calibrados que después se bloquean 90 días es peor que no
+ * generarlos: la biblioteca es el instrumento con el que se comparan todas las mediciones, y cambiarla
+ * después no es una opción. Se avisa antes de la llamada, no después.
+ */
+export function missingCategoryWarning(brandName: string): string {
+	return `No se gastó la llamada: la marca «${brandName}» no declara categoría (\`industry\` en el contexto de marca), así que el generador usaría «${CATEGORY_PLACEHOLDER}» como marcador y los ${LIBRARY_ASKED_FOR} prompts pueden salir mal calibrados. Una biblioteca mal calibrada se bloquea ${LIBRARY_LOCK_DAYS} días y pasa a ser el instrumento con el que se comparan todas las mediciones: por eso conviene declarar la categoría y resincronizar el DNA antes de generarla. Si igual querés generarla con el marcador, confirmá.`;
 }
 
 /** Lo que se lee cuando SÍ volvieron candidatos: cuántos, qué se descartó y que todavía no se guardó. */

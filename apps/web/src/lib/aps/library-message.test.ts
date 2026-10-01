@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+	CATEGORY_PLACEHOLDER,
 	type GeneratorInputs,
 	generateButtonLabel,
 	generationFailureMessage,
@@ -14,14 +15,19 @@ import {
 	generatorInputsNote,
 	type LibraryGenerationReport,
 	libraryReviewMessage,
+	missingCategoryWarning,
 	rejectionSummary,
 } from "./library-message";
 
+/** La marca declara categoría: es el caso de una marca bien configurada. */
 const INPUTS: GeneratorInputs = {
 	received: ["la descripción corta", "los productos y servicios", "las palabras clave"],
 	missing: [],
-	categoryPlaceholder: "marketing/software",
+	category: "Automotriz",
 };
+
+/** La marca no la declara: el generador calibra con el marcador genérico. */
+const INPUTS_SIN_CATEGORIA: GeneratorInputs = { ...INPUTS, category: null };
 
 function report(overrides: Partial<LibraryGenerationReport> = {}): LibraryGenerationReport {
 	return { returned: 6, usable: 6, rejected: [], askedFor: 50, failure: null, ...overrides };
@@ -100,9 +106,20 @@ describe("los insumos que el generador no recibió", () => {
 		expect(note).toContain("los productos y servicios");
 	});
 
-	it("dice que la categoría no se le pasa y con qué marcador trabaja", () => {
+	it("dice que la marca no declara categoría y con qué marcador calibró", () => {
+		const note = generatorInputsNote(INPUTS_SIN_CATEGORIA);
+		expect(note).toContain(CATEGORY_PLACEHOLDER);
+		expect(note).toMatch(/no declara categoría/i);
+	});
+
+	it("cuando la categoría falta, dice que la biblioteca puede salir mal calibrada", () => {
+		expect(generatorInputsNote(INPUTS_SIN_CATEGORIA)).toMatch(/mal calibrada/i);
+	});
+
+	it("cuando la categoría viene, la nombra en vez de hablar del marcador", () => {
 		const note = generatorInputsNote(INPUTS);
-		expect(note).toContain("marketing/software");
+		expect(note).toContain("Automotriz");
+		expect(note).not.toContain(CATEGORY_PLACEHOLDER);
 	});
 
 	it("el mensaje de falla incluye el insumo que falta", () => {
@@ -115,19 +132,49 @@ describe("los insumos que el generador no recibió", () => {
 	});
 
 	it("lee del proyecto cuál de los tres insumos falta", () => {
-		const inputs = generatorInputsFromBrand({
-			shortDescription: "una marca",
-			productsAndServices: [],
-			keywords: ["uno", "dos"],
-		});
+		const inputs = generatorInputsFromBrand(
+			{
+				shortDescription: "una marca",
+				productsAndServices: [],
+				keywords: ["uno", "dos"],
+			},
+			"Bebidas",
+		);
 		expect(inputs.received).toEqual(["la descripción corta", "las palabras clave"]);
 		expect(inputs.missing).toEqual(["los productos y servicios de la marca"]);
+		expect(inputs.category).toBe("Bebidas");
+	});
+
+	it("la categoría vacía cuenta como ausente, no como una categoría llamada «»", () => {
+		const brand = { shortDescription: "una marca", productsAndServices: ["uno"], keywords: ["dos"] };
+		expect(generatorInputsFromBrand(brand, "   ").category).toBeNull();
+		expect(generatorInputsFromBrand(brand, null).category).toBeNull();
+		expect(generatorInputsFromBrand(brand, " Automotriz ").category).toBe("Automotriz");
 	});
 
 	it("con el proyecto vacío, los tres insumos faltan", () => {
-		const inputs = generatorInputsFromBrand({ shortDescription: null, productsAndServices: null, keywords: null });
+		const inputs = generatorInputsFromBrand(
+			{ shortDescription: null, productsAndServices: null, keywords: null },
+			null,
+		);
 		expect(inputs.missing).toHaveLength(3);
 		expect(generatorInputsNote(inputs)).toContain("el generador no recibió contexto de marca");
+	});
+});
+
+describe("el aviso antes de gastar la llamada", () => {
+	it("dice que no se gastó nada y por qué", () => {
+		const warning = missingCategoryWarning("BeAOS");
+		expect(warning).toMatch(/No se gastó la llamada/i);
+		expect(warning).toContain("BeAOS");
+		expect(warning).toContain(CATEGORY_PLACEHOLDER);
+	});
+
+	it("nombra el campo que hay que completar y el bloqueo de 90 días", () => {
+		const warning = missingCategoryWarning("VW Camiones y Buses");
+		expect(warning).toContain("industry");
+		expect(warning).toContain("90 días");
+		expect(warning).toMatch(/mal calibrada/i);
 	});
 });
 

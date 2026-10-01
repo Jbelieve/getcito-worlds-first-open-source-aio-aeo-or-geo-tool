@@ -54,6 +54,7 @@ declare global {
 			readonly AZURE_FOUNDRY_BASE_URL?: string;
 			readonly OPENROUTER_API_KEY?: string;
 			readonly ONBOARDING_LLM_TARGET?: string;
+			readonly APS_LIBRARY_MAX_TOKENS?: string;
 			readonly OLOSTEP_API_KEY?: string;
 			readonly BRIGHTDATA_API_TOKEN?: string;
 			readonly OXYLABS_USERNAME?: string;

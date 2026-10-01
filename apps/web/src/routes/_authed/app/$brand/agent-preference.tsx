@@ -7,6 +7,7 @@ import { ApsRunBlock } from "@/components/aps-visual";
 import { BLOCKING_TEXT } from "@/components/status-tone";
 import { useBrand } from "@/hooks/use-brands";
 import {
+	CATEGORY_PLACEHOLDER,
 	type GeneratorInputs,
 	generateButtonLabel,
 	generatorInputsNote,
@@ -57,6 +58,8 @@ function AgentPreferencePage() {
 	// motivo se perdía: la pantalla no podía decir por qué volvieron menos.
 	const [report, setReport] = useState<LibraryGenerationReport | null>(null);
 	const [inputs, setInputs] = useState<GeneratorInputs | null>(null);
+	// La marca no declara categoría: no se gastó la llamada y el botón ofrece confirmarla igual.
+	const [categoryUnconfirmed, setCategoryUnconfirmed] = useState(false);
 	const brandId = brand?.id;
 
 	const entities = useQuery({
@@ -91,9 +94,9 @@ function AgentPreferencePage() {
 	});
 
 	const generate = useMutation({
-		mutationFn: async () => {
+		mutationFn: async (confirmMissingCategory: boolean) => {
 			if (brandId === undefined) throw new Error("Brand no cargado");
-			return generateApsLibraryFn({ data: { brandId } });
+			return generateApsLibraryFn({ data: { brandId, entityId, confirmMissingCategory } });
 		},
 		onSuccess: (result) => {
 			setReport({
@@ -104,6 +107,9 @@ function AgentPreferencePage() {
 				failure: result.failure,
 			});
 			setInputs(result.inputs);
+			// El aviso de categoría no es una falla: no se gastó nada y el botón puede confirmarlo. Se
+			// distingue de un error para no mandar al operador a buscar el problema donde no está.
+			setCategoryUnconfirmed(result.categoryUnconfirmed === true);
 			if (result.ok === false) {
 				setError(result.reason);
 				setCandidates([]);
@@ -228,9 +234,19 @@ function AgentPreferencePage() {
 					)}
 
 					<div className="flex flex-wrap gap-2 pt-1">
-						<Button size="sm" variant="outline" onClick={() => generate.mutate()} disabled={generate.isPending}>
+						<Button
+							size="sm"
+							variant="outline"
+							onClick={() => generate.mutate(false)}
+							disabled={generate.isPending || entityId.length === 0}
+						>
 							{generateButtonLabel(generate.isPending)}
 						</Button>
+						{categoryUnconfirmed && (
+							<Button size="sm" variant="secondary" onClick={() => generate.mutate(true)} disabled={generate.isPending}>
+								Generar igual, con el marcador
+							</Button>
+						)}
 						{candidates.length > 0 && (
 							<Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
 								{save.isPending ? "Guardando…" : `Guardar y bloquear 90 días (${candidates.length})`}
@@ -244,7 +260,15 @@ function AgentPreferencePage() {
 						biblioteca puede salir más corta. Nada se guarda hasta que confirmes — recién al guardar se bloquean 90
 						días.
 					</p>
-					{inputs !== null && <p className="text-xs text-muted-foreground">{generatorInputsNote(inputs)}</p>}
+					{inputs !== null && !categoryUnconfirmed && (
+						<p className="text-xs text-muted-foreground">{generatorInputsNote(inputs)}</p>
+					)}
+					{categoryUnconfirmed && (
+						<p className="text-xs text-muted-foreground">
+							No se gastó ninguna llamada: la generación se cortó antes de pedirla. Si confirmás, la biblioteca sale
+							calibrada con «{CATEGORY_PLACEHOLDER}» y se bloquea 90 días al guardarla.
+						</p>
+					)}
 
 					{candidates.length > 0 && (
 						<div className="space-y-3 rounded-md border p-3">
