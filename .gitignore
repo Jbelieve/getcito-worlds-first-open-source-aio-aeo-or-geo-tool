@@ -105,4 +105,3 @@ docs/
 .worktrees/
 
 # Worktrees de agentes en paralelo: no entran al repo ni a los tests.
-.worktrees/
