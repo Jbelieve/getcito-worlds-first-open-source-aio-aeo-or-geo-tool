@@ -38,6 +38,8 @@ export interface DeclaredMcpTool {
 export interface DeclaredMcp {
 	url: string;
 	tools?: DeclaredMcpTool[];
+	/** El tipo de transporte que el sitio declara junto al endpoint (`http`, `streamable-http`, ...). */
+	transport?: string;
 }
 
 /**
@@ -82,6 +84,11 @@ export interface AgentAssetInput {
 	mcpUrl?: string;
 	/** Tools que el MCP declara. Ausente => el card no afirma nada sobre tools. */
 	mcpTools?: DeclaredMcpTool[];
+	/**
+	 * Tipo de transporte que el sitio declara para su MCP (`http`, `streamable-http`, ...). Ausente => el
+	 * card no declara `transport.type`: un default sería afirmar un protocolo que nadie verificó.
+	 */
+	mcpTransport?: string;
 	/**
 	 * URL de la API pública que la marca declara (ej. `https://marca.com/api/v1`). Ausente => no se emite
 	 * `api-catalog`: un catálogo RFC 9727 sin API real inventa un servicio, igual que un server-card sin
@@ -307,12 +314,76 @@ function llmsFullTxt(input: AgentAssetInput): string {
 	return lines.join("\n");
 }
 
+/** Un objeto JSON, o `undefined` si el valor no lo es. */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+	return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+/** Un tipo de transporte declarado como string suelto o como objeto `{ type }`. */
+function declaredTransport(value: unknown): string | undefined {
+	return asString(value) ?? asString(asRecord(value)?.type);
+}
+
+/**
+ * Normaliza los tools del card en vivo. Descarta lo que no tenga nombre: sin nombre no se puede llamar.
+ *
+ * Una lista vacía se devuelve como `undefined` y no como `[]`: `tools: []` afirma "este servidor no tiene
+ * ninguna", que es falso cuando en realidad no las conocemos.
+ */
+function declaredMcpTools(raw: unknown): DeclaredMcpTool[] | undefined {
+	if (Array.isArray(raw) === false) return undefined;
+	const tools: DeclaredMcpTool[] = [];
+	for (const entry of raw) {
+		const record = asRecord(entry);
+		if (record === undefined) continue;
+		const name = asString(record.name);
+		if (name === undefined) continue;
+		const tool: DeclaredMcpTool = { name };
+		const title = asString(record.title);
+		if (title !== undefined) tool.title = title;
+		const description = asString(record.description);
+		if (description !== undefined) tool.description = description;
+		tools.push(tool);
+	}
+	return tools.length === 0 ? undefined : tools;
+}
+
+/**
+ * Lo que un server-card **declara** sobre su MCP: el endpoint, y —si los publica— el transporte y los
+ * tools. Devuelve `undefined` cuando el card no declara ningún endpoint.
+ *
+ * Los campos del endpoint se leen en el orden en que los lectores los buscan: `serverUrl` (el canónico),
+ * `transport.endpoint` (la forma vieja, la que publica believe-global.com) y `mcp.endpoint` (la que
+ * publica la landing de BeAOS). `url` **no** se lee: es la identidad del documento —la URL del sitio— y
+ * tomarla como endpoint es lo que hacía que cada marca declarara su propia landing como su MCP, un
+ * endpoint que contesta 405. Un sitio que declara `url` y ningún endpoint no declara ningún MCP.
+ */
+export function declaredMcpFromCard(card: unknown): DeclaredMcp | undefined {
+	const record = asRecord(card);
+	if (record === undefined) return undefined;
+	const mcp = asRecord(record.mcp);
+	const transport = asRecord(record.transport);
+	const url = [record.serverUrl, transport?.endpoint, mcp?.endpoint]
+		.map((candidate) => asString(candidate))
+		.find((candidate) => candidate !== undefined);
+	if (url === undefined) return undefined;
+
+	const transportType = declaredTransport(transport) ?? declaredTransport(mcp?.transport);
+	const tools = declaredMcpTools(record.tools);
+	return {
+		url,
+		...(transportType === undefined ? {} : { transport: transportType }),
+		...(tools === undefined ? {} : { tools }),
+	};
+}
+
 /**
  * `/.well-known/mcp/server-card.json` (AOS-CAPA-01), con `serverUrl`.
  *
- * Se emite solo cuando la marca declara un MCP. Los lectores buscan `serverUrl` en la raíz; el card de
- * `believe-global.com` lo tenía dentro de `transport.endpoint`, que es la forma vieja, y por eso
- * figuraba como incompleto. `tools` va vacío a propósito: no inventamos herramientas.
+ * Se emite solo cuando la marca declara un MCP, y declara exactamente lo que el sitio declaró: el
+ * endpoint, el tipo de transporte y los tools salen de su server-card. Los lectores buscan `serverUrl` en
+ * la raíz; el card de `believe-global.com` lo tenía dentro de `transport.endpoint`, que es la forma vieja,
+ * y por eso figuraba como incompleto.
  */
 function mcpServerCard(input: AgentAssetInput): string | null {
 	const serverUrl = asString(input.mcpUrl);
@@ -321,6 +392,9 @@ function mcpServerCard(input: AgentAssetInput): string | null {
 	// Los tools se declaran solo si el sitio los declara. Inventarlos sería afirmar capacidades que no
 	// verificamos; una lista vacía sería afirmar que no hay ninguna.
 	const tools = (input.mcpTools ?? []).filter((tool) => asString(tool.name) !== undefined);
+	// El tipo de transporte también se copia del sitio: si declara `http`, decir `streamable-http` es
+	// declarar otro protocolo. Sin declaración se omite la clave en vez de elegir un default.
+	const transport = asString(input.mcpTransport);
 	return `${JSON.stringify(
 		{
 			name: input.name,
@@ -329,7 +403,7 @@ function mcpServerCard(input: AgentAssetInput): string | null {
 			protocolVersion: "2025-06-18",
 			serverUrl,
 			websiteUrl: input.websiteUrl,
-			transport: { type: "streamable-http", endpoint: serverUrl },
+			transport: { ...(transport === undefined ? {} : { type: transport }), endpoint: serverUrl },
 			...(tools.length === 0 ? {} : { tools: tools.map((tool) => ({ ...tool, name: tool.name.trim() })) }),
 		},
 		null,

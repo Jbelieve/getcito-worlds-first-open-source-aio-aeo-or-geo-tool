@@ -10,11 +10,10 @@
  */
 
 import { createHash } from "node:crypto";
-import { extractMcpEndpoint } from "@workspace/aos-aps/aos";
 import {
 	type DeclaredAgentResource,
 	type DeclaredMcp,
-	type DeclaredMcpTool,
+	declaredMcpFromCard,
 	generateAgentAssets,
 } from "@workspace/aos-aps/assets";
 import { resolveBundleClaims } from "@workspace/aos-aps/claims";
@@ -291,18 +290,21 @@ export async function activePromptQueries(brandId: string, entityId: string, lim
 }
 
 /**
- * Lo que el sitio YA declara sobre su MCP: la URL y, cuando la publica, sus tools.
+ * Lo que el sitio YA declara sobre su MCP: el endpoint y, cuando los publica, el transporte y sus tools.
  *
- * BeAOS no inventa endpoints ni capacidades: si el sitio no declara MCP, no se emite server-card. Se lee
- * en el orden en que los lectores lo buscan: `serverUrl` del card que el sitio ya sirve — y si no está,
- * `transport.endpoint`, que es la forma vieja y la que usa believe-global.com, y por eso su card
- * figuraba como incompleto —; y como último recurso, el endpoint declarado en su llms.txt.
+ * BeAOS no inventa endpoints ni capacidades: la única fuente es el `/.well-known/mcp/server-card.json` que
+ * el sitio sirve. Si no lo declara —o lo declara sin endpoint— no se emite server-card, y eso es un
+ * resultado, no un fallo.
+ *
+ * El campo `url` del card **no** se lee como endpoint: es la identidad del documento, o sea la URL de la
+ * landing. Tomarlo como endpoint fue el bug que le declaraba a cada marca su propio sitio como su MCP
+ * (`https://be-aos.believe-global.com`, que contesta 405), y un agente lo seguía.
  *
  * Los tools se copian del card en vivo, que es lo que hace útil al server-card: sin ellos el agente sabe
  * dónde está el MCP pero no qué puede pedirle. Si el card no los declara se omite la clave, en vez de
  * emitir una lista vacía que afirmaría que el servidor no tiene ninguno.
  *
- * Los dos pedidos tienen timeout corto: esto corre al apretar "Generar assets", no en un job.
+ * El pedido tiene timeout corto: esto corre al apretar "Generar assets", no en un job.
  */
 export async function declaredMcp(websiteUrl: string | undefined): Promise<DeclaredMcp | undefined> {
 	if (websiteUrl === undefined) return undefined;
@@ -318,47 +320,11 @@ export async function declaredMcp(websiteUrl: string | undefined): Promise<Decla
 			signal: AbortSignal.timeout(5000),
 			headers: { accept: "application/json" },
 		});
-		if (response.ok) {
-			const card = (await response.json()) as Record<string, unknown>;
-			const transport = card.transport as { endpoint?: unknown } | undefined;
-			const found = [card.serverUrl, transport?.endpoint, card.url].find(
-				(value): value is string => typeof value === "string" && value.trim().length > 0,
-			);
-			if (found !== undefined) {
-				const tools = declaredTools(card.tools);
-				return tools === undefined ? { url: found.trim() } : { url: found.trim(), tools };
-			}
-		}
-	} catch {
-		// Sin card accesible: se intenta por llms.txt.
-	}
-
-	try {
-		const response = await fetch(`${origin}/llms.txt`, { signal: AbortSignal.timeout(5000) });
 		if (response.ok === false) return undefined;
-		const url = extractMcpEndpoint(await response.text());
-		return url === undefined || url === null || url.trim().length === 0 ? undefined : { url: url.trim() };
+		return declaredMcpFromCard(await response.json());
 	} catch {
 		return undefined;
 	}
-}
-
-/** Normaliza los tools del card en vivo. Descarta lo que no tenga nombre: sin nombre no se puede llamar. */
-function declaredTools(raw: unknown): DeclaredMcpTool[] | undefined {
-	if (Array.isArray(raw) === false) return undefined;
-	const tools: DeclaredMcpTool[] = [];
-	for (const entry of raw) {
-		if (typeof entry !== "object" || entry === null) continue;
-		const record = entry as Record<string, unknown>;
-		if (typeof record.name !== "string" || record.name.trim().length === 0) continue;
-		const tool: DeclaredMcpTool = { name: record.name.trim() };
-		if (typeof record.title === "string" && record.title.trim().length > 0) tool.title = record.title.trim();
-		if (typeof record.description === "string" && record.description.trim().length > 0) {
-			tool.description = record.description.trim();
-		}
-		tools.push(tool);
-	}
-	return tools.length === 0 ? undefined : tools;
 }
 
 /**
@@ -530,6 +496,7 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 		websiteUrl,
 		mcpUrl: mcp?.url,
 		mcpTools: mcp?.tools,
+		mcpTransport: mcp?.transport,
 		securityContact,
 		apiUrl: api?.apiUrl,
 		openApiUrl: api?.openApiUrl,
