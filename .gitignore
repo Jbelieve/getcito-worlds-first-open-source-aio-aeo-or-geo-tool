@@ -100,3 +100,9 @@ apps/cli/
 
 .claude/skills/add-changeset/
 docs/
+
+# worktrees de agentes (aislamiento entre sesiones)
+.worktrees/
+
+# Worktrees de agentes en paralelo: no entran al repo ni a los tests.
+.worktrees/
