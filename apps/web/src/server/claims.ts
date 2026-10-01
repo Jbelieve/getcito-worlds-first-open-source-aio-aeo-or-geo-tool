@@ -6,10 +6,10 @@ import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
-import { websiteSourcesForClaims } from "@/lib/claims-guard";
-import { liveClaimCountFrom } from "@/server/agent-assets-core";
+import { claimsGuardDecision, websiteSourcesForClaims } from "@/lib/claims-guard";
+import { liveClaimTallyFrom } from "@/server/agent-assets-core";
 import {
-	bundleClaimCountOf,
+	bundleClaimTallyOf,
 	ClaimEntityNotFoundError,
 	ClaimInputError,
 	ClaimNotFoundError,
@@ -92,8 +92,9 @@ export const listClaimsFn = createServerFn({ method: "POST" })
 		// pura que usa el generador, no de una segunda interpretación.
 		const context = await loadClaimsContext(data.brandId, data.entityId);
 
-		// Cuántas pruebas sirve el sitio HOY. Se prueban las tres webs de la marca —entidad, DNA y marca—
-		// porque la de la entidad puede estar vacía, y con la web vacía el candado no puede comparar.
+		// El desglose de las pruebas que el sitio sirve HOY —total, prestadas del paraguas y propias—, que
+		// es lo que el candado compara. Se prueban las tres webs de la marca —entidad, DNA y marca— porque
+		// la de la entidad puede estar vacía, y con la web vacía el candado no puede comparar.
 		const [entity] = await db
 			.select({ websiteUrl: agentBrandEntities.websiteUrl })
 			.from(agentBrandEntities)
@@ -104,7 +105,7 @@ export const listClaimsFn = createServerFn({ method: "POST" })
 			.from(brands)
 			.where(eq(brands.id, data.brandId))
 			.limit(1);
-		const liveClaimCount = await liveClaimCountFrom(
+		const liveClaimTally = await liveClaimTallyFrom(
 			websiteSourcesForClaims({
 				entityWebsite: entity?.websiteUrl,
 				dnaWebsite: payload?.website_url,
@@ -112,7 +113,7 @@ export const listClaimsFn = createServerFn({ method: "POST" })
 			}),
 		);
 
-		const bundleClaimCount = bundleClaimCountOf(context, dna);
+		const bundleTally = bundleClaimTallyOf(context, dna);
 
 		return {
 			candidates: proposeClaimCandidates(payload),
@@ -122,8 +123,12 @@ export const listClaimsFn = createServerFn({ method: "POST" })
 			inheritedClaims: inheritedClaimsOf(context).map(serializeClaim),
 			umbrella: { id: context.umbrellaEntity.id, name: context.umbrellaEntity.name },
 			isUmbrella: context.isUmbrella,
-			liveClaimCount,
-			bundleClaimCount,
+			liveClaimCount: liveClaimTally?.total ?? null,
+			bundleClaimCount: bundleTally.total,
+			// El veredicto del candado, calculado con la MISMA función pura que usa el gate al publicar. La
+			// pantalla lo muestra tal cual en vez de rehacer la regla: una copia podría decir "va a bloquear"
+			// mientras el gate publica.
+			publishDecision: claimsGuardDecision(bundleTally, liveClaimTally),
 			// Si el DNA ya declara claims, los confirmados acá no entran al bundle: la pantalla tiene que
 			// poder decirlo, o el contador miente.
 			claimsSource: dnaCarriesClaims(dna) ? ("maasy" as const) : ("beaos" as const),

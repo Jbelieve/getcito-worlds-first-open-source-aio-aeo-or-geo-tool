@@ -9,6 +9,7 @@
 		"./maasy": "./src/maasy/index.ts",
 		"./assets": "./src/assets/index.ts",
 		"./claims": "./src/claims/index.ts",
+		"./claims/mapping": "./src/claims/mapping.ts",
 		"./blueprint": "./src/blueprint/index.ts",
 		"./provenance": "./src/provenance/index.ts",
 		"./preference": "./src/preference/index.ts",

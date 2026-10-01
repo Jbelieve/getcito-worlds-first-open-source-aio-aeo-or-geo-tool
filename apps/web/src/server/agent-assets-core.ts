@@ -30,7 +30,7 @@ import { findUmbrellaEntity, keysUriForWebsite, signingKeyFromEnv } from "@works
 import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
-import { claimCount, claimsGuardDecision, websiteSourcesForClaims } from "@/lib/claims-guard";
+import { type ClaimTally, claimsGuardDecision, claimTally, websiteSourcesForClaims } from "@/lib/claims-guard";
 
 /**
  * Techo de cada descubrimiento contra el sitio de la marca.
@@ -362,12 +362,14 @@ function declaredTools(raw: unknown): DeclaredMcpTool[] | undefined {
 }
 
 /**
- * Los claims que declara el brand.json que el sitio sirve HOY. `null` si no se puede leer.
+ * El desglose de claims del brand.json que el sitio sirve HOY: total, prestadas y propias. `null` si no
+ * se puede leer.
  *
- * El gate lo compara con los del bundle antes de publicar: nunca interpreta ni traduce el texto, solo
- * cuenta. La decision es pura y vive en @/lib/claims-guard.
+ * Se devuelve el desglose y no un número porque el gate necesita distinguir las propias de las prestadas
+ * del paraguas: perder una prestada al sacarle el padre a un producto no es una regresión. La decisión
+ * es pura y vive en @/lib/claims-guard, que lee la misma marca que escribe el generador.
  */
-export async function liveClaimCount(websiteUrl: string | undefined): Promise<number | null> {
+export async function liveClaimTally(websiteUrl: string | undefined): Promise<ClaimTally | null> {
 	if (websiteUrl === undefined) return null;
 	try {
 		const origin = new URL(websiteUrl).origin;
@@ -376,19 +378,19 @@ export async function liveClaimCount(websiteUrl: string | undefined): Promise<nu
 			headers: { accept: "application/json" },
 		});
 		if (response.ok === false) return null;
-		return claimCount(await response.text());
+		return claimTally(await response.text());
 	} catch {
 		return null;
 	}
 }
 
 /**
- * Los claims que el sitio declara hoy, probando **varias** fuentes de web y quedándose con la primera
+ * El desglose que el sitio declara hoy, probando **varias** fuentes de web y quedándose con la primera
  * que responda.
  *
  * El agujero que esto cierra: el candado miraba un solo campo, `agent_brand_entities.website_url`, y ese
  * campo puede estar vacío —de hecho **estaba vacío** en la entidad de Believe—. Con la web vacía,
- * `liveClaimCount(undefined)` devolvía `null`, y `claimsGuardDecision` con `fromLive: null` **no bloquea**:
+ * `liveClaimTally(undefined)` devolvía `null`, y `claimsGuardDecision` con `fromLive: null` **no bloquea**:
  * publica con un aviso. O sea que el candado que existe para impedir una degradación silenciosa era, él
  * mismo, silencioso: un clic en "Publicar" habría reemplazado las 6 pruebas que el sitio sirve por las 0
  * que el bundle declara.
@@ -397,10 +399,10 @@ export async function liveClaimCount(websiteUrl: string | undefined): Promise<nu
  * confiar en uno: si una está mal escrita o el sitio no responde, se intenta la siguiente. Solo si
  * **ninguna** responde se devuelve `null`, y ahí el aviso dice la verdad: no pudimos verificar.
  */
-export async function liveClaimCountFrom(urls: Array<string | null | undefined>): Promise<number | null> {
+export async function liveClaimTallyFrom(urls: Array<string | null | undefined>): Promise<ClaimTally | null> {
 	for (const url of urls) {
-		const count = await liveClaimCount(url ?? undefined);
-		if (count !== null) return count;
+		const tally = await liveClaimTally(url ?? undefined);
+		if (tally !== null) return tally;
 	}
 	return null;
 }
@@ -562,9 +564,11 @@ export type PublishResult =
  * Publication gate. Closed by default: nothing is handed to a delivery agent until an operator
  * publishes the entity explicitly, so a profile signed with a wrong key never reaches a site.
  *
- * Guardián de regresión: publicar un perfil con MENOS claims que el que el sitio sirve hoy degrada la
- * evidencia verificable de la marca en silencio, y el gate lo dejaba pasar porque solo miraba que el
- * archivo existiera. Solo bloquea cuando el bundle pierde claims; si no puede comparar, avisa.
+ * Guardián de regresión: publicar un perfil con MENOS pruebas **propias** que el que el sitio sirve hoy
+ * degrada la evidencia verificable de la marca en silencio, y el gate lo dejaba pasar porque solo miraba
+ * que el archivo existiera. Solo bloquea cuando el bundle pierde pruebas propias; las prestadas del
+ * paraguas que el bundle deja de usar se avisan pero no bloquean (ver `claimsGuardDecision`), y si no
+ * puede comparar, avisa.
  */
 export async function setEntityPublished(
 	brandId: string,
@@ -574,7 +578,7 @@ export async function setEntityPublished(
 	let warning: string | undefined;
 	if (published) {
 		// Las tres fuentes de la web de la marca. La entidad primero (es la más específica), después el
-		// DNA que sincroniza Maasy, y por último la marca. Ver `liveClaimCountFrom` para el porqué.
+		// DNA que sincroniza Maasy, y por último la marca. Ver `liveClaimTallyFrom` para el porqué.
 		const [entity] = await db
 			.select({ websiteUrl: agentBrandEntities.websiteUrl })
 			.from(agentBrandEntities)
@@ -596,8 +600,8 @@ export async function setEntityPublished(
 			.orderBy(desc(agentAssets.createdAt))
 			.limit(1);
 		const decision = claimsGuardDecision(
-			claimCount(bundle?.content),
-			await liveClaimCountFrom(
+			claimTally(bundle?.content),
+			await liveClaimTallyFrom(
 				websiteSourcesForClaims({
 					entityWebsite: entity?.websiteUrl,
 					dnaWebsite,
