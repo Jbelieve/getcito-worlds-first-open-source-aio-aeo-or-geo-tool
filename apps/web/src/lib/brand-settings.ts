@@ -12,6 +12,8 @@ import { cleanAndValidateDomain } from "@/lib/domain-categories";
  *  - additionalDomains: each cleaned/validated (hard error listing the invalid
  *    ones), then de-duplicated
  *  - aliases: trimmed, empties dropped, de-duplicated
+ *  - category: trimmed; an empty string clears it to `null` (a brand can stop
+ *    declaring a category, and "no la declara" is a real state, not a value)
  *
  * Only keys present on the input are touched, so a partial edit leaves the rest
  * of the brand untouched.
@@ -21,6 +23,7 @@ export interface BrandUpdateInput {
 	website?: string;
 	additionalDomains?: string[];
 	aliases?: string[];
+	category?: string;
 }
 
 export interface BrandUpdateFields {
@@ -28,11 +31,11 @@ export interface BrandUpdateFields {
 	website?: string;
 	additionalDomains?: string[];
 	aliases?: string[];
+	/** `null` cuando el operador borró la categoría: la marca deja de declararla. */
+	category?: string | null;
 }
 
-export type NormalizeBrandUpdateResult =
-	| { ok: true; updates: BrandUpdateFields }
-	| { ok: false; error: string };
+export type NormalizeBrandUpdateResult = { ok: true; updates: BrandUpdateFields } | { ok: false; error: string };
 
 export function normalizeBrandUpdate(input: BrandUpdateInput): NormalizeBrandUpdateResult {
 	const updates: BrandUpdateFields = {};
@@ -63,6 +66,14 @@ export function normalizeBrandUpdate(input: BrandUpdateInput): NormalizeBrandUpd
 
 	if (input.aliases !== undefined) {
 		updates.aliases = [...new Set(input.aliases.map((a) => a.trim()).filter(Boolean))];
+	}
+
+	if (input.category !== undefined) {
+		// Vacío = deja de declararla. No se cae a `undefined` (que significa "no la toques"): borrar el
+		// campo es una acción, y si no se distinguiera de "no lo mandé", la categoría no se podría
+		// quitar nunca desde la pantalla.
+		const trimmed = input.category.trim();
+		updates.category = trimmed.length > 0 ? trimmed : null;
 	}
 
 	return { ok: true, updates };

@@ -152,7 +152,11 @@ export function AppSidebar({
 					icon: IconBuildings,
 				},
 				{
-					title: "Prompts",
+					// Renombre de BeAOS sobre una etiqueta de Getcito: la sección es lo que la gente
+					// **escribe** en un buscador con IA (mide si te mencionan). El instrumento que mide si
+					// te **prefieren** son las preguntas de compra del APS. La URL, la tabla y los tipos
+					// siguen llamándose `prompts`: esto es solo la etiqueta visible.
+					title: "Búsquedas",
 					url: "/settings/prompts",
 					icon: IconListDetails,
 				},

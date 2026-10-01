@@ -9,6 +9,7 @@ import {
 	LIBRARY_MIX,
 	type LibraryPromptInput,
 	libraryLockWindow,
+	resolveLibraryCategory,
 	validateLibrary,
 } from "./library";
 
@@ -160,5 +161,60 @@ describe("categoryFromBrandContext", () => {
 
 	it("el marcador no es la categoría de nadie: se usa solo cuando no hay ninguna", () => {
 		expect(categoryFromBrandContext({ industry: CATEGORY_PLACEHOLDER })).toBe(CATEGORY_PLACEHOLDER);
+	});
+});
+
+/**
+ * La precedencia con la que se calibra la biblioteca.
+ *
+ * El caso real que la justifica: BeAOS y BeScore no tienen proyecto de Maasy, así que su DNA no trae
+ * `industry`. Sin una categoría declarada en la marca, su biblioteca de 50 preguntas de compra salía
+ * calibrada con el marcador «marketing/software» —falso para una plataforma de AOS y para un
+ * fabricante de camiones— y quedaba bloqueada 90 días. La marca declara su categoría en BeAOS y esa
+ * manda; el DNA queda como red de seguridad para quien ya tiene Maasy.
+ */
+describe("resolveLibraryCategory", () => {
+	it("si la marca la declara en BeAOS, manda esa y no la del DNA", () => {
+		const resolved = resolveLibraryCategory({
+			declared: "Plataformas de AOS",
+			dna: { industry: "Marketing y Publicidad" },
+		});
+		expect(resolved).toEqual({ category: "Plataformas de AOS", source: "declared" });
+	});
+
+	it("si la marca no la declara, hereda la del DNA de Maasy en vez del marcador", () => {
+		expect(resolveLibraryCategory({ declared: null, dna: { industry: "Automotriz" } })).toEqual({
+			category: "Automotriz",
+			source: "dna",
+		});
+		expect(resolveLibraryCategory({ dna: { industry: "Automotriz" } })).toEqual({
+			category: "Automotriz",
+			source: "dna",
+		});
+	});
+
+	it("una declaración vacía no gana: cae al DNA", () => {
+		expect(resolveLibraryCategory({ declared: "   ", dna: { industry: "Automotriz" } })).toEqual({
+			category: "Automotriz",
+			source: "dna",
+		});
+		expect(resolveLibraryCategory({ declared: 42, dna: { industry: "Automotriz" } }).source).toBe("dna");
+	});
+
+	it("sin ninguna de las dos no inventa: dice que falta", () => {
+		expect(resolveLibraryCategory({ declared: null, dna: {} })).toEqual({
+			category: null,
+			source: "placeholder",
+		});
+		expect(resolveLibraryCategory({ declared: "", dna: null })).toEqual({
+			category: null,
+			source: "placeholder",
+		});
+		expect(resolveLibraryCategory({}).source).toBe("placeholder");
+	});
+
+	it("normaliza igual las dos fuentes: la misma categoría con espacios da lo mismo", () => {
+		expect(resolveLibraryCategory({ declared: "  Automotriz  " }).category).toBe("Automotriz");
+		expect(resolveLibraryCategory({ dna: { industry: "  Automotriz  " } }).category).toBe("Automotriz");
 	});
 });

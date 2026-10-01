@@ -8,13 +8,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
 	canRegenerateLibrary,
+	categoryFromBrandContext,
 	generateLibraryWithGateway,
 	isLibraryUsable,
 	judgeConfigFromEnv,
 	libraryConfigFromEnv,
 	readGatewayBudget,
 } from "@workspace/aos-aps/aps";
-import { agentApsPromptLibraries, agentApsPrompts, agentApsRuns, agentApsScores } from "@workspace/aos-aps/db/schema";
+import {
+	agentApsPromptLibraries,
+	agentApsPrompts,
+	agentApsRuns,
+	agentApsScores,
+	agentBrandDnaSnapshots,
+} from "@workspace/aos-aps/db/schema";
 import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
@@ -89,6 +96,32 @@ export const getGatewayBudgetFn = createServerFn({ method: "POST" }).handler(asy
 });
 
 /** Everything a run needs lives in `agent-aps-core`, shared with el MCP. */
+
+/**
+ * La categoría que el DNA de Maasy le propondría a esta marca.
+ *
+ * Existe para **sembrar, no obligar**: el operador que ya tiene Maasy con `industry` no la escribe dos
+ * veces —la ve sugerida en el campo y la confirma con un clic— y el que no lo tiene la declara a mano.
+ * Es una **sugerencia para el formulario**: no se guarda nada acá, y la precedencia real
+ * (declarada > DNA > marcador) la resuelve `resolveLibraryCategory` cuando se genera la biblioteca.
+ *
+ * Se lee el DNA más reciente de cualquier entidad de la marca porque el campo es de la marca: una
+ * marca sin entidades igual puede declarar su categoría, y esa es justamente la que desbloquea medir
+ * clientes que no están en Maasy.
+ */
+export const getBrandCategorySuggestionFn = createServerFn({ method: "POST" })
+	.validator(z.object({ brandId: z.string().min(1) }))
+	.handler(async ({ data }) => {
+		const session = await requireAuthSession();
+		await requireOrgAccess(session.user.id, data.brandId);
+		const [snapshot] = await db
+			.select({ payload: agentBrandDnaSnapshots.payload })
+			.from(agentBrandDnaSnapshots)
+			.where(eq(agentBrandDnaSnapshots.brandId, data.brandId))
+			.orderBy(desc(agentBrandDnaSnapshots.syncedAt))
+			.limit(1);
+		return { dnaCategory: categoryFromBrandContext(snapshot?.payload as Record<string, unknown> | undefined) };
+	});
 
 /** What the operator sees before confirming: calls and dollars, with nothing written. */
 export const estimateApsRunFn = createServerFn({ method: "POST" })
@@ -255,21 +288,23 @@ export const generateApsLibraryFn = createServerFn({ method: "POST" })
 		const [brand] = await db.select().from(brands).where(eq(brands.id, data.brandId)).limit(1);
 		if (brand === undefined) throw new Error("Brand not found");
 
-		// La categoría sale de donde la marca ya la declara —el `industry` del DNA sincronizado—, no de un
+		// La categoría sale de la precedencia declarada en BeAOS > `industry` del DNA de Maasy, nunca de un
 		// literal: con el marcador «marketing/software» la biblioteca de un fabricante de camiones o de una
-		// plataforma de AOS sale genérica y se bloquea 90 días. `data.industry` es la puerta del operador.
+		// plataforma de AOS sale genérica y se bloquea 90 días. `data.industry` es la puerta explícita del
+		// operador (la del MCP): si viene, gana; si no, se resuelve la precedencia.
 		const explicit = data.industry?.trim();
-		const category =
+		const resolved =
 			explicit !== undefined && explicit.length > 0
-				? explicit
+				? ({ category: explicit, source: "declared" } as const)
 				: data.entityId === undefined
-					? null
+					? ({ category: null, source: "placeholder" } as const)
 					: await libraryCategoryForEntity(data.brandId, data.entityId);
-		const inputs = generatorInputsFromBrand(brand, category);
+		const category = resolved.category;
+		const inputs = generatorInputsFromBrand(brand, category, resolved.source);
 
 		// El aviso va ANTES de la llamada, no después: si la marca no declara categoría no se gasta nada y
 		// se dice por qué. Confirmar es un acto explícito del operador, no un default.
-		if (category === null && data.confirmMissingCategory !== true) {
+		if (resolved.source === "placeholder" && data.confirmMissingCategory !== true) {
 			return {
 				ok: false as const,
 				reason: missingCategoryWarning(brand.name),

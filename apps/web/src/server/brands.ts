@@ -409,6 +409,11 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 			targetMarket: z.string().optional(),
 			targetLanguage: z.string().optional(),
 			shortDescription: z.string().optional(),
+			/**
+			 * La categoría que la marca declara **en BeAOS**. Manda sobre el `industry` del DNA de Maasy
+			 * al calibrar la biblioteca de preguntas de compra del APS. Vacío = deja de declararla.
+			 */
+			category: z.string().optional(),
 			additionalDomains: z.array(z.string()).optional(),
 			aliases: z.array(z.string()).optional(),
 		}),
@@ -422,6 +427,7 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 			website: data.website,
 			additionalDomains: data.additionalDomains,
 			aliases: data.aliases,
+			category: data.category,
 		});
 		if (!normalized.ok) {
 			throw new Error(normalized.error);

@@ -1,5 +1,10 @@
 /**
- * Las palabras con las que el panel de APS cuenta una generación de biblioteca.
+ * Las palabras con las que el panel de APS cuenta una generación de preguntas de compra.
+ *
+ * El nombre visible del instrumento es **preguntas de compra**, no "biblioteca de prompts": son lo que
+ * un comprador le *pide* a un chat, y miden si te prefieren. Las **búsquedas** —lo que la gente
+ * *escribe* en un buscador— son el otro instrumento y miden si te mencionan (sección Búsquedas). La
+ * tabla y el código siguen diciendo `prompts`/`library`: esto es vocabulario de pantalla.
  *
  * Vive aparte del componente porque es lo único de la pantalla que se puede probar: el texto que dice
  * cuántos candidatos volvieron, cuántos se descartaron y por qué. Antes estaba incrustado en el JSX y
@@ -9,15 +14,16 @@
  * gateway y el gateway devuelve lo que puede (medido: 6 de 50 el 2026-09-23, y 0 cuando el razonamiento
  * se come el tope de tokens). Por eso ninguna frase promete una cantidad: se dice cuántos vinieron.
  *
- * La segunda regla: **la categoría se dice, no se supone**. El generador calibra la biblioteca con la
+ * La segunda regla: **la categoría se dice, no se supone**. El generador calibra las preguntas con la
  * categoría de la marca; cuando la marca no la declara hay que decirlo con todas las letras, porque una
- * biblioteca calibrada con una categoría falsa sale genérica y después se bloquea 90 días.
+ * lista calibrada con una categoría falsa sale genérica y después se bloquea 90 días.
  */
 
 import {
 	CATEGORY_PLACEHOLDER,
 	LIBRARY_LOCK_DAYS,
 	LIBRARY_TARGET_TOTAL,
+	type LibraryCategorySource,
 	type LibraryFailure,
 } from "@workspace/aos-aps/aps";
 
@@ -36,10 +42,10 @@ const REJECTION_TEXT: Record<string, string> = {
 
 const FAILURE_TEXT: Record<LibraryFailure, string> = {
 	truncated: "el gateway cortó la respuesta antes de terminarla (se quedó sin tokens y el JSON quedó abierto)",
-	unparseable: "el gateway no devolvió un JSON de prompts que se pueda leer",
+	unparseable: "el gateway no devolvió un JSON de preguntas que se pueda leer",
 	http_error: "el gateway rechazó la llamada",
 	network_error: "no se pudo llegar al gateway",
-	no_prompts: "el gateway devolvió una lista de prompts vacía",
+	no_prompts: "el gateway devolvió una lista de preguntas vacía",
 };
 
 export interface LibraryGenerationReport {
@@ -67,6 +73,12 @@ export interface GeneratorInputs {
 	missing: string[];
 	/** La categoría que se le pasó al generador. `null` cuando la marca no declara ninguna. */
 	category: string | null;
+	/**
+	 * De dónde salió `category`. Es lo que permite decir *"la declaraste vos"* en vez de *"la sacamos
+	 * del DNA"*: la precedencia (declarada > DNA > marcador) es real y el operador tiene que poder
+	 * saber cuál de las dos se usó sin adivinar. `null` en un texto armado a mano que no la declara.
+	 */
+	categorySource: LibraryCategorySource | null;
 }
 
 /** El marcador con el que trabaja el generador cuando la marca no declara categoría. */
@@ -80,7 +92,11 @@ export interface BrandContextFields {
 }
 
 /** Traduce el contexto de marca a insumos con nombre, para poder decir cuál falta. */
-export function generatorInputsFromBrand(brand: BrandContextFields, category: string | null): GeneratorInputs {
+export function generatorInputsFromBrand(
+	brand: BrandContextFields,
+	category: string | null,
+	categorySource: LibraryCategorySource | null = null,
+): GeneratorInputs {
 	const received: string[] = [];
 	const missing: string[] = [];
 	const check = (present: boolean, ok: string, absent: string): void => {
@@ -95,7 +111,12 @@ export function generatorInputsFromBrand(brand: BrandContextFields, category: st
 	);
 	check((brand.keywords ?? []).length > 0, "las palabras clave", "las palabras clave de la marca");
 	const trimmed = category?.trim();
-	return { received, missing, category: trimmed !== undefined && trimmed.length > 0 ? trimmed : null };
+	return {
+		received,
+		missing,
+		category: trimmed !== undefined && trimmed.length > 0 ? trimmed : null,
+		categorySource,
+	};
 }
 
 /** El título dice lo que hace: pide candidatos, hasta un tope, y no promete la cantidad. */
@@ -117,12 +138,21 @@ export function rejectionSummary(rejected: Array<{ reason: string }>): string | 
  * Antes decía "la categoría tampoco se le pasa: usa «marketing/software» como marcador", como si fuera
  * un detalle. No lo es: es la diferencia entre una biblioteca calibrada para la marca y 50 prompts
  * genéricos que se bloquean 90 días. Así que cuando falta, se dice que falta **y** que la biblioteca
- * puede salir mal calibrada por eso.
+ * puede salir mal calibrada por eso; y cuando está, se dice si la declaró la marca en BeAOS o si
+ * heredó el `industry` del DNA de Maasy, porque son dos cosas distintas y el operador tiene que saber
+ * cuál se usó (y que declararla en BeAOS le gana a la del DNA).
  */
 export function categoryNote(inputs: GeneratorInputs): string {
-	return inputs.category !== null
-		? `La categoría que se le pasó es «${inputs.category}».`
-		: `La marca no declara categoría (\`industry\`), así que el generador usa «${CATEGORY_PLACEHOLDER}» como marcador: la biblioteca puede salir mal calibrada por eso.`;
+	if (inputs.category === null) {
+		return `La marca no declara categoría: no la escribió en BeAOS (Configuración → Brand) ni trae \`industry\` el DNA de Maasy, así que el generador usa «${CATEGORY_PLACEHOLDER}» como marcador y las preguntas pueden salir mal calibradas por eso.`;
+	}
+	if (inputs.categorySource === "declared") {
+		return `La categoría que se le pasó es «${inputs.category}»: la declara la marca en BeAOS.`;
+	}
+	if (inputs.categorySource === "dna") {
+		return `La categoría que se le pasó es «${inputs.category}»: la marca no la declaró en BeAOS, así que se usa la del DNA de Maasy (\`industry\`).`;
+	}
+	return `La categoría que se le pasó es «${inputs.category}».`;
 }
 
 /**
@@ -141,12 +171,12 @@ export function generatorInputsNote(inputs: GeneratorInputs): string {
 /**
  * El aviso de antes de gastar: la generación **no se hizo** y hay que decirlo así.
  *
- * Existe porque generar 50 prompts mal calibrados que después se bloquean 90 días es peor que no
- * generarlos: la biblioteca es el instrumento con el que se comparan todas las mediciones, y cambiarla
+ * Existe porque generar 50 preguntas mal calibradas que después se bloquean 90 días es peor que no
+ * generarlas: la lista es el instrumento con el que se comparan todas las mediciones, y cambiarla
  * después no es una opción. Se avisa antes de la llamada, no después.
  */
 export function missingCategoryWarning(brandName: string): string {
-	return `No se gastó la llamada: la marca «${brandName}» no declara categoría (\`industry\` en el contexto de marca), así que el generador usaría «${CATEGORY_PLACEHOLDER}» como marcador y los ${LIBRARY_ASKED_FOR} prompts pueden salir mal calibrados. Una biblioteca mal calibrada se bloquea ${LIBRARY_LOCK_DAYS} días y pasa a ser el instrumento con el que se comparan todas las mediciones: por eso conviene declarar la categoría y resincronizar el DNA antes de generarla. Si igual querés generarla con el marcador, confirmá.`;
+	return `No se gastó la llamada: la marca «${brandName}» no declara categoría —no la escribiste en BeAOS (Configuración → Brand) ni viene \`industry\` en su DNA de Maasy—, así que el generador usaría «${CATEGORY_PLACEHOLDER}» como marcador y las ${LIBRARY_ASKED_FOR} preguntas pueden salir mal calibradas. Una lista mal calibrada se bloquea ${LIBRARY_LOCK_DAYS} días y pasa a ser el instrumento con el que se comparan todas las mediciones: por eso conviene declarar la categoría en Configuración → Brand (o resincronizar el DNA) antes de generarlas. Si igual querés generarlas con el marcador, confirmá.`;
 }
 
 /** Lo que se lee cuando SÍ volvieron candidatos: cuántos, qué se descartó y que todavía no se guardó. */
@@ -159,9 +189,9 @@ export function libraryReviewMessage(report: LibraryGenerationReport, inputs: Ge
 	];
 	const rejected = rejectionSummary(report.rejected);
 	if (rejected !== null) parts.push(`Se descartaron ${report.rejected.length}: ${rejected}.`);
-	parts.push("Son candidatos, no una biblioteca: no se guardan hasta que confirmes.");
+	parts.push("Son candidatos, no las preguntas definitivas: no se guardan hasta que confirmes.");
 	parts.push(
-		"Al guardar se bloquean 90 días y se convierten en el instrumento con el que vas a comparar todas las mediciones; el worker los vuelve a chequear, así que la biblioteca puede quedar con menos de los que ves acá.",
+		"Al guardar se bloquean 90 días y se convierten en el instrumento con el que vas a comparar todas las mediciones; el worker las vuelve a chequear, así que la lista puede quedar con menos de las que ves acá.",
 	);
 	if (inputs !== null) parts.push(generatorInputsNote(inputs));
 	return parts.join(" ");
@@ -171,7 +201,7 @@ export function libraryReviewMessage(report: LibraryGenerationReport, inputs: Ge
 export function generationFailureMessage(report: LibraryGenerationReport, inputs: GeneratorInputs | null): string {
 	const parts: string[] = [];
 	if (report.failure !== null) {
-		parts.push(`No hay biblioteca: ${FAILURE_TEXT[report.failure]}.`);
+		parts.push(`No hay preguntas de compra: ${FAILURE_TEXT[report.failure]}.`);
 		if (report.failure === "truncated")
 			parts.push("No es un problema de tu proyecto: es el tope de tokens del gateway.");
 	} else if (report.returned > 0) {

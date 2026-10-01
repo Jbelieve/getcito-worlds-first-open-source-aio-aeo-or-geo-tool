@@ -100,7 +100,9 @@ La columna **"de dónde viene"** es la que resuelve la confusión:
 |---|---|---|
 | **Getcito** | La plataforma open source de visibilidad en buscadores con IA sobre la que está construido todo esto. Es la **mitad heredada**: monitoreo, menciones, citas, reportes. | Getcito |
 | **BeAOS** | Esta instancia, más la **capa de agentes** que Believe construyó encima. | BeAOS |
-| **Prompt** | La pregunta que BeAOS le hace a un motor de IA para ver si la marca aparece. Es del monitoreo. | Getcito |
+| **Prompt** | La palabra heredada de Getcito para "lo que se le pregunta a un motor de IA". **Hoy nombra dos instrumentos distintos** que BeAOS separó con nombre propio: la **búsqueda** y la **pregunta de compra** (ver el recuadro de abajo). Si alguien dice "prompt", hay que preguntar cuál de los dos. | Getcito |
+| **Búsqueda** | Lo que la gente **escribe** en un buscador con IA — *"best brand strategy consultancies for ai search"*. Mide **¿te mencionan?** (visibilidad). Corre por **cadencia**, siempre. Se carga en **Settings → Búsquedas**. | Getcito (etiqueta renombrada por BeAOS) |
+| **Pregunta de compra** | Lo que un comprador le **pide** a un chat para que le recomienden — *"¿Qué diferencia hay entre una consultora de marca tradicional y una que aplica neurociencia?"*. Mide **¿te prefieren?** (preferencia). Corre en **una corrida** de APS y se bloquea 90 días. Se genera en la pantalla **APS**. | BeAOS (antes se llamaba *biblioteca de prompts*) |
 | **Competidor** | Otra marca contra la que se compara en el monitoreo. Sirve para *share of voice*, no para el AOS. | Getcito |
 | **Cadencia** | Cada cuánto se vuelve a correr. **Es por marca, no por prompt** (ver §11). | Getcito |
 | **Run / corrida** | Una ejecución. Hay dos tipos y no se parecen: la corrida **de visibilidad** (monitoreo, automática) y la **corrida de APS** (medición contra modelos, a demanda y con costo). | Getcito (visibilidad) / BeAOS (APS) |
@@ -123,6 +125,47 @@ La columna **"de dónde viene"** es la que resuelve la confusión:
 | **Maasy** | El sistema del que BeAOS saca los datos de la marca. En la capa de agentes, es una **fuente de datos**, no la puerta de publicación. | Maasy |
 | **MCP** | La puerta para que **otros productos** (Maasy, BeAds, el agente de una marca) usen BeAOS sin programar una integración. No es una pantalla: es una conexión. | BeAOS |
 | **Bot Beacon** | Tráfico agéntico real de un sitio. **BeAOS no tiene fuente para esto**: el campo existe y hoy vale `null` (ver §9). | Maasy (era su instrumento) |
+
+### El recuadro que hay que leer: las dos cosas que se llamaban "prompts"
+
+BeAOS tiene **dos instrumentos distintos**, y durante un tiempo los dos se llamaron "prompts" y vivieron
+en secciones distintas sin que nada explicara la diferencia. **No se unifican: son dos instrumentos y esa
+separación es el diferencial del producto.** Uno mide si te mencionan; el otro, si te prefieren.
+
+Medido en producción (marca default, Getcito):
+
+```
+Búsquedas (prompts de Getcito):      42
+Preguntas de compra (biblioteca APS): 18
+Idénticas:                             0
+```
+
+**Cero solapamiento**: no son la misma lista escrita distinto, son dos listas.
+
+| | **Búsqueda** | **Pregunta de compra** |
+|---|---|---|
+| Dónde vive | **Settings → Búsquedas** | Pantalla **APS**, paso 1 |
+| Ejemplo | *"best brand strategy consultancies for ai search"* | *"¿Qué diferencia hay entre una consultora de marca tradicional y una que aplica neurociencia?"* |
+| Cómo suena | **Búsqueda** — lo que se escribe | **Pregunta de compra** — lo que se le pide a un chat |
+| Qué mide | **¿Te mencionan?** (visibilidad) | **¿Te prefieren?** (preferencia) |
+| Cuándo corre | Por **cadencia**, siempre | En **una corrida** de APS, y se bloquea **90 días** |
+
+Si entrás a una y no sabés por qué existe la otra, cada pantalla tiene una línea que lo dice. Y si dudás
+de qué se está hablando cuando alguien dice "prompt", esta tabla es la respuesta.
+
+> **Frontera del fork (qué se tocó y qué no).** La sección de búsquedas es de **Getcito (upstream)**, así
+> que el renombre fue **solo de etiquetas visibles, lo mínimo**: el ítem del menú, el nombre de la página
+> (título del navegador, encabezado y descripción) y el nombre en la miga de pan. **No se tocó nada más.**
+> Siguen con el nombre heredado, a propósito: la **URL** `/settings/prompts`, la **tabla `prompts`** y sus
+> columnas, las **claves de la API** y los tipos, la tabla de Prompts del **Admin**, las columnas
+> "Prompts" de **Share of Voice** y **Query Fan-Out**, el informe de **Opportunities**, el asistente de
+> alta (**wizard**) y el título de la página de detalle. Son vocabulario interno y conteos, no el nombre
+> de la sección; reescribirlos habría reestructurado pantallas heredadas y complicado el merge con el
+> upstream, que sigue vivo.
+>
+> El instrumento del APS **sí es de BeAOS**, así que ahí el renombre es completo en la pantalla: la
+> biblioteca se llama **preguntas de compra**. Igual que arriba, la tabla `agent_aps_prompts` y las claves
+> siguen como estaban.
 
 ### El recuadro que hay que leer: "APS" son tres cosas
 
@@ -150,7 +193,10 @@ Una frase cada una. Si te quedás con esta sección, ya entendés por qué la pl
 ### 4.1 Getcito — la capa heredada: *cómo te ve la IA hoy*
 
 Monitorea preguntas en motores de IA y cuenta menciones, **share of voice**, consultas derivadas y citas.
-Produce **monitoreo y reportes**. Su vocabulario es *prompt, competidor, cadencia, run, snapshot*.
+Produce **monitoreo y reportes**. Su vocabulario es *prompt, competidor, cadencia, run, snapshot*. BeAOS le
+cambió **una sola etiqueta visible**: lo que Getcito llama *prompts* se muestra como **Búsquedas** (lo que
+la gente escribe), para no confundirlo con las **preguntas de compra** del APS (lo que la gente pregunta).
+La URL, la tabla y las claves siguen diciendo `prompts` (§3).
 
 ### 4.2 Maasy — la capa de datos: *de dónde salen los datos de marca*
 
@@ -196,12 +242,12 @@ la forma canónica es `https://beaos.believe-global.com/app/default/<pantalla>`.
 | Ligar una marca con su proyecto de Maasy | **Agent Entities** (`/agent-entities`) | El vínculo guardado y el DNA sincronizado |
 | Generar, descargar y **publicar** los archivos | **Agent Assets** (`/agent-assets`) | Hasta 15 archivos con su ruta, su hash y su botón de descarga, más el interruptor de publicación |
 | Confirmar qué afirma la marca y con qué se prueba | **Pruebas** (`/claims`) | Pruebas confirmadas + el contador "tu sitio sirve X · tu bundle declararía Y" |
-| Saber si los asistentes te **prefieren** | **APS** (`/agent-preference`) | Biblioteca de prompts, estimación de costo, corrida y APS por modelo con banda y P10–P90 |
+| Saber si los asistentes te **prefieren** | **APS** (`/agent-preference`) | Preguntas de compra, estimación de costo, corrida y APS por modelo con banda y P10–P90 |
 | Saber qué hacer y quién lo hace | **Plan** (`/blueprint`) | 36 tarjetas en 4 grupos, con pasos, detalle exacto y cómo verificar cada una |
 | Generar el documento para el cliente | **Reports** (`/reports`) | Reporte con Share of Voice y una página **Agent Readiness** con AOS y APS |
-| Configurar la marca | **Settings → Brand** (`/settings/brand`) | Nombre, web, dominios adicionales, alias, mercado objetivo e idioma objetivo |
+| Configurar la marca | **Settings → Brand** (`/settings/brand`) | Nombre, web, dominios adicionales, alias, mercado objetivo, idioma objetivo y **categoría** |
 | Elegir contra quién se compara | **Settings → Competitors** (`/settings/competitors`) | Lista de competidores |
-| Cargar o editar las preguntas del monitoreo | **Settings → Prompts** (`/settings/prompts`) | Texto y habilitación de cada prompt |
+| Cargar o editar las **búsquedas** del monitoreo | **Settings → Búsquedas** (`/settings/prompts`) | Texto y habilitación de cada búsqueda |
 | Elegir qué modelos se consultan | **Settings → LLMs** (`/settings/llms`) | Modelos habilitados por marca |
 | Ver todas las marcas del sistema | **Admin → Brands** (`/admin`) | Listado global y el alta de marca. Solo admin. Además, desde acá se cambia la **cadencia** de una marca |
 | Ver qué está corriendo | **Admin → Queue** (`/admin/queue`) | La cola de trabajos en segundo plano |
@@ -220,7 +266,9 @@ El menú tiene **tres grupos**, y las pantallas de agentes y las heredadas convi
 - **Dashboard** — Overview, AOS, Agent Entities, Agent Assets, Pruebas, APS, Plan.
   Después, **solo si la marca está *onboarded***: Visibility, Share of Voice, Query Fan-Out, Citations,
   Opportunities.
-- **Settings** — Brand, Competitors, Prompts, LLMs. Siempre visible.
+- **Settings** — Brand, Competitors, **Búsquedas**, LLMs. Siempre visible.
+  (El menú dice **Búsquedas** desde el renombre de BeAOS; la URL sigue siendo `/settings/prompts`, que es
+  de Getcito. Ver §3 y §6.10.)
 - **Admin** — si sos admin: Brands, Nueva marca, Reports, Workflows, Queue, API Usage, Tools. Si tenés
   acceso a reportes pero no sos admin: **solo Reports**.
 
@@ -386,13 +434,20 @@ la marca o su categoría. No es lo que la marca dice: es lo que los asistentes c
 **Se usa en tres pasos, en orden** — y todo esto es **por entidad**: la biblioteca es de la entidad, la
 corrida es de la entidad y el resultado es de la entidad. Si no hay entidad, no hay dónde medir.
 
-**Paso 1 · Biblioteca de prompts.** Son las preguntas con las que se va a medir, y **no pueden nombrar la
+**Paso 1 · Preguntas de compra.** (Hasta el renombre de BeAOS, esta pantalla decía *"Biblioteca de
+prompts"*; es el mismo instrumento.) Son las preguntas con las que se va a medir, y **no pueden nombrar la
 marca** (una pregunta que la nombra contamina la respuesta y se descarta antes de guardarse). Si la marca no
 tiene, se generan con **Generar candidatos (hasta 50)**: el botón le pide 50 al gateway y el gateway devuelve
 los que puede, así que puede volver una lista **más corta** — la pantalla dice cuántos volvieron, cuántos
 quedaron usables y por qué se descartó el resto. Lo que vuelve son **candidatos: no se guardan hasta que
 aprietes Guardar y bloquear 90 días**. Revisalos: la calidad de la medición depende de la calidad de las
 preguntas.
+
+> **No confundir con las Búsquedas.** Estas son **preguntas de compra**: lo que un comprador le *pide* a un
+> chat para que le recomienden — *"¿Qué diferencia hay entre una consultora de marca tradicional y una que
+> aplica neurociencia?"* — y miden **si te prefieren**. Las **Búsquedas** (Settings → Búsquedas) son lo que
+> la gente *escribe* — *"best brand strategy consultancies for ai search"* — y miden **si te mencionan**.
+> Cero solapamiento entre las dos listas: ver §3.
 
 **Paso 2 · Corrida.** Elegí entidad, apretá **Estimar corrida** y **mirá el costo antes de gastar**. Nada se
 ejecuta hasta que aprietes **Confirmar y ejecutar**. Corre **a demanda**: no hay barrido automático.
@@ -506,12 +561,28 @@ cita a un competidor desde su propio sitio y a vos desde un tercero, hay un huec
 ### 6.10 Settings
 
 - **Brand** — nombre, web, dominios adicionales, alias, **mercado objetivo** e **idioma objetivo**,
-  productos y servicios. **El idioma importa:** todo lo que BeAOS genera con IA sale en ese idioma.
+  productos y servicios, y **categoría**. **El idioma importa:** todo lo que BeAOS genera con IA sale en ese idioma.
+  - **La categoría se declara acá, no en Maasy.** Es un campo de BeAOS (columna `brands.category`) y es
+    la que **calibra las preguntas de compra del APS** (§6.6). Existe para que BeAOS pueda medir
+    clientes que **no están en Maasy**: sin ella, la única fuente era el `industry` del DNA, y una marca
+    sin proyecto de Maasy —BeAOS y BeScore, por ejemplo— terminaba calibrada con el marcador genérico
+    `marketing/software`, que es falso para una plataforma de AOS y para un fabricante de camiones.
+  - **La precedencia es: categoría declarada en BeAOS → `industry` del DNA de Maasy → marcador
+    genérico.** Si la marca declara su categoría acá, manda esa. Si la dejás vacía, se usa la del DNA.
+    Si no hay ninguna de las dos, el APS **no gasta la llamada**: avisa que la biblioteca puede salir
+    mal calibrada y hay que confirmar a mano. Con categoría declarada ese aviso **no aparece**.
+  - **La sugerencia no es un guardado.** Si el DNA de Maasy ya trae `industry`, el campo la muestra
+    como sugerencia con un botón **"Usar esa"**: el que ya tiene Maasy no la escribe dos veces, y el
+    que no lo tiene la declara a mano. Se guarda recién cuando apretás **Save Changes**.
+  - Para **borrar** la categoría, vaciá el campo y guardá: queda sin declarar (y vuelve a aplicar la
+    del DNA, si hay).
 - **Competitors** — contra quién se compara.
-- **Prompts** — las preguntas del monitoreo de visibilidad. Cada prompt tiene su **página de detalle**
-  (`/app/<marca>/prompts/<id>`) con sus estadísticas y su historial de corridas: ahí se ve qué respondió
-  cada motor y cuándo. Lo que se edita es el **texto** y si está **habilitado**; **no hay frecuencia ni
-  prioridad por prompt** (la cadencia es de la marca, §11).
+- **Búsquedas** — las búsquedas del monitoreo de visibilidad: lo que la gente escribe en un buscador con
+  IA. **El menú dice "Búsquedas" desde el renombre de BeAOS; la URL sigue siendo `/settings/prompts` y la
+  tabla sigue siendo `prompts`** — es un renombre de etiqueta visible, no de datos (ver §3). Cada búsqueda
+  tiene su **página de detalle** (`/app/<marca>/prompts/<id>`) con sus estadísticas y su historial de
+  corridas: ahí se ve qué respondió cada motor y cuándo. Lo que se edita es el **texto** y si está
+  **habilitado**; **no hay frecuencia ni prioridad por búsqueda** (la cadencia es de la marca, §11).
 - **LLMs** — qué modelos están habilitados para la marca. Los nombres canónicos que BeAOS reconoce vienen
   del código: **ChatGPT, Claude, Claude Opus, Claude Sonnet, Google AI Mode, Google AI Overview, Gemini,
   Copilot, Perplexity, Grok, Mistral y DeepSeek**. Cuáles están habilitados de verdad es configuración

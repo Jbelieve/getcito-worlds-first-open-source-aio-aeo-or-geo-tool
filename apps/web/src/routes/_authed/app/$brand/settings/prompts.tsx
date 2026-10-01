@@ -1,7 +1,8 @@
 /**
- * /app/$brand/settings/prompts - Prompt management page
+ * /app/$brand/settings/prompts - Búsquedas: lo que la gente escribe
  *
- * Editor to add/edit/remove prompts.
+ * Editor to add/edit/remove searches. La URL, la tabla (`prompts`) y los tipos siguen con el nombre
+ * heredado de Getcito: **esto es un renombre de la etiqueta visible**, no de los datos.
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { getAppName, getBrandName, buildTitle } from "@/lib/route-head";
@@ -60,8 +61,12 @@ export const Route = createFileRoute("/_authed/app/$brand/settings/prompts")({
 		const brandName = getBrandName(matches);
 		return {
 			meta: [
-				{ title: buildTitle("Prompts", { appName, brandName }) },
-				{ name: "description", content: "Add, edit, or remove tracked prompts." },
+				{ title: buildTitle("Búsquedas", { appName, brandName }) },
+				{
+					name: "description",
+					content:
+						"Las búsquedas que la gente escribe en un buscador con IA: miden si tu marca aparece mencionada. Lo que mide la preferencia son las preguntas de compra del APS.",
+				},
 			],
 		};
 	},
@@ -82,8 +87,13 @@ function PromptsSettingsPage() {
 			brandId={brandId}
 			brandName={brand?.name}
 			brandWebsite={brand?.website}
-			pageTitle="Prompts"
-			pageDescription="Add, edit, or remove your brand tracking keywords and prompts"
+			pageTitle="Búsquedas"
+			/*
+			 * La segunda frase es la línea que explica **la otra**: quien entra acá tiene que saber que
+			 * existe un segundo instrumento —las preguntas de compra del APS— y en qué se diferencian,
+			 * sin salir de la pantalla. El ejemplo es literal: es lo que se escribe, no lo que se pregunta.
+			 */
+			pageDescription="Lo que la gente escribe en un buscador con IA — por ejemplo «best brand strategy consultancies for ai search» — y miden si te mencionan. Lo que se le pide a un chat para que te recomiende son las preguntas de compra del APS, y miden si te prefieren."
 		/>
 	);
 }

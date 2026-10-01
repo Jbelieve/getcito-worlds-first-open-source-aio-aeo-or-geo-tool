@@ -20,7 +20,9 @@ const PAGE_NAMES: Record<string, string> = {
 	"share-of-voice": "Share of Voice",
 	"query-fan-out": "Query Fan-Out",
 	opportunities: "Opportunities",
-	prompts: "Prompts",
+	// El segmento de la URL sigue siendo `prompts` (es de Getcito); lo que se muestra es lo que la
+	// sección es para BeAOS: las búsquedas que la gente escribe. Ver el renombre en `app-sidebar`.
+	prompts: "Búsquedas",
 	citations: "Citations",
 	brand: "Brand",
 	competitors: "Competitors",

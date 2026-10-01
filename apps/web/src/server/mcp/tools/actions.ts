@@ -79,6 +79,11 @@ const ensureBrand: McpTool = {
 				description: "Productos y servicios, que alimentan la generación de bibliotecas de prompts.",
 			},
 			keywords: { type: "array", items: { type: "string" }, description: "Palabras clave de la marca." },
+			category: {
+				type: "string",
+				description:
+					"La categoría de la marca (por ejemplo `Automotriz`), que calibra la biblioteca de preguntas de compra del APS. Manda sobre el `industry` del DNA de Maasy. Declarala cuando el cliente no esté en Maasy, o su biblioteca saldría calibrada con un marcador genérico.",
+			},
 		},
 		required: ["name", "website"],
 		additionalProperties: false,
@@ -96,6 +101,7 @@ const ensureBrand: McpTool = {
 		const shortDescription = optionalString(args, "shortDescription");
 		const productsAndServices = optionalStringArray(args, "productsAndServices");
 		const keywords = optionalStringArray(args, "keywords");
+		const category = optionalString(args, "category");
 
 		const existing = await db
 			.select({
@@ -128,6 +134,7 @@ const ensureBrand: McpTool = {
 			if (shortDescription !== undefined) patch.shortDescription = shortDescription;
 			if (productsAndServices !== undefined) patch.productsAndServices = productsAndServices;
 			if (keywords !== undefined) patch.keywords = keywords;
+			if (category !== undefined) patch.category = category;
 			await db.update(brands).set(patch).where(eq(brands.id, target.id));
 			const payload = { brandId: target.id, created: false };
 			const reason = byHost ? `ya existía para el host ${host}` : `ya existía con el id "${target.id}"`;
@@ -142,6 +149,7 @@ const ensureBrand: McpTool = {
 		if (shortDescription !== undefined) values.shortDescription = shortDescription;
 		if (productsAndServices !== undefined) values.productsAndServices = productsAndServices;
 		if (keywords !== undefined) values.keywords = keywords;
+		if (category !== undefined) values.category = category;
 		await db.insert(brands).values(values);
 		const payload = { brandId: identity.brandId, created: true };
 		return textResult(`Marca "${identity.brandId}" creada para el host ${host}.`, payload);
@@ -238,7 +246,7 @@ const startApsRun: McpTool = {
 			confirmMissingCategory: {
 				type: "boolean",
 				description:
-					"true para generar la biblioteca aunque la marca no declare categoría (`industry` en el DNA). Por defecto false: sin categoría la generación se corta ANTES de gastar la llamada, porque una biblioteca calibrada con el marcador genérico «marketing/software» sale mal calibrada y se bloquea 90 días.",
+					"true para generar la biblioteca aunque la marca no declare categoría. Por defecto false: sin categoría —ni la declarada en BeAOS ni el `industry` del DNA— la generación se corta ANTES de gastar la llamada, porque una biblioteca calibrada con el marcador genérico «marketing/software» sale mal calibrada y se bloquea 90 días.",
 			},
 		},
 		required: ["brandId", "entityId"],
@@ -314,7 +322,7 @@ const ensurePromptLibrary: McpTool = {
 	name: "ensure_prompt_library",
 	title: "Asegurar la biblioteca de prompts APS",
 	description:
-		"Genera la biblioteca de prompts APS de una entidad si no tiene una activa, y devuelve los prompts (id, texto, categoría y etapa de funnel). Si ya tiene una activa y no mandás `force`, devuelve esa tal cual con `created: false`: es idempotente y no gasta una generación. Con `force: true` genera una versión nueva, que supersede a la anterior aunque esté dentro del bloqueo de 90 días —cambiar el instrumento arranca una serie nueva—. La biblioteca se calibra con la categoría que la marca declara (`industry` del DNA sincronizado): si no la declara, la generación se corta ANTES de gastar la llamada con el aviso de que puede salir mal calibrada, y solo sigue con `confirmMissingCategory: true`. La respuesta trae `calibrationCategory` para que se sepa con qué se calibró. No existe el estado 'aprobada': la biblioteca queda `active` y la anterior `superseded`. Usala antes de start_aps_run si querés revisar los prompts primero.",
+		"Genera la biblioteca de prompts APS de una entidad si no tiene una activa, y devuelve los prompts (id, texto, categoría y etapa de funnel). Si ya tiene una activa y no mandás `force`, devuelve esa tal cual con `created: false`: es idempotente y no gasta una generación. Con `force: true` genera una versión nueva, que supersede a la anterior aunque esté dentro del bloqueo de 90 días —cambiar el instrumento arranca una serie nueva—. La biblioteca se calibra con la categoría de la marca, con esta precedencia: primero la que la marca declara en BeAOS (campo `category`, se escribe con `ensure_brand` o en Configuración → Brand), después el `industry` del DNA sincronizado de Maasy, y si no hay ninguna de las dos se corta ANTES de gastar la llamada con el aviso de que puede salir mal calibrada, y solo sigue con `confirmMissingCategory: true`. La respuesta trae `calibrationCategory` para que se sepa con qué se calibró. No existe el estado 'aprobada': la biblioteca queda `active` y la anterior `superseded`. Usala antes de start_aps_run si querés revisar los prompts primero.",
 	inputSchema: {
 		type: "object",
 		properties: {
@@ -327,7 +335,7 @@ const ensurePromptLibrary: McpTool = {
 			confirmMissingCategory: {
 				type: "boolean",
 				description:
-					"true para generar aunque la marca no declare categoría (`industry` en el DNA). Por defecto false: sin categoría la generación se corta ANTES de gastar la llamada, porque una biblioteca calibrada con el marcador genérico «marketing/software» sale mal calibrada y se bloquea 90 días.",
+					"true para generar aunque la marca no declare categoría. Por defecto false: sin categoría —ni la declarada en BeAOS ni el `industry` del DNA— la generación se corta ANTES de gastar la llamada, porque una biblioteca calibrada con el marcador genérico «marketing/software» sale mal calibrada y se bloquea 90 días.",
 			},
 		},
 		required: ["brandId", "entityId"],
