@@ -25,6 +25,7 @@ import { type AgentBrandClaim, agentBrandClaims, agentBrandEntities } from "@wor
 import { findUmbrellaEntity } from "@workspace/aos-aps/provenance";
 import { db } from "@workspace/lib/db/db";
 import { and, asc, eq } from "drizzle-orm";
+import { type ClaimTally, tallyClaims } from "@/lib/claims-guard";
 
 export { type ClaimInput, ClaimInputError, type NormalizedClaim } from "@workspace/aos-aps/claims";
 
@@ -116,13 +117,16 @@ export function inheritedClaimsOf(context: ClaimsContext): AgentBrandClaim[] {
 }
 
 /**
- * Cuántos claims declara el bundle de la entidad.
+ * El desglose del bundle de la entidad: cuántas pruebas declara, cuántas prestadas y cuántas propias.
  *
  * Es el mismo cálculo que hace el generador —`resolveBundleClaims`— y no una copia: lo que muestra la
- * pantalla es lo que va a quedar firmado.
+ * pantalla es lo que va a quedar firmado. Y el desglose sale de `tallyClaims` sobre esas pruebas, con la
+ * misma marca que lee el candado: si la herencia se contara acá con una segunda regla, la pantalla podría
+ * decir "heredás 3" mientras el bundle declara 0.
  */
-export function bundleClaimCountOf(context: ClaimsContext, dna: Record<string, unknown> | undefined): number {
-	return resolveBundleClaims({ dna, saved: context.rows, umbrella: context.umbrella ?? undefined }).claims.length;
+export function bundleClaimTallyOf(context: ClaimsContext, dna: Record<string, unknown> | undefined): ClaimTally {
+	const { claims } = resolveBundleClaims({ dna, saved: context.rows, umbrella: context.umbrella ?? undefined });
+	return tallyClaims(claims);
 }
 
 export class ClaimNotFoundError extends Error {}
