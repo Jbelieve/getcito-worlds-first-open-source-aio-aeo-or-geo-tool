@@ -179,14 +179,14 @@ function AgentPreferencePage() {
 				<h1 className="text-3xl font-bold">APS</h1>
 				<p className="text-muted-foreground">
 					Agent Preference Score: si los modelos te prefieren cuando un comprador pregunta sin nombrarte. Medido contra
-					modelos reales con una biblioteca de prompts unaided, en corridas on-demand y con su varianza.
+					modelos reales con una biblioteca de preguntas de compra unaided, en corridas on-demand y con su varianza.
 				</p>
 			</div>
 
 			<Card>
 				<CardHeader>
 					<CardTitle>Entidad</CardTitle>
-					<CardDescription>El APS se mide por entidad, con la biblioteca de esa entidad.</CardDescription>
+					<CardDescription>El APS se mide por entidad, con las preguntas de compra de esa entidad.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<select
@@ -207,21 +207,31 @@ function AgentPreferencePage() {
 
 			<Card>
 				<CardHeader>
-					<CardTitle>1 · Biblioteca de prompts</CardTitle>
+					{/*
+					 * El nombre visible de este instrumento es **preguntas de compra**, no "biblioteca de
+					 * prompts": son lo que un comprador le *pide* a un chat, y lo que miden es si te
+					 * prefieren. La otra mitad —lo que la gente *escribe* en un buscador— se llama
+					 * Búsquedas y mide si te mencionan. La tabla y el código siguen diciendo `prompts`.
+					 */}
+					<CardTitle>1 · Preguntas de compra</CardTitle>
 					<CardDescription>
 						Son las preguntas que un comprador real le hace a un asistente de IA{" "}
-						<span className="font-medium text-foreground">sin nombrar tu marca</span> — por ejemplo “¿qué schorle
-						artesanal me recomendás?”. De ahí sale si te prefieren de verdad: si el prompt nombrara tu marca, la
-						respuesta estaría contaminada y no mediría nada.
+						<span className="font-medium text-foreground">sin nombrar tu marca</span> — por ejemplo “¿Qué diferencia hay
+						entre una consultora de marca tradicional y una que aplica neurociencia?”. De ahí sale si te prefieren de
+						verdad: si la pregunta nombrara tu marca, la respuesta estaría contaminada y no mediría nada. Lo que la
+						gente <span className="italic">escribe</span> en un buscador son las{" "}
+						<span className="font-medium text-foreground">búsquedas</span> (sección Búsquedas): esas miden si te
+						mencionan, no si te prefieren.
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-3 text-sm">
 					{active === undefined || active === null ? (
-						<p className="text-muted-foreground">Esta entidad todavía no tiene biblioteca activa.</p>
+						<p className="text-muted-foreground">Esta entidad todavía no tiene preguntas de compra activas.</p>
 					) : (
 						<div className="space-y-1">
 							<p>
-								Versión <span className="font-mono">{active.version}</span> · {active.promptCount} prompts habilitados ·{" "}
+								Versión <span className="font-mono">{active.version}</span> · {active.promptCount} preguntas habilitadas
+								·{" "}
 								{Object.entries(library.data?.counts ?? {})
 									.map(([kind, count]) => `${kind}: ${count}`)
 									.join(" · ")}
@@ -257,16 +267,15 @@ function AgentPreferencePage() {
 					{/* El tope lo decide el gateway, no el botón: se dice ANTES de apretar, no cuando vuelven menos. */}
 					<p className="text-xs text-muted-foreground">
 						El botón le pide hasta {LIBRARY_ASKED_FOR} candidatos al gateway, y cuántos devuelve no lo decide BeAOS: la
-						biblioteca puede salir más corta. Nada se guarda hasta que confirmes — recién al guardar se bloquean 90
-						días.
+						lista puede salir más corta. Nada se guarda hasta que confirmes — recién al guardar se bloquean 90 días.
 					</p>
 					{inputs !== null && !categoryUnconfirmed && (
 						<p className="text-xs text-muted-foreground">{generatorInputsNote(inputs)}</p>
 					)}
 					{categoryUnconfirmed && (
 						<p className="text-xs text-muted-foreground">
-							No se gastó ninguna llamada: la generación se cortó antes de pedirla. Si confirmás, la biblioteca sale
-							calibrada con «{CATEGORY_PLACEHOLDER}» y se bloquea 90 días al guardarla.
+							No se gastó ninguna llamada: la generación se cortó antes de pedirla. Si confirmás, las preguntas salen
+							calibradas con «{CATEGORY_PLACEHOLDER}» y se bloquean 90 días al guardarlas.
 						</p>
 					)}
 
@@ -308,7 +317,7 @@ function AgentPreferencePage() {
 				<CardHeader>
 					<CardTitle>2 · Corrida</CardTitle>
 					<CardDescription>
-						Manda esos prompts a los modelos reales y mide si te nombran, te recomiendan y con qué fuentes. Primero la
+						Manda esas preguntas a los modelos reales y mide si te nombran, te recomiendan y con qué fuentes. Primero la
 						estimación: nada se ejecuta ni se gasta hasta que confirmes.
 					</CardDescription>
 				</CardHeader>
@@ -371,7 +380,7 @@ function AgentPreferencePage() {
 								</p>
 							)}
 							<p className="text-muted-foreground">
-								AOS usado como capacidad de acción: {estimateData.capacidadAccion ?? "sin auditoría"} · biblioteca v
+								AOS usado como capacidad de acción: {estimateData.capacidadAccion ?? "sin auditoría"} · preguntas v
 								{estimateData.libraryVersion ?? "—"}
 							</p>
 							{estimateData.reasons.length > 0 && <p className={BLOCKING_TEXT}>{estimateData.reasons.join(" ")}</p>}
@@ -393,7 +402,9 @@ function AgentPreferencePage() {
 						<ApsRunBlock key={run.id} run={run} expanded={runIndex === 0} statusLabel={statusLabel(run.status)} />
 					))}
 					{(runs.data ?? []).length === 0 && (
-						<p className="text-muted-foreground">Todavía no hay corridas. Genera la biblioteca y estima la primera.</p>
+						<p className="text-muted-foreground">
+							Todavía no hay corridas. Generá las preguntas de compra y estimá la primera.
+						</p>
 					)}
 				</CardContent>
 			</Card>
