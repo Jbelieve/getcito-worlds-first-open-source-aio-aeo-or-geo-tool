@@ -125,6 +125,10 @@ export const listClaimsFn = createServerFn({ method: "POST" })
 			isUmbrella: context.isUmbrella,
 			liveClaimCount: liveClaimTally?.total ?? null,
 			bundleClaimCount: bundleTally.total,
+			// El veredicto del candado, calculado con la MISMA función pura que usa el gate al publicar. La
+			// pantalla lo muestra tal cual en vez de rehacer la regla: una copia podría decir "va a bloquear"
+			// mientras el gate publica.
+			publishDecision: claimsGuardDecision(bundleTally, liveClaimTally),
 			// Si el DNA ya declara claims, los confirmados acá no entran al bundle: la pantalla tiene que
 			// poder decirlo, o el contador miente.
 			claimsSource: dnaCarriesClaims(dna) ? ("maasy" as const) : ("beaos" as const),

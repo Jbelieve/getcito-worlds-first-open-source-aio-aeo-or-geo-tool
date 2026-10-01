@@ -288,6 +288,9 @@ function ClaimsPage() {
 
 	const liveClaimCount = claims.data?.liveClaimCount ?? null;
 	const bundleClaimCount = claims.data?.bundleClaimCount ?? 0;
+	// El veredicto lo calcula el servidor con la misma función pura que usa el gate al publicar: acá solo
+	// se muestra. Rehacer la regla en la pantalla sería la copia que dice "va a bloquear" mientras publica.
+	const publishDecision = claims.data?.publishDecision;
 	const fromMaasy = claims.data?.claimsSource === "maasy";
 	const candidates = claims.data?.candidates ?? [];
 	const saved = claims.data?.claims ?? [];
@@ -298,7 +301,6 @@ function ClaimsPage() {
 	const umbrellaName = claims.data?.umbrella.name;
 	const isUmbrella = claims.data?.isUmbrella ?? false;
 	const confirmedOwnCount = ownSaved.filter((claim) => claim.status === "confirmed").length;
-	const missing = liveClaimCount === null ? 0 : Math.max(0, liveClaimCount - bundleClaimCount);
 	const formReady =
 		form !== null &&
 		form.claimId.trim().length > 0 &&
@@ -325,8 +327,9 @@ function ClaimsPage() {
 						{bundleClaimCount}
 					</CardTitle>
 					<CardDescription>
-						El candado de publicación compara los dos números antes de publicar: nunca deja que el bundle pierda
-						evidencia que el sitio ya sirve.
+						El candado de publicación compara las pruebas <strong>propias</strong> de los dos: nunca deja que el bundle
+						pierda evidencia que esta entidad declaró. Las prestadas del paraguas que el bundle deja de usar se avisan,
+						y se publican igual.
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-2 text-sm">
@@ -338,21 +341,23 @@ function ClaimsPage() {
 					)}
 					{liveClaimCount === null && (
 						<p className={BLOCKING_TEXT}>
-							No pudimos leer el perfil del sitio, así que no podemos comparar. Se publica con un aviso, no bloqueado.
+							{publishDecision?.warning ??
+								"No pudimos leer el perfil del sitio, así que no podemos comparar. Se publica con un aviso, no bloqueado."}
 						</p>
 					)}
-					{liveClaimCount !== null && missing > 0 && (
+					{publishDecision?.blocked === true && (
 						<div className={`rounded-md border p-3 ${BLOCKING_BLOCK}`}>
-							El candado <strong>va a bloquear la publicación</strong> hasta que confirmes al menos {liveClaimCount}{" "}
-							{liveClaimCount === 1 ? "prueba" : "pruebas"}. Hoy tenés {confirmedOwnCount} confirmada
-							{confirmedOwnCount === 1 ? "" : "s"} y el bundle declararía {bundleClaimCount}.
+							El candado <strong>va a bloquear la publicación</strong>. {publishDecision.reason} Hoy tenés{" "}
+							{confirmedOwnCount} confirmada{confirmedOwnCount === 1 ? "" : "s"} en esta entidad y el bundle declararía{" "}
+							{bundleClaimCount}.
 						</div>
 					)}
-					{liveClaimCount !== null && missing === 0 && (
+					{liveClaimCount !== null && publishDecision?.blocked === false && (
 						<p className="text-muted-foreground">
-							{bundleClaimCount === 0
-								? "El sitio no declara pruebas todavía, así que no hay nada que el candado pueda degradar."
-								: "El bundle declara al menos lo que el sitio sirve: el candado no bloquea."}
+							{publishDecision.warning ??
+								(bundleClaimCount === 0
+									? "El sitio no declara pruebas todavía, así que no hay nada que el candado pueda degradar."
+									: "El bundle declara al menos las pruebas propias que el sitio sirve: el candado no bloquea.")}
 						</p>
 					)}
 					<p className="text-muted-foreground">
