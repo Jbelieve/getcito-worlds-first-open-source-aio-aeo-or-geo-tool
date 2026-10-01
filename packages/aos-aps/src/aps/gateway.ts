@@ -236,12 +236,21 @@ Reglas duras:
 /**
  * Generation runs on a cheaper band than the judge: writing prompts is authoring work, not the
  * measurement judgement, and the operator reviews the candidate list before anything is locked.
+ *
+ * La banda y el **tope de tokens** son suyos. El tope no se hereda: `APS_JUDGE_MAX_TOKENS` está
+ * calibrado para un veredicto corto (3000 en producción) y escribir 50 prompts con un modelo que
+ * razona no entra ahí — el razonamiento se come el presupuesto, el JSON queda abierto y no hay
+ * biblioteca. Medido: con 3000 no salió ninguna en 8 intentos; con el tope propio, 50/50 en 4 de 4.
  */
 export function libraryConfigFromEnv(env: Record<string, string | undefined> = process.env): GatewayJudgeConfig | null {
 	const judge = judgeConfigFromEnv(env);
 	if (judge === null) return null;
 	const model = env.APS_LIBRARY_MODEL?.trim();
-	return { ...judge, model: model !== undefined && model.length > 0 ? model : "believe-smart" };
+	return {
+		...judge,
+		model: model !== undefined && model.length > 0 ? model : "believe-smart",
+		maxTokens: LIBRARY_MAX_TOKENS,
+	};
 }
 
 export interface GatewayLibraryInput {
