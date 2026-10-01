@@ -18,6 +18,7 @@ import {
 	CATEGORY_PLACEHOLDER,
 	LIBRARY_LOCK_DAYS,
 	LIBRARY_TARGET_TOTAL,
+	type LibraryCategorySource,
 	type LibraryFailure,
 } from "@workspace/aos-aps/aps";
 
@@ -67,6 +68,12 @@ export interface GeneratorInputs {
 	missing: string[];
 	/** La categoría que se le pasó al generador. `null` cuando la marca no declara ninguna. */
 	category: string | null;
+	/**
+	 * De dónde salió `category`. Es lo que permite decir *"la declaraste vos"* en vez de *"la sacamos
+	 * del DNA"*: la precedencia (declarada > DNA > marcador) es real y el operador tiene que poder
+	 * saber cuál de las dos se usó sin adivinar. `null` en un texto armado a mano que no la declara.
+	 */
+	categorySource: LibraryCategorySource | null;
 }
 
 /** El marcador con el que trabaja el generador cuando la marca no declara categoría. */
@@ -80,7 +87,11 @@ export interface BrandContextFields {
 }
 
 /** Traduce el contexto de marca a insumos con nombre, para poder decir cuál falta. */
-export function generatorInputsFromBrand(brand: BrandContextFields, category: string | null): GeneratorInputs {
+export function generatorInputsFromBrand(
+	brand: BrandContextFields,
+	category: string | null,
+	categorySource: LibraryCategorySource | null = null,
+): GeneratorInputs {
 	const received: string[] = [];
 	const missing: string[] = [];
 	const check = (present: boolean, ok: string, absent: string): void => {
@@ -95,7 +106,12 @@ export function generatorInputsFromBrand(brand: BrandContextFields, category: st
 	);
 	check((brand.keywords ?? []).length > 0, "las palabras clave", "las palabras clave de la marca");
 	const trimmed = category?.trim();
-	return { received, missing, category: trimmed !== undefined && trimmed.length > 0 ? trimmed : null };
+	return {
+		received,
+		missing,
+		category: trimmed !== undefined && trimmed.length > 0 ? trimmed : null,
+		categorySource,
+	};
 }
 
 /** El título dice lo que hace: pide candidatos, hasta un tope, y no promete la cantidad. */
@@ -117,12 +133,21 @@ export function rejectionSummary(rejected: Array<{ reason: string }>): string | 
  * Antes decía "la categoría tampoco se le pasa: usa «marketing/software» como marcador", como si fuera
  * un detalle. No lo es: es la diferencia entre una biblioteca calibrada para la marca y 50 prompts
  * genéricos que se bloquean 90 días. Así que cuando falta, se dice que falta **y** que la biblioteca
- * puede salir mal calibrada por eso.
+ * puede salir mal calibrada por eso; y cuando está, se dice si la declaró la marca en BeAOS o si
+ * heredó el `industry` del DNA de Maasy, porque son dos cosas distintas y el operador tiene que saber
+ * cuál se usó (y que declararla en BeAOS le gana a la del DNA).
  */
 export function categoryNote(inputs: GeneratorInputs): string {
-	return inputs.category !== null
-		? `La categoría que se le pasó es «${inputs.category}».`
-		: `La marca no declara categoría (\`industry\`), así que el generador usa «${CATEGORY_PLACEHOLDER}» como marcador: la biblioteca puede salir mal calibrada por eso.`;
+	if (inputs.category === null) {
+		return `La marca no declara categoría: no la escribió en BeAOS (Configuración → Brand) ni trae \`industry\` el DNA de Maasy, así que el generador usa «${CATEGORY_PLACEHOLDER}» como marcador y la biblioteca puede salir mal calibrada por eso.`;
+	}
+	if (inputs.categorySource === "declared") {
+		return `La categoría que se le pasó es «${inputs.category}»: la declara la marca en BeAOS.`;
+	}
+	if (inputs.categorySource === "dna") {
+		return `La categoría que se le pasó es «${inputs.category}»: la marca no la declaró en BeAOS, así que se usa la del DNA de Maasy (\`industry\`).`;
+	}
+	return `La categoría que se le pasó es «${inputs.category}».`;
 }
 
 /**
@@ -146,7 +171,7 @@ export function generatorInputsNote(inputs: GeneratorInputs): string {
  * después no es una opción. Se avisa antes de la llamada, no después.
  */
 export function missingCategoryWarning(brandName: string): string {
-	return `No se gastó la llamada: la marca «${brandName}» no declara categoría (\`industry\` en el contexto de marca), así que el generador usaría «${CATEGORY_PLACEHOLDER}» como marcador y los ${LIBRARY_ASKED_FOR} prompts pueden salir mal calibrados. Una biblioteca mal calibrada se bloquea ${LIBRARY_LOCK_DAYS} días y pasa a ser el instrumento con el que se comparan todas las mediciones: por eso conviene declarar la categoría y resincronizar el DNA antes de generarla. Si igual querés generarla con el marcador, confirmá.`;
+	return `No se gastó la llamada: la marca «${brandName}» no declara categoría —no la escribiste en BeAOS (Configuración → Brand) ni viene \`industry\` en su DNA de Maasy—, así que el generador usaría «${CATEGORY_PLACEHOLDER}» como marcador y los ${LIBRARY_ASKED_FOR} prompts pueden salir mal calibrados. Una biblioteca mal calibrada se bloquea ${LIBRARY_LOCK_DAYS} días y pasa a ser el instrumento con el que se comparan todas las mediciones: por eso conviene declarar la categoría en Configuración → Brand (o resincronizar el DNA) antes de generarla. Si igual querés generarla con el marcador, confirmá.`;
 }
 
 /** Lo que se lee cuando SÍ volvieron candidatos: cuántos, qué se descartó y que todavía no se guardó. */

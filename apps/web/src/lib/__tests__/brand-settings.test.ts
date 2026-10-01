@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { normalizeBrandUpdate } from "@/lib/brand-settings";
 
 describe("normalizeBrandUpdate", () => {
@@ -23,15 +23,15 @@ describe("normalizeBrandUpdate", () => {
 			expect(result).toEqual({ ok: true, updates: { name: "Acme" } });
 		});
 
-		it.each([["empty string", ""], ["whitespace only", "   "]])(
-			"rejects a %s name",
-			(_label, name) => {
-				expect(normalizeBrandUpdate({ name })).toEqual({
-					ok: false,
-					error: "Brand name must be a non-empty string",
-				});
-			},
-		);
+		it.each([
+			["empty string", ""],
+			["whitespace only", "   "],
+		])("rejects a %s name", (_label, name) => {
+			expect(normalizeBrandUpdate({ name })).toEqual({
+				ok: false,
+				error: "Brand name must be a non-empty string",
+			});
+		});
 	});
 
 	describe("website", () => {
@@ -82,12 +82,37 @@ describe("normalizeBrandUpdate", () => {
 		});
 	});
 
+	describe("category", () => {
+		it("trims the declared category", () => {
+			expect(normalizeBrandUpdate({ category: "  Automotriz  " })).toEqual({
+				ok: true,
+				updates: { category: "Automotriz" },
+			});
+		});
+
+		/**
+		 * Vacío es una acción, no ausencia: si "" se tratara como "no lo mandaste", la categoría no se
+		 * podría dejar de declarar nunca, y la marca quedaría atada a la que declaró una vez.
+		 */
+		it("clears the category to null when the operator empties the field", () => {
+			expect(normalizeBrandUpdate({ category: "" })).toEqual({ ok: true, updates: { category: null } });
+			expect(normalizeBrandUpdate({ category: "   " })).toEqual({ ok: true, updates: { category: null } });
+		});
+
+		it("does not touch the category when it is not in the payload", () => {
+			const result = normalizeBrandUpdate({ name: "Acme" });
+			expect(result.ok).toBe(true);
+			if (result.ok) expect(result.updates).not.toHaveProperty("category");
+		});
+	});
+
 	it("validates all provided fields together", () => {
 		const result = normalizeBrandUpdate({
 			name: " Acme ",
 			website: "acme.com",
 			additionalDomains: ["acme.io", "acme.io"],
 			aliases: [" Acme ", "Acme"],
+			category: " Automotriz ",
 		});
 		expect(result).toEqual({
 			ok: true,
@@ -96,6 +121,7 @@ describe("normalizeBrandUpdate", () => {
 				website: "https://acme.com/",
 				additionalDomains: ["acme.io"],
 				aliases: ["Acme"],
+				category: "Automotriz",
 			},
 		});
 	});

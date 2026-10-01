@@ -37,6 +37,19 @@ export const brands = pgTable("brands", {
 	shortDescription: text("short_description"),
 	productsAndServices: text("products_and_services").array().notNull().default([]),
 	keywords: text("keywords").array().notNull().default([]),
+	/**
+	 * La categoría que la marca declara **en BeAOS**, editable en Configuración → Brand.
+	 *
+	 * Existe para romper la dependencia de Maasy: hasta ahora la única fuente de categoría era el
+	 * `industry` del DNA (`agent_brand_dna_snapshots.payload`), así que una marca sin proyecto de
+	 * Maasy —o con el suyo vacío, como BeAOS y BeScore— no podía declarar su categoría y la
+	 * biblioteca de preguntas de compra se calibraba con el marcador genérico.
+	 *
+	 * `null` significa "la marca no la declara acá". No es un valor por defecto silencioso: la
+	 * precedencia (declarada > DNA > marcador) vive en `resolveLibraryCategory`
+	 * (`@workspace/aos-aps/aps`), no en esta columna.
+	 */
+	category: text("category"),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true })
 		.defaultNow()

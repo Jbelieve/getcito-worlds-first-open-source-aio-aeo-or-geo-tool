@@ -13,7 +13,6 @@ import {
 	apsBudgetConfigFromEnv,
 	apsPricesFromEnv,
 	canRegenerateLibrary,
-	categoryFromBrandContext,
 	GATEWAY_JUDGE_PIPELINE_VERSION,
 	generateLibraryWithGateway,
 	isLibraryUsable,
@@ -23,7 +22,9 @@ import {
 	libraryLockWindow,
 	type PreparedApsRun,
 	prepareApsRun,
+	type ResolvedLibraryCategory,
 	readGatewayBudget,
+	resolveLibraryCategory,
 	validateLibrary,
 } from "@workspace/aos-aps/aps";
 import {
@@ -273,26 +274,31 @@ export interface EnsurePromptLibraryResult {
 export class PromptLibraryError extends Error {}
 
 /**
- * La categoría con la que se calibra la biblioteca de una entidad, leída de donde la marca ya la
- * declara: el campo `industry` del último DNA sincronizado.
+ * La categoría con la que se calibra la biblioteca de una entidad, con la **precedencia** resuelta por
+ * `resolveLibraryCategory` (declarada en BeAOS > `industry` del DNA de Maasy > marcador).
  *
- * No es un campo nuevo ni una convención de este archivo: es el mismo `dnaPayload.industry` que
- * `generateAssetsForEntity` publica como `brand.industry` dentro del `brand.json` firmado. Si acá se
- * leyera otra cosa, la biblioteca se calibraría con una categoría distinta de la que la marca declara
- * a los agentes.
+ * Acá solo se leen las dos fuentes: la declarada es la columna `brands.category` —la que el operador
+ * edita en Configuración → Brand, y la única que existe cuando el cliente no está en Maasy— y la
+ * heredada es el `industry` del último DNA sincronizado de la entidad. La regla de cuál gana **no se
+ * decide acá**, sino en `resolveLibraryCategory`, porque la puerta de la UI y la del MCP tienen que
+ * resolver igual.
  *
- * Devuelve `null` cuando no hay DNA o la marca no declara industria. **No inventa una**: quien llama
- * tiene que decir que falta, porque una biblioteca calibrada con una categoría falsa sale genérica y
- * se bloquea 90 días.
+ * `source: "placeholder"` es información, no un valor: significa que la marca no declara categoría por
+ * ninguna vía y quien llama **tiene que decir que falta**, porque una biblioteca calibrada con una
+ * categoría falsa sale genérica y se bloquea 90 días.
  */
-export async function libraryCategoryForEntity(brandId: string, entityId: string): Promise<string | null> {
+export async function libraryCategoryForEntity(brandId: string, entityId: string): Promise<ResolvedLibraryCategory> {
+	const [brand] = await db.select({ category: brands.category }).from(brands).where(eq(brands.id, brandId)).limit(1);
 	const [snapshot] = await db
 		.select({ payload: agentBrandDnaSnapshots.payload })
 		.from(agentBrandDnaSnapshots)
 		.where(and(eq(agentBrandDnaSnapshots.entityId, entityId), eq(agentBrandDnaSnapshots.brandId, brandId)))
 		.orderBy(desc(agentBrandDnaSnapshots.syncedAt))
 		.limit(1);
-	return categoryFromBrandContext(snapshot?.payload as Record<string, unknown> | undefined);
+	return resolveLibraryCategory({
+		declared: brand?.category,
+		dna: snapshot?.payload as Record<string, unknown> | undefined,
+	});
 }
 
 async function readLibraryPrompts(libraryId: string): Promise<PromptLibraryPrompt[]> {
@@ -366,12 +372,14 @@ export async function ensurePromptLibraryForEntity(data: EnsurePromptLibraryInpu
 		throw new PromptLibraryError(`No existe la marca "${data.brandId}". Creamela primero con ensure_brand.`);
 	}
 
-	// La categoría con la que se calibra la biblioteca, **antes** de gastar la llamada: es el campo
-	// `industry` del DNA sincronizado. Sin categoría, 50 prompts genéricos se bloquean 90 días y pasan a
-	// ser el instrumento de todas las mediciones, así que se corta acá y se dice qué falta, en vez de
-	// generar y avisar después. Quien sabe lo que hace lo confirma con `confirmMissingCategory`.
-	const category = await libraryCategoryForEntity(data.brandId, data.entityId);
-	if (category === null && data.confirmMissingCategory !== true) {
+	// La categoría con la que se calibra la biblioteca, **antes** de gastar la llamada: sale de la
+	// precedencia declarada > DNA > marcador. Sin categoría, 50 prompts genéricos se bloquean 90 días y
+	// pasan a ser el instrumento de todas las mediciones, así que se corta acá y se dice qué falta —y
+	// dónde declararla— en vez de generar y avisar después. Quien sabe lo que hace lo confirma con
+	// `confirmMissingCategory`.
+	const resolved = await libraryCategoryForEntity(data.brandId, data.entityId);
+	const category = resolved.category;
+	if (resolved.source === "placeholder" && data.confirmMissingCategory !== true) {
 		throw new PromptLibraryError(missingCategoryWarning(brand.name));
 	}
 
@@ -398,7 +406,7 @@ export async function ensurePromptLibraryForEntity(data: EnsurePromptLibraryInpu
 					askedFor: LIBRARY_ASKED_FOR,
 					failure: generated.failure,
 				},
-				generatorInputsFromBrand(brand, category),
+				generatorInputsFromBrand(brand, category, resolved.source),
 			),
 		);
 	}

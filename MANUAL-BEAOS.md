@@ -199,7 +199,7 @@ la forma canónica es `https://beaos.believe-global.com/app/default/<pantalla>`.
 | Saber si los asistentes te **prefieren** | **APS** (`/agent-preference`) | Biblioteca de prompts, estimación de costo, corrida y APS por modelo con banda y P10–P90 |
 | Saber qué hacer y quién lo hace | **Plan** (`/blueprint`) | 36 tarjetas en 4 grupos, con pasos, detalle exacto y cómo verificar cada una |
 | Generar el documento para el cliente | **Reports** (`/reports`) | Reporte con Share of Voice y una página **Agent Readiness** con AOS y APS |
-| Configurar la marca | **Settings → Brand** (`/settings/brand`) | Nombre, web, dominios adicionales, alias, mercado objetivo e idioma objetivo |
+| Configurar la marca | **Settings → Brand** (`/settings/brand`) | Nombre, web, dominios adicionales, alias, mercado objetivo, idioma objetivo y **categoría** |
 | Elegir contra quién se compara | **Settings → Competitors** (`/settings/competitors`) | Lista de competidores |
 | Cargar o editar las preguntas del monitoreo | **Settings → Prompts** (`/settings/prompts`) | Texto y habilitación de cada prompt |
 | Elegir qué modelos se consultan | **Settings → LLMs** (`/settings/llms`) | Modelos habilitados por marca |
@@ -506,7 +506,21 @@ cita a un competidor desde su propio sitio y a vos desde un tercero, hay un huec
 ### 6.10 Settings
 
 - **Brand** — nombre, web, dominios adicionales, alias, **mercado objetivo** e **idioma objetivo**,
-  productos y servicios. **El idioma importa:** todo lo que BeAOS genera con IA sale en ese idioma.
+  productos y servicios, y **categoría**. **El idioma importa:** todo lo que BeAOS genera con IA sale en ese idioma.
+  - **La categoría se declara acá, no en Maasy.** Es un campo de BeAOS (columna `brands.category`) y es
+    la que **calibra las preguntas de compra del APS** (§6.6). Existe para que BeAOS pueda medir
+    clientes que **no están en Maasy**: sin ella, la única fuente era el `industry` del DNA, y una marca
+    sin proyecto de Maasy —BeAOS y BeScore, por ejemplo— terminaba calibrada con el marcador genérico
+    `marketing/software`, que es falso para una plataforma de AOS y para un fabricante de camiones.
+  - **La precedencia es: categoría declarada en BeAOS → `industry` del DNA de Maasy → marcador
+    genérico.** Si la marca declara su categoría acá, manda esa. Si la dejás vacía, se usa la del DNA.
+    Si no hay ninguna de las dos, el APS **no gasta la llamada**: avisa que la biblioteca puede salir
+    mal calibrada y hay que confirmar a mano. Con categoría declarada ese aviso **no aparece**.
+  - **La sugerencia no es un guardado.** Si el DNA de Maasy ya trae `industry`, el campo la muestra
+    como sugerencia con un botón **"Usar esa"**: el que ya tiene Maasy no la escribe dos veces, y el
+    que no lo tiene la declara a mano. Se guarda recién cuando apretás **Save Changes**.
+  - Para **borrar** la categoría, vaciá el campo y guardá: queda sin declarar (y vuelve a aplicar la
+    del DNA, si hay).
 - **Competitors** — contra quién se compara.
 - **Prompts** — las preguntas del monitoreo de visibilidad. Cada prompt tiene su **página de detalle**
   (`/app/<marca>/prompts/<id>`) con sus estadísticas y su historial de corridas: ahí se ve qué respondió

@@ -40,13 +40,25 @@ export interface LibraryPromptInput {
 }
 
 /**
- * La categoría con la que se calibra la biblioteca, leída de donde la marca **ya** la declara.
+ * La forma canónica de una categoría declarada: texto, sin espacios sobrantes, no vacío.
+ *
+ * Es la única normalización que existe para las dos fuentes (BeAOS y Maasy): si cada una recortara a
+ * su manera, una categoría con espacios pasaría en una puerta y no en la otra, y la biblioteca se
+ * calibraría distinto según de dónde viniera.
+ */
+export function normalizeLibraryCategory(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * La categoría con la que se calibra la biblioteca, leída del contexto de marca de Maasy.
  *
  * El campo es `industry`, y no es una invención de este módulo: es el que el contexto de marca trae
  * (`MaasyBrandContext.industry`, la clave de arriba del payload que BeAOS guarda en
  * `agent_brand_dna_snapshots.payload`) y el mismo que ya viaja al `brand.json` servido como
- * `brand.industry` en `generateAgentAssets`. Si acá se leyera otro campo, la biblioteca se
- * calibraría con una categoría distinta de la que la marca declara a los agentes.
+ * `brand.industry` en `generateAgentAssets`.
  *
  * Devuelve `null` —nunca un marcador— cuando la marca no la declara o viene vacía: quien llama
  * decide qué decir, y decir "no la declaró" es distinto de inventar una. Una biblioteca calibrada
@@ -54,10 +66,53 @@ export interface LibraryPromptInput {
  * opción aceptable.
  */
 export function categoryFromBrandContext(payload: Record<string, unknown> | null | undefined): string | null {
-	const industry = payload?.industry;
-	if (typeof industry !== "string") return null;
-	const trimmed = industry.trim();
-	return trimmed.length > 0 ? trimmed : null;
+	return normalizeLibraryCategory(payload?.industry);
+}
+
+/** De dónde salió la categoría con la que se calibra la biblioteca. */
+export type LibraryCategorySource = "declared" | "dna" | "placeholder";
+
+export interface ResolvedLibraryCategory {
+	/**
+	 * La categoría efectiva. `null` significa que la marca no la declara por ninguna vía; quien llama
+	 * decide si avisa o si genera con `CATEGORY_PLACEHOLDER`, pero **no puede inventar una**.
+	 */
+	category: string | null;
+	source: LibraryCategorySource;
+}
+
+/**
+ * La categoría con la que se calibra la biblioteca, con la **precedencia explícita**. El orden es la
+ * regla, no un detalle de implementación:
+ *
+ *  1. **`declared`** — la categoría que la marca declara en BeAOS (columna `brands.category`,
+ *     editable en Configuración → Brand). Manda sobre todo lo demás porque es la que un humano
+ *     escribió para **esta** marca en **este** producto, y es la única que existe cuando la marca no
+ *     está en Maasy: BeAOS tiene que poder medir clientes que no son de Maasy, y con el DNA como
+ *     única fuente la biblioteca de esos clientes salía calibrada con el marcador genérico.
+ *  2. **`dna`** — el `industry` del último DNA sincronizado. Es la red de seguridad para quien ya
+ *     tiene Maasy: no tiene que escribir la categoría dos veces. Se usa **solo** si la marca no la
+ *     declaró en BeAOS, porque una declaración explícita siempre gana a un dato heredado.
+ *  3. **`placeholder`** — ninguna de las dos. `category` vuelve `null` y `source` lo dice, para que
+ *     quien llama muestre el aviso de que puede salir mal calibrada en vez de calibrar en silencio
+ *     con `CATEGORY_PLACEHOLDER`.
+ *
+ * Los tres casos se resuelven acá y no en la pantalla a propósito: la puerta de la UI y la del MCP
+ * tienen que resolver igual, o la misma marca generaría dos bibliotecas calibradas distinto.
+ */
+export function resolveLibraryCategory(input: {
+	/** La categoría declarada en BeAOS (`brands.category`). */
+	declared?: unknown;
+	/** El payload del DNA de Maasy, de donde sale `industry`. */
+	dna?: Record<string, unknown> | null | undefined;
+}): ResolvedLibraryCategory {
+	const declared = normalizeLibraryCategory(input.declared);
+	if (declared !== null) return { category: declared, source: "declared" };
+
+	const inherited = categoryFromBrandContext(input.dna);
+	if (inherited !== null) return { category: inherited, source: "dna" };
+
+	return { category: null, source: "placeholder" };
 }
 
 export type RejectionReason = "empty" | "names_brand" | "duplicate" | "unknown_kind" | "unknown_funnel_stage";

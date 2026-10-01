@@ -5,7 +5,7 @@
  */
 
 import { IconInfoCircle } from "@tabler/icons-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate, useRouteContext } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
 import { DATAFORSEO_LANGUAGES } from "@workspace/lib/languages";
@@ -32,6 +32,7 @@ import { citationKeys } from "@/hooks/use-citations";
 import { dashboardKeys } from "@/hooks/use-dashboard-summary";
 import { cleanAndValidateDomain } from "@/lib/domain-categories";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
+import { getBrandCategorySuggestionFn } from "@/server/agent-aps";
 import { deleteBrandFn, updateBrandFn } from "@/server/brands";
 
 export const Route = createFileRoute("/_authed/app/$brand/settings/brand")({
@@ -66,6 +67,7 @@ function BrandSettingsPage() {
 	const [marketOverride, setMarketOverride] = useState<string | null>(null);
 	const [languageOverride, setLanguageOverride] = useState<string | null>(null);
 	const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null);
+	const [categoryOverride, setCategoryOverride] = useState<string | null>(null);
 	const [isDeleting, setIsDeleting] = useState(false);
 	const navigate = useNavigate();
 	const context = useRouteContext({ strict: false }) as { clientConfig?: ClientConfig };
@@ -76,6 +78,25 @@ function BrandSettingsPage() {
 	const targetMarket = marketOverride ?? brand?.targetMarket ?? "";
 	const targetLanguage = languageOverride ?? brand?.targetLanguage ?? "";
 	const shortDescription = descriptionOverride ?? brand?.shortDescription ?? "";
+	const category = categoryOverride ?? brand?.category ?? "";
+
+	/**
+	 * La categoría que trae el DNA de Maasy, para **sembrarla** en el campo. Es solo una sugerencia:
+	 * no se guarda hasta que el operador la confirme (el clic la pone en el campo y el guardado es el
+	 * "Save Changes" del formulario). El que ya tiene Maasy no la escribe dos veces; el que no lo tiene
+	 * la declara a mano.
+	 */
+	const suggestion = useQuery({
+		queryKey: ["brand-category-suggestion", brand?.id],
+		queryFn: () => getBrandCategorySuggestionFn({ data: { brandId: brand?.id ?? "" } }),
+		enabled: Boolean(brand?.id),
+		staleTime: 60_000,
+	});
+	/** El DNA propone una categoría y la marca todavía no declaró ninguna: hay algo que sembrar. */
+	const suggestedCategory =
+		category.trim().length === 0 && (suggestion.data?.dnaCategory ?? null) !== null
+			? (suggestion.data?.dnaCategory as string)
+			: null;
 
 	/** Drop the overrides so the freshly saved server values take over again. */
 	const clearOverrides = () => {
@@ -84,6 +105,7 @@ function BrandSettingsPage() {
 		setMarketOverride(null);
 		setLanguageOverride(null);
 		setDescriptionOverride(null);
+		setCategoryOverride(null);
 	};
 
 	const validateDomain = useCallback((val: string): true | string => {
@@ -148,6 +170,9 @@ function BrandSettingsPage() {
 					targetMarket: targetMarket || undefined,
 					targetLanguage: targetLanguage || undefined,
 					shortDescription: shortDescription || undefined,
+					// Se manda siempre, incluso vacía: borrar la categoría es una acción y el servidor la
+					// distingue de "no la toques" (ver normalizeBrandUpdate).
+					category,
 					additionalDomains,
 					aliases,
 				},
@@ -242,6 +267,59 @@ function BrandSettingsPage() {
 							className="min-h-[100px]"
 						/>
 						<p className="text-xs text-muted-foreground">Briefly describe what your brand does.</p>
+					</div>
+
+					{/*
+					 * Campo agregado por BeAOS (no viene del upstream de Getcito): la categoría de la marca,
+					 * declarada acá y no dependiente de Maasy. Es la que calibra la biblioteca de preguntas de
+					 * compra del APS. Va en inglés el contenedor heredado, en español el campo nuevo —es
+					 * vocabulario de BeAOS— para no reescribir la pantalla entera.
+					 */}
+					<div className="space-y-2">
+						<Label className="flex items-center gap-1.5" htmlFor="category">
+							Categoría
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+								</TooltipTrigger>
+								<TooltipContent className="max-w-xs text-xs font-normal">
+									La categoría de la marca (por ejemplo, <strong>Automotriz</strong> o{" "}
+									<strong>Plataformas de AOS</strong>). Es con la que se calibran las{" "}
+									<strong>preguntas de compra</strong> del APS. Si la declarás acá, manda esta; si no, se usa la del DNA
+									de Maasy; y si tampoco hay, un marcador genérico que puede dejar la biblioteca mal calibrada.
+								</TooltipContent>
+							</Tooltip>
+						</Label>
+						<Input
+							id="category"
+							name="category"
+							type="text"
+							placeholder="E.g. Automotriz"
+							value={category}
+							onChange={(e) => setCategoryOverride(e.target.value)}
+							disabled={isSubmitting}
+						/>
+						{suggestedCategory !== null ? (
+							<p className="text-xs text-muted-foreground">
+								El DNA de Maasy trae «{suggestedCategory}».{" "}
+								<Button
+									type="button"
+									variant="link"
+									size="sm"
+									className="h-auto p-0 text-xs"
+									onClick={() => setCategoryOverride(suggestedCategory)}
+									disabled={isSubmitting}
+								>
+									Usar esa
+								</Button>{" "}
+								— se guarda recién cuando guardás los cambios.
+							</p>
+						) : (
+							<p className="text-xs text-muted-foreground">
+								La categoría con la que se calibran las preguntas de compra del APS. Si la dejás vacía, se usa la del
+								DNA de Maasy.
+							</p>
+						)}
 					</div>
 
 					<div className="space-y-2">

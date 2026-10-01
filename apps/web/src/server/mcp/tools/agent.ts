@@ -62,6 +62,7 @@ const listBrands: McpTool = {
 				additionalDomains: brands.additionalDomains,
 				targetMarket: brands.targetMarket,
 				targetLanguage: brands.targetLanguage,
+				category: brands.category,
 			})
 			.from(brands)
 			.orderBy(desc(brands.createdAt))
@@ -109,6 +110,7 @@ const getBrand: McpTool = {
 				aliases: brand.aliases,
 				targetMarket: brand.targetMarket,
 				targetLanguage: brand.targetLanguage,
+				category: brand.category,
 			},
 			entities: entities.map((entity) => ({
 				...entity,

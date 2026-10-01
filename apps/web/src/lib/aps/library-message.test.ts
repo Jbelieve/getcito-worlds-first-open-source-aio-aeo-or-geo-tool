@@ -19,15 +19,19 @@ import {
 	rejectionSummary,
 } from "./library-message";
 
-/** La marca declara categoría: es el caso de una marca bien configurada. */
+/** La marca declara categoría en BeAOS: es el caso de una marca bien configurada. */
 const INPUTS: GeneratorInputs = {
 	received: ["la descripción corta", "los productos y servicios", "las palabras clave"],
 	missing: [],
 	category: "Automotriz",
+	categorySource: "declared",
 };
 
+/** La marca no la declara en BeAOS pero su DNA de Maasy trae `industry`. */
+const INPUTS_CATEGORIA_DNA: GeneratorInputs = { ...INPUTS, categorySource: "dna" };
+
 /** La marca no la declara: el generador calibra con el marcador genérico. */
-const INPUTS_SIN_CATEGORIA: GeneratorInputs = { ...INPUTS, category: null };
+const INPUTS_SIN_CATEGORIA: GeneratorInputs = { ...INPUTS, category: null, categorySource: "placeholder" };
 
 function report(overrides: Partial<LibraryGenerationReport> = {}): LibraryGenerationReport {
 	return { returned: 6, usable: 6, rejected: [], askedFor: 50, failure: null, ...overrides };
@@ -114,6 +118,24 @@ describe("los insumos que el generador no recibió", () => {
 
 	it("cuando la categoría falta, dice que la biblioteca puede salir mal calibrada", () => {
 		expect(generatorInputsNote(INPUTS_SIN_CATEGORIA)).toMatch(/mal calibrada/i);
+	});
+
+	/**
+	 * El test que fija la precedencia de punta a punta del mensaje: **sin** categoría el aviso de "puede
+	 * salir mal calibrada" aparece, y **con** categoría declarada no aparece. Es la diferencia entre
+	 * avisar de verdad y avisar siempre —un aviso que sale siempre no lo lee nadie.
+	 */
+	it("sin categoría el aviso de mal calibrada aparece, y con categoría declarada NO", () => {
+		expect(generatorInputsNote(INPUTS_SIN_CATEGORIA)).toMatch(/mal calibrada/i);
+		expect(generatorInputsNote(INPUTS)).not.toMatch(/mal calibrada/i);
+		expect(generatorInputsNote(INPUTS)).not.toContain(CATEGORY_PLACEHOLDER);
+		expect(generatorInputsNote(INPUTS)).toContain("Automotriz");
+	});
+
+	it("distingue la categoría declarada en BeAOS de la heredada del DNA", () => {
+		expect(generatorInputsNote(INPUTS)).toMatch(/la declara la marca en BeAOS/i);
+		expect(generatorInputsNote(INPUTS_CATEGORIA_DNA)).toMatch(/DNA de Maasy/i);
+		expect(generatorInputsNote(INPUTS_CATEGORIA_DNA)).not.toMatch(/mal calibrada/i);
 	});
 
 	it("cuando la categoría viene, la nombra en vez de hablar del marcador", () => {
