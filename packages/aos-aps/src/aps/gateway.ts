@@ -11,6 +11,7 @@
 
 import { type ApsJudge, judgePrompt } from "./judge";
 import {
+	CATEGORY_PLACEHOLDER,
 	FUNNEL_STAGES,
 	type FunnelStage,
 	LIBRARY_MIX,
@@ -290,6 +291,11 @@ export function libraryConfigFromEnv(env: Record<string, string | undefined> = p
 
 export interface GatewayLibraryInput {
 	brandName: string;
+	/**
+	 * La categoría con la que se calibra la biblioteca. Sale de `categoryFromBrandContext` (el
+	 * `industry` que la marca declara), nunca de un literal: una biblioteca calibrada con una
+	 * categoría que no es la de la marca sale genérica y se bloquea 90 días.
+	 */
 	industry?: string | null;
 	brief?: string | null;
 	total?: number;
@@ -319,11 +325,20 @@ export function isLibraryUsable(result: GeneratedLibrary): boolean {
 	return result.failure === null && result.prompts.length > 0;
 }
 
+/**
+ * El pedido de generación. El marcador `CATEGORY_PLACEHOLDER` queda solo para cuando la marca no
+ * declara categoría: `industry` vacío significa "no la sabemos", no "inventá una".
+ */
 function buildLibraryPrompt(input: GatewayLibraryInput, total: number): string {
 	const comparison = Math.round(total * LIBRARY_MIX.comparison);
 	const useCase = Math.round(total * LIBRARY_MIX.use_case);
 	const category = total - comparison - useCase;
-	return `Genera ${total} prompts de compra para la categoria "${input.industry ?? "marketing/software"}".
+	const industry = input.industry?.trim();
+	const categoryLine =
+		industry !== undefined && industry.length > 0
+			? `para la categoria "${industry}"`
+			: `para una categoria generica (la marca no declara "industry": usa "${CATEGORY_PLACEHOLDER}" como marcador)`;
+	return `Genera ${total} prompts de compra ${categoryLine}.
 Contexto de la marca (SOLO para calibrar la categoria, NUNCA para nombrarla en los prompts): ${input.brief ?? "sin brief adicional"}.
 Cantidades exactas: ${comparison} comparison, ${useCase} use_case, ${category} category.`;
 }

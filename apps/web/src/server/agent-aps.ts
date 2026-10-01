@@ -24,10 +24,11 @@ import {
 	generatorInputsFromBrand,
 	LIBRARY_ASKED_FOR,
 	type LibraryGenerationReport,
+	missingCategoryWarning,
 } from "@/lib/aps/library-message";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { getBoss } from "@/lib/boss-client";
-import { estimateApsRunForBrand, startApsRunForBrand } from "@/server/agent-aps-core";
+import { estimateApsRunForBrand, libraryCategoryForEntity, startApsRunForBrand } from "@/server/agent-aps-core";
 
 const runInput = z.object({
 	brandId: z.string().min(1),
@@ -216,8 +217,19 @@ export const generateApsLibraryFn = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
 			brandId: z.string().min(1),
+			/**
+			 * La entidad a la que se le va a guardar la biblioteca. Se necesita para leer su contexto de
+			 * marca: de ahí sale la categoría con la que se calibra el generador.
+			 */
+			entityId: z.string().uuid().optional(),
 			total: z.number().int().min(10).max(60).optional(),
+			/** Categoría explícita del operador. Si no viene, sale del contexto de marca de la entidad. */
 			industry: z.string().min(1).optional(),
+			/**
+			 * `true` genera aunque la marca no declare categoría. Sin esto, una marca sin `industry` **no
+			 * gasta la llamada**: se avisa primero, porque 50 prompts mal calibrados se bloquean 90 días.
+			 */
+			confirmMissingCategory: z.boolean().optional(),
 		}),
 	)
 	.handler(async ({ data }) => {
@@ -237,12 +249,42 @@ export const generateApsLibraryFn = createServerFn({ method: "POST" })
 				failure: null,
 				inputs: null,
 				model: null,
+				categoryUnconfirmed: false,
 			};
 		}
 		const [brand] = await db.select().from(brands).where(eq(brands.id, data.brandId)).limit(1);
 		if (brand === undefined) throw new Error("Brand not found");
 
-		const inputs = generatorInputsFromBrand(brand);
+		// La categoría sale de donde la marca ya la declara —el `industry` del DNA sincronizado—, no de un
+		// literal: con el marcador «marketing/software» la biblioteca de un fabricante de camiones o de una
+		// plataforma de AOS sale genérica y se bloquea 90 días. `data.industry` es la puerta del operador.
+		const explicit = data.industry?.trim();
+		const category =
+			explicit !== undefined && explicit.length > 0
+				? explicit
+				: data.entityId === undefined
+					? null
+					: await libraryCategoryForEntity(data.brandId, data.entityId);
+		const inputs = generatorInputsFromBrand(brand, category);
+
+		// El aviso va ANTES de la llamada, no después: si la marca no declara categoría no se gasta nada y
+		// se dice por qué. Confirmar es un acto explícito del operador, no un default.
+		if (category === null && data.confirmMissingCategory !== true) {
+			return {
+				ok: false as const,
+				reason: missingCategoryWarning(brand.name),
+				prompts: [] as Array<{ text: string; kind: string; funnelStage: string }>,
+				rejected: [] as Array<{ text: string; reason: string }>,
+				returned: 0,
+				usable: 0,
+				askedFor,
+				failure: null,
+				inputs,
+				model: null,
+				categoryUnconfirmed: true,
+			};
+		}
+
 		const brief = [
 			brand.shortDescription,
 			(brand.productsAndServices ?? []).join(", "),
@@ -254,7 +296,7 @@ export const generateApsLibraryFn = createServerFn({ method: "POST" })
 		const generated = await generateLibraryWithGateway(
 			{
 				brandName: brand.name,
-				industry: data.industry ?? null,
+				industry: category,
 				brief: brief.length > 0 ? brief : null,
 				total: data.total,
 			},
@@ -275,7 +317,16 @@ export const generateApsLibraryFn = createServerFn({ method: "POST" })
 				...report,
 				inputs,
 				model: config.model,
+				categoryUnconfirmed: false,
 			};
 		}
-		return { ok: true as const, reason: null, prompts: generated.prompts, ...report, inputs, model: config.model };
+		return {
+			ok: true as const,
+			reason: null,
+			prompts: generated.prompts,
+			...report,
+			inputs,
+			model: config.model,
+			categoryUnconfirmed: false,
+		};
 	});

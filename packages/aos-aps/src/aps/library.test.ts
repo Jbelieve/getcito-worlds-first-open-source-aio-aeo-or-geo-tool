@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+	CATEGORY_PLACEHOLDER,
+	canRegenerateLibrary,
+	categoryFromBrandContext,
+	isLibraryLocked,
+	isUnaided,
 	LIBRARY_LOCK_DAYS,
 	LIBRARY_MIX,
 	type LibraryPromptInput,
-	canRegenerateLibrary,
-	isLibraryLocked,
-	isUnaided,
 	libraryLockWindow,
 	validateLibrary,
 } from "./library";
@@ -123,5 +125,40 @@ describe("library lock", () => {
 		const superseded = canRegenerateLibrary(lock, new Date("2026-02-01T00:00:00Z"), true);
 		expect(superseded.allowed).toBe(true);
 		expect(superseded.reason).toContain("serie nueva");
+	});
+});
+
+/**
+ * La categoría con la que se calibra la biblioteca.
+ *
+ * El bug que cierra: `buildLibraryPrompt` caía al literal "marketing/software" porque ninguna puerta
+ * le pasaba la categoría, así que la biblioteca de un fabricante de camiones se calibraba como la de
+ * una consultora de marketing. El campo real es `industry`, el mismo que BeAOS publica en el
+ * `brand.json`; y cuando la marca no lo declara hay que decirlo, no inventarlo.
+ */
+describe("categoryFromBrandContext", () => {
+	it("lee el campo industry que la marca declara", () => {
+		expect(categoryFromBrandContext({ industry: "Automotriz" })).toBe("Automotriz");
+		expect(categoryFromBrandContext({ industry: "  Media y Publicidad  " })).toBe("Media y Publicidad");
+	});
+
+	it("no inventa una categoría cuando la marca no la declara", () => {
+		expect(categoryFromBrandContext({})).toBeNull();
+		expect(categoryFromBrandContext(undefined)).toBeNull();
+		expect(categoryFromBrandContext(null)).toBeNull();
+		// El DNA real de BeAOS trae `industry` como string vacío: eso es "no la declara", no "una
+		// categoría sin nombre".
+		expect(categoryFromBrandContext({ industry: "" })).toBeNull();
+		expect(categoryFromBrandContext({ industry: "   " })).toBeNull();
+	});
+
+	it("no acepta un industry que no sea texto", () => {
+		expect(categoryFromBrandContext({ industry: 42 })).toBeNull();
+		expect(categoryFromBrandContext({ industry: ["a"] })).toBeNull();
+		expect(categoryFromBrandContext({ industry: { name: "Automotriz" } })).toBeNull();
+	});
+
+	it("el marcador no es la categoría de nadie: se usa solo cuando no hay ninguna", () => {
+		expect(categoryFromBrandContext({ industry: CATEGORY_PLACEHOLDER })).toBe(CATEGORY_PLACEHOLDER);
 	});
 });

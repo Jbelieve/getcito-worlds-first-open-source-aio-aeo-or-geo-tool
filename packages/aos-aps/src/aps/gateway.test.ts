@@ -12,6 +12,7 @@ import {
 	libraryMaxTokensFromEnv,
 	readGatewayBudget,
 } from "./gateway";
+import { CATEGORY_PLACEHOLDER } from "./library";
 
 const CONFIG = { url: "https://gateway.test/v1", key: "gw-key", model: "believe-deep", version: "deepseek-flash-4.1" };
 
@@ -218,6 +219,31 @@ describe("generateLibraryWithGateway", () => {
 		// gastó 7.153 (87%) y una corrida mala se corta. El default tiene margen, no es el mínimo.
 		expect(body.max_tokens).toBe(LIBRARY_MAX_TOKENS);
 		expect(LIBRARY_MAX_TOKENS).toBeGreaterThan(8000);
+	});
+
+	it("manda la categoría de la marca en el pedido", async () => {
+		let body = "";
+		const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+			body = String(init?.body);
+			return libraryResponse([{ text: "x", kind: "category", funnel_stage: "awareness" }]);
+		}) as unknown as typeof fetch;
+		await generateLibraryWithGateway({ brandName: "VW", industry: "Camiones y buses" }, libraryConfig, fetchImpl);
+		expect(body).toContain("Camiones y buses");
+		expect(body).not.toContain(CATEGORY_PLACEHOLDER);
+	});
+
+	it("sin categoría declarada dice que usa el marcador, en vez de inventar una categoría", async () => {
+		const bodies: string[] = [];
+		const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+			bodies.push(String(init?.body));
+			return libraryResponse([{ text: "x", kind: "category", funnel_stage: "awareness" }]);
+		}) as unknown as typeof fetch;
+		await generateLibraryWithGateway({ brandName: "F", industry: null }, libraryConfig, fetchImpl);
+		await generateLibraryWithGateway({ brandName: "F", industry: "   " }, libraryConfig, fetchImpl);
+		for (const body of bodies) {
+			expect(body).toContain(CATEGORY_PLACEHOLDER);
+			expect(body).toMatch(/no declara/);
+		}
 	});
 
 	it("accepts a camelCase funnel stage and drops invalid candidates", async () => {
