@@ -39,10 +39,44 @@ export interface GatewayJudgeConfig {
 /** Measured default: enough for the reasoning plus the verdict, with headroom. */
 export const JUDGE_MAX_TOKENS = 3000;
 /**
- * Measured default for a full library: 50 prompts spent ~3.7k tokens reasoning and ~6.3k writing,
- * so 4000 truncated the JSON and the whole generation was thrown away.
+ * El tope propio de la biblioteca, y por qué es este número.
+ *
+ * El modelo que escribe la biblioteca **razona**, y el razonamiento se cobra contra este mismo tope:
+ * el JSON no empieza hasta que el modelo termina de pensar. Medido contra el gateway real
+ * (`believe-smart` = deepseek-flash, 2026-10-01, contextos reales de BeAOS y de Believe):
+ *
+ *   - Diez corridas: salida total 3.4k–8.0k tokens, de los cuales 1.5k–5.4k fueron razonamiento. El
+ *     razonamiento varió **3x** entre corridas del mismo prompt: la varianza es el problema, no el
+ *     promedio.
+ *   - Con el tope viejo (8.000) la peor corrida gastó **7.958: quedó a 42 tokens del borde**. La
+ *     peor con el contexto de BeAOS gastó 7.153 (87%). Margen cero: el tope se agotaba por azar.
+ *   - Cuando el razonamiento se come el presupuesto la respuesta se corta: `finish_reason=length`,
+ *     el JSON queda abierto a la mitad y no hay biblioteca. Eso es lo que se reportó con BeAOS.
+ *
+ * 32.000 es **4x la peor corrida medida** y 4x el tope que quedaba al borde: deja ~24k para el
+ * razonamiento (4,5x lo peor visto) más el JSON de 50 prompts (~2–3k medidos). **No es "el mínimo que
+ * funcionó hoy"**: el mínimo que funcionó hoy es exactamente el número que se corta mañana, porque el
+ * razonamiento no está acotado y ya se midió al 99,5% del tope viejo.
+ *
+ * El techo del modelo no es la restricción: `/v1/model/info` del gateway reporta
+ * `max_output_tokens: 393216` para las tres bandas, así que 32.000 es el 8% de lo que el modelo
+ * acepta. El costo tampoco: a US$6e-7 por token de salida, agotar el tope entero cuesta ~US$0,02 y
+ * una corrida real de 50 prompts rondó los US$0,003.
  */
-export const LIBRARY_MAX_TOKENS = 8000;
+export const LIBRARY_MAX_TOKENS = 32000;
+
+/**
+ * El tope de la biblioteca, configurable por entorno.
+ *
+ * Existe para poder ajustarlo **sin desplegar**, que es lo que hace falta el día que cambie el
+ * modelo detrás de la banda o el largo del contexto de marca: las dos cosas mueven el número, y
+ * esperar un deploy para corregirlo deja el botón roto mientras tanto. Un valor ausente, vacío o no
+ * numérico cae al default medido; un valor explícito manda, aunque sea más chico.
+ */
+export function libraryMaxTokensFromEnv(env: Record<string, string | undefined> = process.env): number {
+	const parsed = Number.parseInt(env.APS_LIBRARY_MAX_TOKENS?.trim() ?? "", 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : LIBRARY_MAX_TOKENS;
+}
 
 /** Distinguishes this JSON-mode judge from MAASY's tool-call judge in the persisted series. */
 export const GATEWAY_JUDGE_PIPELINE_VERSION = "gateway-json-v1";
@@ -241,6 +275,7 @@ Reglas duras:
  * calibrado para un veredicto corto (3000 en producción) y escribir 50 prompts con un modelo que
  * razona no entra ahí — el razonamiento se come el presupuesto, el JSON queda abierto y no hay
  * biblioteca. Medido: con 3000 no salió ninguna en 8 intentos; con el tope propio, 50/50 en 4 de 4.
+ * El default y su variable viven con `LIBRARY_MAX_TOKENS` (arriba), no con las del juez.
  */
 export function libraryConfigFromEnv(env: Record<string, string | undefined> = process.env): GatewayJudgeConfig | null {
 	const judge = judgeConfigFromEnv(env);
@@ -249,7 +284,7 @@ export function libraryConfigFromEnv(env: Record<string, string | undefined> = p
 	return {
 		...judge,
 		model: model !== undefined && model.length > 0 ? model : "believe-smart",
-		maxTokens: LIBRARY_MAX_TOKENS,
+		maxTokens: libraryMaxTokensFromEnv(env),
 	};
 }
 

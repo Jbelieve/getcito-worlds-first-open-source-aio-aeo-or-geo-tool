@@ -154,6 +154,13 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 			"Overrides which provider runs brand analysis and other structured research, as a model:provider entry (e.g. chatgpt:olostep). Defaults to the first configured direct API provider.",
 	},
 	{
+		name: "APS_LIBRARY_MAX_TOKENS",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Tope de tokens con el que se le pide la biblioteca APS al gateway (default 32000). Es propio y NO hereda APS_JUDGE_MAX_TOKENS: el modelo de la biblioteca razona, el razonamiento se cobra contra este mismo tope y un tope de veredicto corto deja el JSON de 50 prompts abierto a la mitad. Existe para poder ajustarlo sin desplegar cuando cambien la banda del modelo o el largo del contexto de marca. Un valor ausente, vacío o no numérico cae al default medido; uno explícito manda.",
+	},
+	{
 		name: "OLOSTEP_API_KEY",
 		scope: "server",
 		requiredBy: "dynamic-scrape-targets",
