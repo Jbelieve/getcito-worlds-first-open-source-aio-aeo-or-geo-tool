@@ -113,11 +113,16 @@ export function linkByRel(links: ParsedLink[], rel: string): string | undefined 
 	return undefined;
 }
 
-/** Resuelve una URL declarada contra el origen. Un valor relativo vale; uno inventado no. */
-function resolveUrl(value: unknown, origin: string): string | undefined {
+/**
+ * Resuelve una URL declarada contra una base. Un valor relativo vale; uno inventado no.
+ *
+ * La base la elige el contrato del campo que la declara: un `Link` del home (RFC 8288) se resuelve
+ * contra el propio home, y un `servers[].url` de OpenAPI contra la URL del documento.
+ */
+function resolveUrl(value: unknown, base: string): string | undefined {
 	if (typeof value !== "string" || value.trim().length === 0) return undefined;
 	try {
-		return new URL(value.trim(), origin).toString();
+		return new URL(value.trim(), base).toString();
 	} catch {
 		return undefined;
 	}
@@ -126,14 +131,22 @@ function resolveUrl(value: unknown, origin: string): string | undefined {
 /**
  * La API que la marca declara en su descripcion OpenAPI, ya derivada.
  *
- * `apiDocsUrl` cae en `/developers` cuando la marca no la declara: es la convencion que la propia
- * consigna pide, no un endpoint que inventemos. `apiStatusUrl` solo viaja si la marca lo declaro en un
- * `Link rel="status"`: sin dato no se emite, y el generador ya sabe omitir campos que faltan.
+ * `apiUrl` sale de `servers[0].url` —la raiz que la propia API declara— y por eso es obligatorio: sin esa
+ * declaracion el documento describe una API pero no dice donde vive, y el `api-catalog` no emite la
+ * entrada. Antes se caia a `${origin}/api/v1`, un prefijo que elegia BeAOS a partir del dominio: un
+ * catalogo que promete una API en una direccion que nadie declaro manda al agente a llamar un endpoint
+ * que puede no existir.
+ *
+ * `apiDocsUrl` y `apiStatusUrl` solo viajan si el sitio los declaro en un `Link` de su home: `/developers`
+ * era la misma convencion inventada, no una declaracion. El generador ya sabe omitir campos que faltan.
+ *
+ * Un `servers[0].url` relativo se resuelve contra la URL del documento, no contra el origen: la spec de
+ * OpenAPI lo define asi, y con el origen un `v2` servido bajo `/api/` publicaba `/v2`.
  */
 export interface DeclaredApi {
 	apiUrl: string;
 	openApiUrl: string;
-	apiDocsUrl: string;
+	apiDocsUrl?: string;
 	apiStatusUrl?: string;
 }
 
@@ -142,7 +155,8 @@ export interface DeclaredApi {
  *
  * Devolver `undefined` cuando el JSON no trae `openapi` es la regla del bundle: un documento que
  * responde 200 pero no es una descripcion de API no declara ninguna API, y el `api-catalog` (RFC 9727)
- * no puede emitirse por el solo hecho de que exista una URL.
+ * no puede emitirse por el solo hecho de que exista una URL. Lo mismo vale cuando el documento es
+ * OpenAPI pero no declara su raiz en `servers`.
  */
 export function apiFromOpenApiDocument(
 	document: unknown,
@@ -155,20 +169,25 @@ export function apiFromOpenApiDocument(
 	const record = document as Record<string, unknown>;
 	if (typeof record.openapi !== "string" || record.openapi.trim().length === 0) return undefined;
 
-	// `servers[0].url` es la raiz que la propia API declara; si no la hay, se cae al prefijo
-	// convencional del origen en vez de inventar un host.
+	// `servers[0].url` es la raiz que la propia API declara, y la unica fuente posible del endpoint: si no
+	// la declara, se omite la entrada en vez de completarla con el prefijo convencional del origen. Un
+	// valor relativo se resuelve contra la URL del documento, que es lo que manda la spec de OpenAPI:
+	// resolverlo contra el origen publicaba otra direccion que tampoco nadie declaro.
 	const servers = Array.isArray(record.servers) ? record.servers : [];
 	const firstServer = servers.find(
 		(server): server is Record<string, unknown> => typeof server === "object" && server !== null,
 	);
-	const apiUrl = resolveUrl(firstServer?.url, origin) ?? `${origin}/api/v1`;
+	const apiUrl = resolveUrl(firstServer?.url, openApiUrl);
+	if (apiUrl === undefined) return undefined;
 
-	const docsUrl = resolveUrl(declaredDocsUrl, origin) ?? `${origin}/developers`;
+	// El `Link` del home sí se resuelve contra el origen: la RFC 8288 resuelve sus destinos contra la URI
+	// del pedido, que es el home.
+	const docsUrl = resolveUrl(declaredDocsUrl, origin);
 	const statusUrl = resolveUrl(declaredStatusUrl, origin);
 	return {
 		apiUrl,
 		openApiUrl,
-		apiDocsUrl: docsUrl,
+		...(docsUrl === undefined ? {} : { apiDocsUrl: docsUrl }),
 		...(statusUrl === undefined ? {} : { apiStatusUrl: statusUrl }),
 	};
 }
@@ -207,8 +226,10 @@ export async function declaredSecurityContact(websiteUrl: string | undefined): P
  * La API que el sitio YA declara, descubierta como el MCP: primero el `Link rel="service-desc"` del
  * home, despues `/openapi.json` y `/.well-known/openapi.json`.
  *
- * Sin API declarada no se pasa nada y el `api-catalog` no se emite. El generador exige `apiUrl` y
- * `openApiUrl` juntos: un catalogo sin descripcion no lleva a ninguna parte.
+ * Las tres ubicaciones son candidatos que se **piden**: solo cuenta el documento que responde con una
+ * descripcion OpenAPI, y aun asi la entrada se emite unicamente si ese documento declara su raiz en
+ * `servers`. El generador exige `apiUrl` y `openApiUrl` juntos —un catalogo sin descripcion no lleva a
+ * ninguna parte— y `apiUrl` nunca se completa con una convencion.
  */
 export async function declaredApi(websiteUrl: string | undefined): Promise<DeclaredApi | undefined> {
 	if (websiteUrl === undefined) return undefined;
@@ -290,19 +311,25 @@ export async function activePromptQueries(brandId: string, entityId: string, lim
 }
 
 /**
- * Lo que el sitio YA declara sobre su MCP: el endpoint y, cuando los publica, el transporte y sus tools.
+ * Lo que el sitio YA declara sobre su MCP: el endpoint y, cuando los publica, el transporte, sus tools y
+ * la identidad del servidor (nombre, versión y versión de protocolo).
  *
- * BeAOS no inventa endpoints ni capacidades: la única fuente es el `/.well-known/mcp/server-card.json` que
- * el sitio sirve. Si no lo declara —o lo declara sin endpoint— no se emite server-card, y eso es un
- * resultado, no un fallo.
+ * BeAOS no inventa endpoints, capacidades ni protocolos: la única fuente es el
+ * `/.well-known/mcp/server-card.json` que el sitio sirve. Si no lo declara —o lo declara sin endpoint— no
+ * se emite server-card, y eso es un resultado, no un fallo.
  *
  * El campo `url` del card **no** se lee como endpoint: es la identidad del documento, o sea la URL de la
  * landing. Tomarlo como endpoint fue el bug que le declaraba a cada marca su propio sitio como su MCP
- * (`https://be-aos.believe-global.com`, que contesta 405), y un agente lo seguía.
+ * (`https://be-aos.believe-global.com`, que contesta 405), y un agente lo seguía. `url` tampoco se lee
+ * para el transporte ni para la identidad del servidor.
  *
  * Los tools se copian del card en vivo, que es lo que hace útil al server-card: sin ellos el agente sabe
  * dónde está el MCP pero no qué puede pedirle. Si el card no los declara se omite la clave, en vez de
  * emitir una lista vacía que afirmaría que el servidor no tiene ninguno.
+ *
+ * Lo mismo vale para la versión de protocolo y la identidad del servidor: el card las declara y se copian;
+ * si no las declara, se omiten en vez de completarlas con la versión del template o con el nombre de la
+ * marca.
  *
  * El pedido tiene timeout corto: esto corre al apretar "Generar assets", no en un job.
  */
@@ -497,6 +524,9 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 		mcpUrl: mcp?.url,
 		mcpTools: mcp?.tools,
 		mcpTransport: mcp?.transport,
+		mcpProtocolVersion: mcp?.protocolVersion,
+		mcpServerName: mcp?.serverName,
+		mcpServerVersion: mcp?.serverVersion,
 		securityContact,
 		apiUrl: api?.apiUrl,
 		openApiUrl: api?.openApiUrl,
