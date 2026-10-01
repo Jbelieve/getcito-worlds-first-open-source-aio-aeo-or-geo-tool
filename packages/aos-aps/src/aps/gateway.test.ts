@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-	GATEWAY_JUDGE_PIPELINE_VERSION,
 	extractJsonObject,
+	GATEWAY_JUDGE_PIPELINE_VERSION,
 	gatewayJudge,
 	gatewaySpendFromHeaders,
 	generateLibraryWithGateway,
+	isLibraryUsable,
 	judgeConfigFromEnv,
 	readGatewayBudget,
 } from "./gateway";
@@ -228,19 +229,58 @@ describe("generateLibraryWithGateway", () => {
 		expect(result?.rejected).toHaveLength(3);
 	});
 
-	it("returns null instead of half a library", async () => {
+	it("declara la causa en vez de devolver media biblioteca", async () => {
 		const empty = (async () => libraryResponse([])) as unknown as typeof fetch;
-		expect(await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, empty)).toBeNull();
+		expect((await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, empty)).failure).toBe("no_prompts");
 
 		const broken = (async () =>
 			new Response(JSON.stringify({ choices: [{ message: { content: "no es json" } }] }), {
 				status: 200,
 				headers: { "content-type": "application/json" },
 			})) as unknown as typeof fetch;
-		expect(await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, broken)).toBeNull();
+		expect((await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, broken)).failure).toBe("unparseable");
 
 		const failing = (async () => new Response("boom", { status: 500 })) as unknown as typeof fetch;
-		expect(await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, failing)).toBeNull();
+		expect((await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, failing)).failure).toBe("http_error");
+
+		const throwing = (async () => {
+			throw new Error("ECONNREFUSED");
+		}) as unknown as typeof fetch;
+		expect((await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, throwing)).failure).toBe(
+			"network_error",
+		);
+	});
+
+	it("dice que la respuesta se cortó cuando el modelo agotó el tope de tokens", async () => {
+		// Medido en producción (2026-09-30 21:10 UTC): con APS_JUDGE_MAX_TOKENS=3000 el razonamiento
+		// se come el presupuesto, el JSON queda abierto y la ruta devolvía un error genérico.
+		const truncated = (async () =>
+			new Response(
+				JSON.stringify({
+					choices: [
+						{
+							finish_reason: "length",
+							message: { content: '{"prompts":[{"text":"una consulta larga que quedo a me' },
+						},
+					],
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			)) as unknown as typeof fetch;
+
+		const result = await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, truncated);
+		expect(result.failure).toBe("truncated");
+		expect(result.prompts).toEqual([]);
+		expect(isLibraryUsable(result)).toBe(false);
+	});
+
+	it("una biblioteca completa sí es usable", async () => {
+		const fetchImpl = (async () =>
+			libraryResponse([
+				{ text: "consulta de categoria", kind: "category", funnel_stage: "awareness" },
+			])) as unknown as typeof fetch;
+		const result = await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, fetchImpl);
+		expect(result.failure).toBeNull();
+		expect(isLibraryUsable(result)).toBe(true);
 	});
 });
 

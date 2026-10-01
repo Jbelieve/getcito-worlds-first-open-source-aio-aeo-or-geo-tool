@@ -388,8 +388,11 @@ corrida es de la entidad y el resultado es de la entidad. Si no hay entidad, no 
 
 **Paso 1 · Biblioteca de prompts.** Son las preguntas con las que se va a medir, y **no pueden nombrar la
 marca** (una pregunta que la nombra contamina la respuesta y se descarta antes de guardarse). Si la marca no
-tiene, se generan con **Generar 50 prompts de compra**. Revisalos: la calidad de la medición depende de la
-calidad de las preguntas. Después, **Guardar y bloquear 90 días**.
+tiene, se generan con **Generar candidatos (hasta 50)**: el botón le pide 50 al gateway y el gateway devuelve
+los que puede, así que puede volver una lista **más corta** — la pantalla dice cuántos volvieron, cuántos
+quedaron usables y por qué se descartó el resto. Lo que vuelve son **candidatos: no se guardan hasta que
+aprietes Guardar y bloquear 90 días**. Revisalos: la calidad de la medición depende de la calidad de las
+preguntas.
 
 **Paso 2 · Corrida.** Elegí entidad, apretá **Estimar corrida** y **mirá el costo antes de gastar**. Nada se
 ejecuta hasta que aprietes **Confirmar y ejecutar**. Corre **a demanda**: no hay barrido automático.
