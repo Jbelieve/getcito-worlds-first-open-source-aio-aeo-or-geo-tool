@@ -382,6 +382,48 @@ describe("server-card (AOS-CAPA-01)", () => {
 		const assets = generateAgentAssets({ name: "Believe", websiteUrl: "https://believe-global.com", dna });
 		expect(assetByPath(assets, "/.well-known/mcp/server-card.json")).toBeUndefined();
 	});
+
+	it("copia la version de protocolo y la identidad del server que el sitio declara", () => {
+		// El template del estandar pide `2025-06-18`, y por eso estaba escrito a mano en el generador. Pero
+		// el dato correcto es el que el MCP declara: el `initialize` del servidor real de la landing
+		// contesta `2024-11-05` con `serverInfo { name: "aos-mcp", version: "1.0.0" }`. Declarar otro
+		// protocolo es afirmar que el servidor habla algo que no habla.
+		const assets = generateAgentAssets({
+			name: "BeAOS",
+			websiteUrl: LANDING_ORIGIN,
+			dna,
+			mcpUrl: LANDING_ENDPOINT,
+			mcpTransport: "http",
+			mcpProtocolVersion: "2024-11-05",
+			mcpServerName: "aos-mcp",
+			mcpServerVersion: "3.2.1",
+		});
+		const card = JSON.parse(assetByPath(assets, "/.well-known/mcp/server-card.json")?.content ?? "{}");
+		expect(card.protocolVersion).toBe("2024-11-05");
+		expect(card.name).toBe("aos-mcp");
+		expect(card.version).toBe("3.2.1");
+	});
+
+	it("OMITE la version de protocolo y la identidad del server si el sitio no las declara", () => {
+		// El card real de la landing no declara `protocolVersion` ni `version`. Antes la tarjeta afirmaba
+		// `2025-06-18` —la del template— y `1.0.0` —un default—, y tomaba el nombre de la marca como nombre
+		// del server. Las tres eran declaraciones que nadie hizo: se omiten, que es informacion.
+		const assets = generateAgentAssets({
+			name: "BeAOS",
+			websiteUrl: LANDING_ORIGIN,
+			dna,
+			mcpUrl: LANDING_ENDPOINT,
+			mcpTransport: "http",
+		});
+		const card = JSON.parse(assetByPath(assets, "/.well-known/mcp/server-card.json")?.content ?? "{}");
+		expect(card).not.toHaveProperty("protocolVersion");
+		expect(card).not.toHaveProperty("version");
+		expect(card).not.toHaveProperty("name");
+		// Lo que el sitio SI declara sigue viajando.
+		expect(card.serverUrl).toBe(LANDING_ENDPOINT);
+		expect(card.websiteUrl).toBe(LANDING_ORIGIN);
+		expect(card.transport).toEqual({ type: "http", endpoint: LANDING_ENDPOINT });
+	});
 });
 
 describe("directorio de Web Bot Auth (APS-PROV-03)", () => {
@@ -864,7 +906,13 @@ describe("declaredMcpFromCard: el endpoint sale del sitio, no de su dominio", ()
 	it("lee el endpoint que la landing de BeAOS declara dentro de `mcp`", () => {
 		// La landing declara su MCP en `mcp.endpoint`. Antes se leia `url` —la URL de la landing— y el
 		// bundle publicaba un endpoint que contesta 405.
-		expect(declaredMcpFromCard(LANDING_CARD)).toEqual({ url: LANDING_ENDPOINT, transport: "http" });
+		// El `name` de un server-card es el nombre del server y se copia: aca coincide con el de la marca,
+		// que es casualidad del caso, no la regla.
+		expect(declaredMcpFromCard(LANDING_CARD)).toEqual({
+			url: LANDING_ENDPOINT,
+			transport: "http",
+			serverName: "BeAOS",
+		});
 	});
 
 	it("un sitio que declara un endpoint distinto de su dominio se respeta", () => {
@@ -904,6 +952,43 @@ describe("declaredMcpFromCard: el endpoint sale del sitio, no de su dominio", ()
 		// Una lista vacia afirma "no hay ninguna": se omite igual que cuando no la conocemos.
 		expect(declaredMcpFromCard({ serverUrl: "https://mcp.otro-host.com/mcp", tools: [] })).toEqual({
 			url: "https://mcp.otro-host.com/mcp",
+		});
+	});
+
+	it("copia la version de protocolo y la identidad del server, y omite lo que el card no declara", () => {
+		expect(
+			declaredMcpFromCard({
+				serverUrl: "https://mcp.otro-host.com/mcp",
+				protocolVersion: "2024-11-05",
+				name: "aos-mcp",
+				version: "3.2.1",
+			}),
+		).toEqual({
+			url: "https://mcp.otro-host.com/mcp",
+			protocolVersion: "2024-11-05",
+			serverName: "aos-mcp",
+			serverVersion: "3.2.1",
+		});
+		// Sin declaracion no se elige un default: la clave no viaja.
+		expect(declaredMcpFromCard({ serverUrl: "https://mcp.otro-host.com/mcp" })).toEqual({
+			url: "https://mcp.otro-host.com/mcp",
+		});
+		// Un `protocolVersion` en blanco no declara nada, igual que un `serverUrl` en blanco.
+		expect(
+			declaredMcpFromCard({ serverUrl: "https://mcp.otro-host.com/mcp", protocolVersion: "  ", version: null }),
+		).toEqual({ url: "https://mcp.otro-host.com/mcp" });
+	});
+
+	it("lee la identidad tambien de `serverInfo`, que es como la declara el `initialize`", () => {
+		expect(
+			declaredMcpFromCard({
+				serverUrl: "https://mcp.otro-host.com/mcp",
+				serverInfo: { name: "aos-mcp", version: "1.0.0" },
+			}),
+		).toEqual({
+			url: "https://mcp.otro-host.com/mcp",
+			serverName: "aos-mcp",
+			serverVersion: "1.0.0",
 		});
 	});
 });

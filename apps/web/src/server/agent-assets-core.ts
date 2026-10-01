@@ -311,19 +311,25 @@ export async function activePromptQueries(brandId: string, entityId: string, lim
 }
 
 /**
- * Lo que el sitio YA declara sobre su MCP: el endpoint y, cuando los publica, el transporte y sus tools.
+ * Lo que el sitio YA declara sobre su MCP: el endpoint y, cuando los publica, el transporte, sus tools y
+ * la identidad del servidor (nombre, versión y versión de protocolo).
  *
- * BeAOS no inventa endpoints ni capacidades: la única fuente es el `/.well-known/mcp/server-card.json` que
- * el sitio sirve. Si no lo declara —o lo declara sin endpoint— no se emite server-card, y eso es un
- * resultado, no un fallo.
+ * BeAOS no inventa endpoints, capacidades ni protocolos: la única fuente es el
+ * `/.well-known/mcp/server-card.json` que el sitio sirve. Si no lo declara —o lo declara sin endpoint— no
+ * se emite server-card, y eso es un resultado, no un fallo.
  *
  * El campo `url` del card **no** se lee como endpoint: es la identidad del documento, o sea la URL de la
  * landing. Tomarlo como endpoint fue el bug que le declaraba a cada marca su propio sitio como su MCP
- * (`https://be-aos.believe-global.com`, que contesta 405), y un agente lo seguía.
+ * (`https://be-aos.believe-global.com`, que contesta 405), y un agente lo seguía. `url` tampoco se lee
+ * para el transporte ni para la identidad del servidor.
  *
  * Los tools se copian del card en vivo, que es lo que hace útil al server-card: sin ellos el agente sabe
  * dónde está el MCP pero no qué puede pedirle. Si el card no los declara se omite la clave, en vez de
  * emitir una lista vacía que afirmaría que el servidor no tiene ninguno.
+ *
+ * Lo mismo vale para la versión de protocolo y la identidad del servidor: el card las declara y se copian;
+ * si no las declara, se omiten en vez de completarlas con la versión del template o con el nombre de la
+ * marca.
  *
  * El pedido tiene timeout corto: esto corre al apretar "Generar assets", no en un job.
  */
@@ -518,6 +524,9 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 		mcpUrl: mcp?.url,
 		mcpTools: mcp?.tools,
 		mcpTransport: mcp?.transport,
+		mcpProtocolVersion: mcp?.protocolVersion,
+		mcpServerName: mcp?.serverName,
+		mcpServerVersion: mcp?.serverVersion,
 		securityContact,
 		apiUrl: api?.apiUrl,
 		openApiUrl: api?.openApiUrl,

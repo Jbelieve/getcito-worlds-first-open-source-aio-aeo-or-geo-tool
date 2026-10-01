@@ -5,7 +5,7 @@
  * una API ni un endpoint de MCP. Si el sitio no lo declara, no se emite el archivo — y eso es un
  * resultado, no un fallo.
  */
-import { generateAgentAssets } from "@workspace/aos-aps/assets";
+import { type DeclaredMcp, generateAgentAssets } from "@workspace/aos-aps/assets";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	apiFromOpenApiDocument,
@@ -343,8 +343,16 @@ function stubLanding({ card, llms }: { card: unknown | null; llms: string | null
 }
 
 /** El server-card del bundle, tal como lo emite el generador para esa marca. */
-function generatedServerCard(websiteUrl: string, mcp?: { url: string; transport?: string }): Record<string, unknown> {
-	const assets = generateAgentAssets({ name: "BeAOS", websiteUrl, mcpUrl: mcp?.url, mcpTransport: mcp?.transport });
+function generatedServerCard(websiteUrl: string, mcp?: DeclaredMcp): Record<string, unknown> {
+	const assets = generateAgentAssets({
+		name: "BeAOS",
+		websiteUrl,
+		mcpUrl: mcp?.url,
+		mcpTransport: mcp?.transport,
+		mcpProtocolVersion: mcp?.protocolVersion,
+		mcpServerName: mcp?.serverName,
+		mcpServerVersion: mcp?.serverVersion,
+	});
 	const asset = assets.find((entry) => entry.path === "/.well-known/mcp/server-card.json");
 	return asset === undefined ? {} : JSON.parse(asset.content);
 }
@@ -404,6 +412,63 @@ describe("declaredMcp", () => {
 			llms: null,
 		});
 		expect(await declaredMcp(LANDING_ORIGIN)).toEqual({ url: LANDING_ENDPOINT, transport: "streamable-http" });
+	});
+
+	it("copia la version de protocolo y la identidad del server que el sitio declara", async () => {
+		// El template del estandar pide `2025-06-18`, y por eso estaba hardcodeado. Pero el dato correcto es
+		// el que el servidor declara: el `initialize` del MCP real de la landing contesta `2024-11-05` con
+		// `serverInfo { name: "aos-mcp", version: "1.0.0" }`. Decir otro protocolo es declarar algo que el
+		// servidor no habla.
+		stubLanding({
+			card: {
+				...LANDING_CARD,
+				protocolVersion: "2024-11-05",
+				name: "aos-mcp",
+				version: "1.0.0",
+			},
+			llms: null,
+		});
+		const mcp = await declaredMcp(LANDING_ORIGIN);
+		expect(mcp).toEqual({
+			url: LANDING_ENDPOINT,
+			transport: "http",
+			protocolVersion: "2024-11-05",
+			serverName: "aos-mcp",
+			serverVersion: "1.0.0",
+		});
+
+		const card = generatedServerCard(LANDING_ORIGIN, mcp);
+		expect(card.protocolVersion).toBe("2024-11-05");
+		expect(card.name).toBe("aos-mcp");
+		expect(card.version).toBe("1.0.0");
+	});
+
+	it("sin `protocolVersion` declarado la tarjeta no afirma ninguna", async () => {
+		// El card real de la landing hoy NO declara `protocolVersion`: hasta que lo declare, la tarjeta
+		// generada no puede elegir una por el — ni la del template ni la del initialize, que no esta en el
+		// card. Omitir es informacion; el default es una declaracion que nadie hizo.
+		stubLanding({ card: LANDING_CARD, llms: LANDING_LLMS_TXT });
+		const mcp = await declaredMcp(LANDING_ORIGIN);
+		expect(mcp?.protocolVersion).toBeUndefined();
+
+		const card = generatedServerCard(LANDING_ORIGIN, mcp);
+		expect(card.serverUrl).toBe(LANDING_ENDPOINT);
+		expect(card).not.toHaveProperty("protocolVersion");
+		expect(card).not.toHaveProperty("version");
+	});
+
+	it("un card que declara `serverInfo` tambien declara la identidad del server", async () => {
+		stubLanding({
+			card: {
+				url: LANDING_ORIGIN,
+				serverUrl: LANDING_ENDPOINT,
+				serverInfo: { name: "aos-mcp", version: "1.0.0" },
+			},
+			llms: null,
+		});
+		const mcp = await declaredMcp(LANDING_ORIGIN);
+		expect(mcp?.serverName).toBe("aos-mcp");
+		expect(mcp?.serverVersion).toBe("1.0.0");
 	});
 
 	it("un 404 o un HTML con 200 no declaran un MCP", async () => {

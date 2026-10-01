@@ -34,12 +34,24 @@ export interface DeclaredMcpTool {
 	description?: string;
 }
 
-/** El MCP que el sitio declara: siempre la URL, los tools solo cuando los publica. */
+/** El MCP que el sitio declara: la URL siempre; el resto, solo cuando lo publica. */
 export interface DeclaredMcp {
 	url: string;
 	tools?: DeclaredMcpTool[];
 	/** El tipo de transporte que el sitio declara junto al endpoint (`http`, `streamable-http`, ...). */
 	transport?: string;
+	/**
+	 * La versión de protocolo que el sitio declara para su MCP.
+	 *
+	 * Ausente => la tarjeta generada no afirma ninguna. El template del estándar pide `2025-06-18`, pero el
+	 * dato correcto es el que el servidor habla: el `initialize` del MCP real de la landing contesta
+	 * `2024-11-05`, y declarar la del template es una mentira que el agente descubre en la primera llamada.
+	 */
+	protocolVersion?: string;
+	/** El nombre del servidor que el sitio declara (`name` del card o `serverInfo.name`). */
+	serverName?: string;
+	/** La versión del servidor que el sitio declara (`version` del card o `serverInfo.version`). */
+	serverVersion?: string;
 }
 
 /**
@@ -89,6 +101,16 @@ export interface AgentAssetInput {
 	 * card no declara `transport.type`: un default sería afirmar un protocolo que nadie verificó.
 	 */
 	mcpTransport?: string;
+	/**
+	 * Versión de protocolo que el sitio declara para su MCP. Ausente => el card no declara
+	 * `protocolVersion`: elegir la del template (`2025-06-18`) afirmaría un protocolo que el servidor no
+	 * habla.
+	 */
+	mcpProtocolVersion?: string;
+	/** Nombre del servidor que el sitio declara. Ausente => el card no lo afirma. */
+	mcpServerName?: string;
+	/** Versión del servidor que el sitio declara. Ausente => el card no la afirma. */
+	mcpServerVersion?: string;
 	/**
 	 * URL de la API pública que la marca declara (ej. `https://marca.com/api/v1`). Ausente => no se emite
 	 * `api-catalog`: un catálogo RFC 9727 sin API real inventa un servicio, igual que un server-card sin
@@ -349,14 +371,18 @@ function declaredMcpTools(raw: unknown): DeclaredMcpTool[] | undefined {
 }
 
 /**
- * Lo que un server-card **declara** sobre su MCP: el endpoint, y —si los publica— el transporte y los
- * tools. Devuelve `undefined` cuando el card no declara ningún endpoint.
+ * Lo que un server-card **declara** sobre su MCP: el endpoint, y —si los publica— el transporte, los tools
+ * y la identidad del servidor (nombre, versión de software y versión de protocolo). Devuelve `undefined`
+ * cuando el card no declara ningún endpoint.
  *
  * Los campos del endpoint se leen en el orden en que los lectores los buscan: `serverUrl` (el canónico),
  * `transport.endpoint` (la forma vieja, la que publica believe-global.com) y `mcp.endpoint` (la que
  * publica la landing de BeAOS). `url` **no** se lee: es la identidad del documento —la URL del sitio— y
  * tomarla como endpoint es lo que hacía que cada marca declarara su propia landing como su MCP, un
  * endpoint que contesta 405. Un sitio que declara `url` y ningún endpoint no declara ningún MCP.
+ *
+ * La identidad sale del card (`name`/`version`/`protocolVersion`) o de su `serverInfo`, que es como la
+ * declara el `initialize` del protocolo. Nada de eso se elige acá: lo que el card no declara, no viaja.
  */
 export function declaredMcpFromCard(card: unknown): DeclaredMcp | undefined {
 	const record = asRecord(card);
@@ -369,10 +395,17 @@ export function declaredMcpFromCard(card: unknown): DeclaredMcp | undefined {
 	if (url === undefined) return undefined;
 
 	const transportType = declaredTransport(transport) ?? declaredTransport(mcp?.transport);
+	const protocolVersion = asString(record.protocolVersion) ?? asString(mcp?.protocolVersion);
+	const serverInfo = asRecord(record.serverInfo);
+	const serverName = asString(record.name) ?? asString(serverInfo?.name);
+	const serverVersion = asString(record.version) ?? asString(serverInfo?.version);
 	const tools = declaredMcpTools(record.tools);
 	return {
 		url,
 		...(transportType === undefined ? {} : { transport: transportType }),
+		...(protocolVersion === undefined ? {} : { protocolVersion }),
+		...(serverName === undefined ? {} : { serverName }),
+		...(serverVersion === undefined ? {} : { serverVersion }),
 		...(tools === undefined ? {} : { tools }),
 	};
 }
@@ -381,9 +414,14 @@ export function declaredMcpFromCard(card: unknown): DeclaredMcp | undefined {
  * `/.well-known/mcp/server-card.json` (AOS-CAPA-01), con `serverUrl`.
  *
  * Se emite solo cuando la marca declara un MCP, y declara exactamente lo que el sitio declaró: el
- * endpoint, el tipo de transporte y los tools salen de su server-card. Los lectores buscan `serverUrl` en
- * la raíz; el card de `believe-global.com` lo tenía dentro de `transport.endpoint`, que es la forma vieja,
- * y por eso figuraba como incompleto.
+ * endpoint, el tipo de transporte, los tools y la identidad del servidor salen de su server-card. Los
+ * lectores buscan `serverUrl` en la raíz; el card de `believe-global.com` lo tenía dentro de
+ * `transport.endpoint`, que es la forma vieja, y por eso figuraba como incompleto.
+ *
+ * `name`, `version` y `protocolVersion` son la identidad del **servidor**, no la de la marca: el card no
+ * los toma del nombre del negocio ni de la versión del template, y si el sitio no los declara se omiten.
+ * Un `protocolVersion: "2025-06-18"` escrito a mano declaraba un protocolo distinto del que el servidor
+ * contesta en su `initialize` (`2024-11-05` en el caso real de la landing).
  */
 function mcpServerCard(input: AgentAssetInput): string | null {
 	const serverUrl = asString(input.mcpUrl);
@@ -395,12 +433,15 @@ function mcpServerCard(input: AgentAssetInput): string | null {
 	// El tipo de transporte también se copia del sitio: si declara `http`, decir `streamable-http` es
 	// declarar otro protocolo. Sin declaración se omite la clave en vez de elegir un default.
 	const transport = asString(input.mcpTransport);
+	const serverName = asString(input.mcpServerName);
+	const serverVersion = asString(input.mcpServerVersion);
+	const protocolVersion = asString(input.mcpProtocolVersion);
 	return `${JSON.stringify(
 		{
-			name: input.name,
+			...(serverName === undefined ? {} : { name: serverName }),
 			description,
-			version: "1.0.0",
-			protocolVersion: "2025-06-18",
+			...(serverVersion === undefined ? {} : { version: serverVersion }),
+			...(protocolVersion === undefined ? {} : { protocolVersion }),
 			serverUrl,
 			websiteUrl: input.websiteUrl,
 			transport: { ...(transport === undefined ? {} : { type: transport }), endpoint: serverUrl },
