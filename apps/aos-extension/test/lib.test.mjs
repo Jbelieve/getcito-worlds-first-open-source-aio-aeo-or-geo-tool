@@ -570,9 +570,10 @@ describe("sub-scores por eje", () => {
 		assert.equal(audit.score, audit.subScores.aos);
 	});
 
-	it("el APS medido y el APS declarado no son el mismo número", () => {
-		// `subScores.aps` lo medimos nosotros sobre el estándar; `aps.declaredAps` es lo que el sitio
-		// dice de sí mismo. Mezclarlos sería mostrar dos veces el número equivocado.
+	it("el APS del estándar y el APS declarado no son el mismo número", () => {
+		// `subScores.aps` es el APS del estándar: cuántos requisitos del eje APS cumple el sitio.
+		// `aps.declaredAps` es lo que el sitio dice de sí mismo. Mezclarlos sería mostrar dos veces el
+		// número equivocado; y llamar "medido" al primero hacía que los tres APS parecieran uno solo.
 		assert.equal(audit.subScores.aps, 100);
 		assert.equal(audit.aps.declaredAps, 94);
 	});

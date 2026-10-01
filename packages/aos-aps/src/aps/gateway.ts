@@ -236,12 +236,21 @@ Reglas duras:
 /**
  * Generation runs on a cheaper band than the judge: writing prompts is authoring work, not the
  * measurement judgement, and the operator reviews the candidate list before anything is locked.
+ *
+ * La banda y el **tope de tokens** son suyos. El tope no se hereda: `APS_JUDGE_MAX_TOKENS` está
+ * calibrado para un veredicto corto (3000 en producción) y escribir 50 prompts con un modelo que
+ * razona no entra ahí — el razonamiento se come el presupuesto, el JSON queda abierto y no hay
+ * biblioteca. Medido: con 3000 no salió ninguna en 8 intentos; con el tope propio, 50/50 en 4 de 4.
  */
 export function libraryConfigFromEnv(env: Record<string, string | undefined> = process.env): GatewayJudgeConfig | null {
 	const judge = judgeConfigFromEnv(env);
 	if (judge === null) return null;
 	const model = env.APS_LIBRARY_MODEL?.trim();
-	return { ...judge, model: model !== undefined && model.length > 0 ? model : "believe-smart" };
+	return {
+		...judge,
+		model: model !== undefined && model.length > 0 ? model : "believe-smart",
+		maxTokens: LIBRARY_MAX_TOKENS,
+	};
 }
 
 export interface GatewayLibraryInput {
@@ -251,10 +260,28 @@ export interface GatewayLibraryInput {
 	total?: number;
 }
 
+/**
+ * Por qué una generación no dejó biblioteca.
+ *
+ * Existe porque `null` no se puede explicar. La biblioteca es el instrumento de medición y media
+ * biblioteca es peor que ninguna, así que la falla se declara con su causa en vez de devolverse como
+ * una lista corta o como un silencio: sin esto, el operador ve "no devolvió una biblioteca usable" y
+ * no tiene por dónde empezar a buscar.
+ */
+export type LibraryFailure = "http_error" | "network_error" | "truncated" | "unparseable" | "no_prompts";
+
 export interface GeneratedLibrary {
+	/** Candidatos usables. Vacío cuando `failure` no es `null`. */
 	prompts: LibraryPromptInput[];
 	/** Candidates the model produced that are not usable as they came. */
 	rejected: Array<{ text: string; reason: string }>;
+	/** Por qué no hay biblioteca. `null` cuando sí la hay. */
+	failure: LibraryFailure | null;
+}
+
+/** ¿Esta generación dejó una biblioteca usable? */
+export function isLibraryUsable(result: GeneratedLibrary): boolean {
+	return result.failure === null && result.prompts.length > 0;
 }
 
 function buildLibraryPrompt(input: GatewayLibraryInput, total: number): string {
@@ -279,15 +306,16 @@ function asLibraryPrompt(value: unknown): LibraryPromptInput | null {
 }
 
 /**
- * Asks the gateway for a candidate library. Returns null when the call or the payload is unusable, so
- * the caller reports a failure instead of persisting half a library.
+ * Asks the gateway for a candidate library. La causa de la falla viaja en `failure`: quien llama
+ * puede decir qué pasó en vez de un genérico que manda a buscar el problema donde no está.
  */
 export async function generateLibraryWithGateway(
 	input: GatewayLibraryInput,
 	config: GatewayJudgeConfig,
 	fetchImpl: typeof fetch = fetch,
-): Promise<GeneratedLibrary | null> {
+): Promise<GeneratedLibrary> {
 	const total = input.total ?? LIBRARY_TARGET_TOTAL;
+	const failure = (reason: LibraryFailure): GeneratedLibrary => ({ prompts: [], rejected: [], failure: reason });
 	let payload: unknown;
 	try {
 		const response = await fetchImpl(endpoint(config.url), {
@@ -304,16 +332,21 @@ export async function generateLibraryWithGateway(
 				],
 			}),
 		});
-		if (response.ok === false) return null;
+		if (response.ok === false) return failure("http_error");
 		payload = await response.json();
 	} catch {
-		return null;
+		return failure("network_error");
 	}
 
-	const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> })?.choices?.[0]?.message?.content;
-	if (typeof content !== "string") return null;
+	const choice = (payload as { choices?: Array<{ message?: { content?: unknown }; finish_reason?: unknown }> })
+		?.choices?.[0];
+	// Un tope de tokens agotado no es un veredicto: el JSON queda abierto a la mitad. Igual que en el
+	// juez, la respuesta truncada se declara truncada en vez de intentar leerla.
+	if (choice?.finish_reason === "length") return failure("truncated");
+	const content = choice?.message?.content;
+	if (typeof content !== "string") return failure("unparseable");
 	const parsed = extractJsonObject(content) as { prompts?: unknown } | null;
-	if (parsed === null || Array.isArray(parsed.prompts) === false) return null;
+	if (parsed === null || Array.isArray(parsed.prompts) === false) return failure("unparseable");
 
 	const prompts: LibraryPromptInput[] = [];
 	const rejected: Array<{ text: string; reason: string }> = [];
@@ -331,5 +364,6 @@ export async function generateLibraryWithGateway(
 		}
 		prompts.push(prompt);
 	}
-	return prompts.length === 0 ? null : { prompts, rejected };
+	if (prompts.length === 0) return { prompts: [], rejected, failure: "no_prompts" };
+	return { prompts, rejected, failure: null };
 }

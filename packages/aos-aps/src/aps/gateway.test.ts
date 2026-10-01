@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-	GATEWAY_JUDGE_PIPELINE_VERSION,
 	extractJsonObject,
+	GATEWAY_JUDGE_PIPELINE_VERSION,
 	gatewayJudge,
 	gatewaySpendFromHeaders,
 	generateLibraryWithGateway,
+	isLibraryUsable,
 	judgeConfigFromEnv,
+	LIBRARY_MAX_TOKENS,
+	libraryConfigFromEnv,
 	readGatewayBudget,
 } from "./gateway";
 
@@ -14,6 +17,14 @@ const CONFIG = { url: "https://gateway.test/v1", key: "gw-key", model: "believe-
 function completion(content: string, ok = true): Response {
 	return new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
 		status: ok ? 200 : 500,
+		headers: { "content-type": "application/json" },
+	});
+}
+
+/** Respuesta del gateway con una lista de prompts. Vive acá porque la usan dos bloques. */
+function libraryResponse(prompts: unknown[]): Response {
+	return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ prompts }) } }] }), {
+		status: 200,
 		headers: { "content-type": "application/json" },
 	});
 }
@@ -175,13 +186,6 @@ describe("generateLibraryWithGateway", () => {
 		version: "deepseek-flash-4.1",
 	};
 
-	function libraryResponse(prompts: unknown[]): Response {
-		return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ prompts }) } }] }), {
-			status: 200,
-			headers: { "content-type": "application/json" },
-		});
-	}
-
 	it("asks for the target mix without letting the brand into the prompts", async () => {
 		const captured: { body?: string } = {};
 		const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -228,19 +232,100 @@ describe("generateLibraryWithGateway", () => {
 		expect(result?.rejected).toHaveLength(3);
 	});
 
-	it("returns null instead of half a library", async () => {
+	it("declara la causa en vez de devolver media biblioteca", async () => {
 		const empty = (async () => libraryResponse([])) as unknown as typeof fetch;
-		expect(await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, empty)).toBeNull();
+		expect((await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, empty)).failure).toBe("no_prompts");
 
 		const broken = (async () =>
 			new Response(JSON.stringify({ choices: [{ message: { content: "no es json" } }] }), {
 				status: 200,
 				headers: { "content-type": "application/json" },
 			})) as unknown as typeof fetch;
-		expect(await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, broken)).toBeNull();
+		expect((await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, broken)).failure).toBe("unparseable");
 
 		const failing = (async () => new Response("boom", { status: 500 })) as unknown as typeof fetch;
-		expect(await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, failing)).toBeNull();
+		expect((await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, failing)).failure).toBe("http_error");
+
+		const throwing = (async () => {
+			throw new Error("ECONNREFUSED");
+		}) as unknown as typeof fetch;
+		expect((await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, throwing)).failure).toBe(
+			"network_error",
+		);
+	});
+
+	it("dice que la respuesta se cortó cuando el modelo agotó el tope de tokens", async () => {
+		// Medido en producción (2026-09-30 21:10 UTC): con APS_JUDGE_MAX_TOKENS=3000 el razonamiento
+		// se come el presupuesto, el JSON queda abierto y la ruta devolvía un error genérico.
+		const truncated = (async () =>
+			new Response(
+				JSON.stringify({
+					choices: [
+						{
+							finish_reason: "length",
+							message: { content: '{"prompts":[{"text":"una consulta larga que quedo a me' },
+						},
+					],
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			)) as unknown as typeof fetch;
+
+		const result = await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, truncated);
+		expect(result.failure).toBe("truncated");
+		expect(result.prompts).toEqual([]);
+		expect(isLibraryUsable(result)).toBe(false);
+	});
+
+	it("una biblioteca completa sí es usable", async () => {
+		const fetchImpl = (async () =>
+			libraryResponse([
+				{ text: "consulta de categoria", kind: "category", funnel_stage: "awareness" },
+			])) as unknown as typeof fetch;
+		const result = await generateLibraryWithGateway({ brandName: "F" }, libraryConfig, fetchImpl);
+		expect(result.failure).toBeNull();
+		expect(isLibraryUsable(result)).toBe(true);
+	});
+});
+
+describe("libraryConfigFromEnv", () => {
+	/** El entorno real de producción, con el tope del juez en 3000. */
+	const env = {
+		LLM_GATEWAY_URL: "https://gateway.test/v1",
+		LLM_GATEWAY_KEY_BEADS: "gw-key",
+		APS_JUDGE_MAX_TOKENS: "3000",
+		APS_LIBRARY_MODEL: "believe-smart",
+	};
+
+	it("no hereda el tope de tokens del juez: la generación tiene el suyo", () => {
+		// El bug medido el 2026-09-30: con 3000 el razonamiento se comía el presupuesto, el JSON quedaba
+		// abierto y el botón no hacía nada. `LIBRARY_MAX_TOKENS` es el tope con el que sí salen 50.
+		expect(libraryConfigFromEnv(env)?.maxTokens).toBe(LIBRARY_MAX_TOKENS);
+	});
+
+	it("el pedido real sale con el tope de la biblioteca aunque el juez tenga otro", async () => {
+		let body: Record<string, unknown> = {};
+		const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+			body = JSON.parse(String(init?.body));
+			return libraryResponse([{ text: "x", kind: "category", funnel_stage: "awareness" }]);
+		}) as unknown as typeof fetch;
+		const config = libraryConfigFromEnv(env);
+		expect(config).not.toBeNull();
+		if (config === null) return;
+		await generateLibraryWithGateway({ brandName: "F" }, config, fetchImpl);
+		expect(body.max_tokens).toBe(LIBRARY_MAX_TOKENS);
+	});
+
+	it("lo que sí comparte con el juez lo sigue compartiendo", () => {
+		const config = libraryConfigFromEnv(env);
+		expect(config?.url).toBe("https://gateway.test/v1");
+		expect(config?.key).toBe("gw-key");
+		expect(config?.model).toBe("believe-smart");
+		// La banda se puede cambiar sin tocar la del juez.
+		expect(libraryConfigFromEnv({ ...env, APS_LIBRARY_MODEL: "believe-fast" })?.model).toBe("believe-fast");
+	});
+
+	it("sin gateway no hay configuración de generación", () => {
+		expect(libraryConfigFromEnv({})).toBeNull();
 	});
 });
 

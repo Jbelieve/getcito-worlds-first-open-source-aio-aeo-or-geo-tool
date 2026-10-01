@@ -388,8 +388,11 @@ corrida es de la entidad y el resultado es de la entidad. Si no hay entidad, no 
 
 **Paso 1 · Biblioteca de prompts.** Son las preguntas con las que se va a medir, y **no pueden nombrar la
 marca** (una pregunta que la nombra contamina la respuesta y se descarta antes de guardarse). Si la marca no
-tiene, se generan con **Generar 50 prompts de compra**. Revisalos: la calidad de la medición depende de la
-calidad de las preguntas. Después, **Guardar y bloquear 90 días**.
+tiene, se generan con **Generar candidatos (hasta 50)**: el botón le pide 50 al gateway y el gateway devuelve
+los que puede, así que puede volver una lista **más corta** — la pantalla dice cuántos volvieron, cuántos
+quedaron usables y por qué se descartó el resto. Lo que vuelve son **candidatos: no se guardan hasta que
+aprietes Guardar y bloquear 90 días**. Revisalos: la calidad de la medición depende de la calidad de las
+preguntas.
 
 **Paso 2 · Corrida.** Elegí entidad, apretá **Estimar corrida** y **mirá el costo antes de gastar**. Nada se
 ejecuta hasta que aprietes **Confirmar y ejecutar**. Corre **a demanda**: no hay barrido automático.
@@ -1290,9 +1293,11 @@ Estas son las preguntas que quedaron abiertas. Sirven más que el manual, porque
 todavía no está claro:
 
 1. **¿Qué es "APS" para el equipo, cuando alguien dice "el APS"?** Hay tres números con ese nombre. El
-   manual los separa, pero **la pantalla no**: el audit público llama `apsStandards` a un chequeo del
-   estándar y el comentario del código lo describe como "el APS **medido** sobre los requisitos", que es una
-   frase que confunde justo lo que hay que separar. ¿Se renombra en la UI?
+   manual los separa y, desde el arreglo de vocabulario, **la pantalla también**: el audit público ya llama
+   `apsStandards` **"APS del estándar"** (era "APS · preferencia") y el comentario del código ya no dice
+   "medido", que era la frase que confundía justo lo que hay que separar. Los campos de la API **no**
+   cambiaron de nombre: la extensión y la landing los siguen leyendo igual. Queda una pregunta de producto:
+   ¿alcanza con la etiqueta, o el número del estándar debería dejar de llamarse "APS" en la vista?
 2. **¿Cuál es el cupo real del audit público en producción?** El código tiene defaults (20 por IP, 2000
    globales), pero el valor efectivo es el del `.env` del servidor y no es legible desde el repositorio.
 3. **¿Cuánto cuesta hoy una corrida de APS?** El precio por modelo vive en `APS_PRICES` (configuración, no

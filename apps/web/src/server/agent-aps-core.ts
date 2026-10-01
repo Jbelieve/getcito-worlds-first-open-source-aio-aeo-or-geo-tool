@@ -15,6 +15,7 @@ import {
 	canRegenerateLibrary,
 	GATEWAY_JUDGE_PIPELINE_VERSION,
 	generateLibraryWithGateway,
+	isLibraryUsable,
 	judgeConfigFromEnv,
 	LIBRARY_LOCK_DAYS,
 	libraryConfigFromEnv,
@@ -34,6 +35,7 @@ import {
 import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
+import { generationFailureMessage, generatorInputsFromBrand, LIBRARY_ASKED_FOR } from "@/lib/aps/library-message";
 import { getBoss } from "@/lib/boss-client";
 
 export interface ApsRunRequestInput {
@@ -331,8 +333,21 @@ export async function ensurePromptLibraryForEntity(data: EnsurePromptLibraryInpu
 		{ brandName: brand.name, industry: null, brief: brief.length > 0 ? brief : null },
 		config,
 	);
-	if (generated === null) {
-		throw new PromptLibraryError("El gateway no devolvió una biblioteca usable.");
+	if (isLibraryUsable(generated) === false) {
+		// La causa concreta, no un genérico: el consumidor de esta puerta es otro agente y un
+		// "no devolvió una biblioteca usable" lo manda a buscar el problema donde no está.
+		throw new PromptLibraryError(
+			generationFailureMessage(
+				{
+					returned: generated.prompts.length + generated.rejected.length,
+					usable: generated.prompts.length,
+					rejected: generated.rejected,
+					askedFor: LIBRARY_ASKED_FOR,
+					failure: generated.failure,
+				},
+				generatorInputsFromBrand(brand),
+			),
+		);
 	}
 
 	const [latest] = await db

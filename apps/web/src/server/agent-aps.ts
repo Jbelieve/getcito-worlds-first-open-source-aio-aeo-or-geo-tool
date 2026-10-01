@@ -9,6 +9,7 @@ import { createServerFn } from "@tanstack/react-start";
 import {
 	canRegenerateLibrary,
 	generateLibraryWithGateway,
+	isLibraryUsable,
 	judgeConfigFromEnv,
 	libraryConfigFromEnv,
 	readGatewayBudget,
@@ -18,6 +19,12 @@ import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import {
+	generationFailureMessage,
+	generatorInputsFromBrand,
+	LIBRARY_ASKED_FOR,
+	type LibraryGenerationReport,
+} from "@/lib/aps/library-message";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { getBoss } from "@/lib/boss-client";
 import { estimateApsRunForBrand, startApsRunForBrand } from "@/server/agent-aps-core";
@@ -200,6 +207,10 @@ export const getApsLibraryFn = createServerFn({ method: "POST" })
 /**
  * Generates a candidate library on demand. It writes nothing: the operator reviews the candidates
  * and then calls saveApsLibraryFn, which is what validates and locks them.
+ *
+ * Devuelve la cuenta completa —cuántos vinieron, cuántos quedaron usables, por qué se descartó el
+ * resto y por qué falló cuando falló— porque el panel no puede explicar lo que no recibe. Antes acá
+ * se devolvían los candidatos y un motivo de descarte que la pantalla tiraba a la basura.
  */
 export const generateApsLibraryFn = createServerFn({ method: "POST" })
 	.validator(
@@ -212,13 +223,26 @@ export const generateApsLibraryFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
+		const askedFor = data.total ?? LIBRARY_ASKED_FOR;
 		const config = libraryConfigFromEnv();
 		if (config === null) {
-			return { ok: false as const, reason: "Falta LLM_GATEWAY_URL o la key del gateway para generar la biblioteca." };
+			return {
+				ok: false as const,
+				reason: "Falta LLM_GATEWAY_URL o la key del gateway para generar la biblioteca.",
+				prompts: [] as Array<{ text: string; kind: string; funnelStage: string }>,
+				rejected: [] as Array<{ text: string; reason: string }>,
+				returned: 0,
+				usable: 0,
+				askedFor,
+				failure: null,
+				inputs: null,
+				model: null,
+			};
 		}
 		const [brand] = await db.select().from(brands).where(eq(brands.id, data.brandId)).limit(1);
 		if (brand === undefined) throw new Error("Brand not found");
 
+		const inputs = generatorInputsFromBrand(brand);
 		const brief = [
 			brand.shortDescription,
 			(brand.productsAndServices ?? []).join(", "),
@@ -236,8 +260,22 @@ export const generateApsLibraryFn = createServerFn({ method: "POST" })
 			},
 			config,
 		);
-		if (generated === null) {
-			return { ok: false as const, reason: "El gateway no devolvio una biblioteca usable." };
+		const report: LibraryGenerationReport = {
+			returned: generated.prompts.length + generated.rejected.length,
+			usable: generated.prompts.length,
+			rejected: generated.rejected,
+			askedFor,
+			failure: generated.failure,
+		};
+		if (isLibraryUsable(generated) === false) {
+			return {
+				ok: false as const,
+				reason: generationFailureMessage(report, inputs),
+				prompts: [] as Array<{ text: string; kind: string; funnelStage: string }>,
+				...report,
+				inputs,
+				model: config.model,
+			};
 		}
-		return { ok: true as const, prompts: generated.prompts, rejected: generated.rejected, model: config.model };
+		return { ok: true as const, reason: null, prompts: generated.prompts, ...report, inputs, model: config.model };
 	});

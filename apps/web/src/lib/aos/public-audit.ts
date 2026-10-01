@@ -567,8 +567,15 @@ export interface PublicAuditResponse {
 	requirements: PublicAuditRequirements;
 	/**
 	 * Sub-scores por eje, del motor. `aosStandards` es el mismo número que `score` (el AOS es el
-	 * puntaje de operabilidad); `apsStandards` es el APS **medido** sobre los requisitos del estándar
-	 * y NO es lo mismo que `declaredAps`, que es lo que el sitio declara sobre sí mismo.
+	 * puntaje de operabilidad); `apsStandards` es el **APS del estándar**: cuántos requisitos del eje
+	 * APS cumple el sitio —claim/proofs publicados y firma verificable—, o sea un chequeo del sitio y
+	 * **no** una medición contra modelos. Tampoco es `declaredAps`, que es lo que el sitio declara
+	 * sobre sí mismo.
+	 *
+	 * Son **tres** números distintos que se llaman "APS" y ninguno es el otro: el declarado (lo que el
+	 * sitio firma), este (los requisitos del estándar que cumple) y el medido (una corrida real contra
+	 * modelos, que cuesta plata y no vive acá). El nombre del campo no cambia porque la extensión y la
+	 * landing ya lo consumen así: lo que cambia es cómo se muestra y cómo se documenta.
 	 */
 	aosStandards: number;
 	apsStandards: number;

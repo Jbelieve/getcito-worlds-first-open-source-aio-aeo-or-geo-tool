@@ -511,9 +511,11 @@ describe("publicAuditResponse", () => {
 		expect(payload.breakdown[1]).toMatchObject({ axis: "APS", earnedWeight: 3, maxWeight: 7, percent: 40 });
 	});
 
-	it("el APS medido y el APS declarado son dos números distintos y no se pisan", () => {
+	it("el APS del estándar y el APS declarado son dos números distintos y no se pisan", () => {
 		const payload = publicAuditResponse(auditResult(), NOW);
-		// `apsStandards` lo medimos nosotros; `declaredAps` es lo que el sitio dice de sí mismo.
+		// `apsStandards` es el APS del estándar: cuántos requisitos del eje APS cumple el sitio, un
+		// chequeo del sitio. `declaredAps` es lo que el sitio dice de sí mismo. (Antes este test decía
+		// "medido": el nombre era el bug, porque el tercer APS —el medido contra modelos— no pasa por acá.)
 		expect(payload.apsStandards).toBe(40);
 		expect(payload.declaredAps).toBe(41);
 		expect(payload.apsStandards).not.toBe(payload.declaredAps);
