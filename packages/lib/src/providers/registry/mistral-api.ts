@@ -1,13 +1,14 @@
 import { z } from "zod";
+import type { Citation } from "../../text-extraction";
+import { localeSystemMessages, localeSystemPrompt } from "../locale";
+import { usageFromResponse } from "../token-usage";
 import type {
 	Provider,
-	ScrapeResult,
 	ProviderOptions,
+	ScrapeResult,
 	StructuredResearchOptions,
 	StructuredResearchResult,
 } from "../types";
-import type { Citation } from "../../text-extraction";
-import { localeSystemMessages, localeSystemPrompt } from "../locale";
 
 const MISTRAL_BASE_URL = "https://api.mistral.ai";
 const DEFAULT_MODEL = "mistral-medium-latest";
@@ -102,7 +103,12 @@ export const mistralApi: Provider = {
 				...(locale ? { instructions: locale } : {}),
 			});
 			const parsed = parseConversationsResponse(data);
-			return { ...parsed, rawOutput: data, modelVersion: data?.model ?? version };
+			return {
+				...parsed,
+				rawOutput: data,
+				modelVersion: data?.model ?? version,
+				usage: usageFromResponse(data),
+			};
 		}
 
 		const data = await mistralPost("/v1/chat/completions", {
@@ -115,6 +121,7 @@ export const mistralApi: Provider = {
 			webQueries: [],
 			citations: [],
 			modelVersion: data?.model ?? version,
+			usage: usageFromResponse(data),
 		};
 	},
 
@@ -144,6 +151,7 @@ export const mistralApi: Provider = {
 			return {
 				object: (schema as z.ZodType).parse(JSON.parse(content)) as T,
 				modelVersion: data?.model ?? targetModel,
+				usage: usageFromResponse(data),
 			};
 		}
 		// /v1/conversations forwards completion_args.response_format through to
@@ -167,6 +175,7 @@ export const mistralApi: Provider = {
 		return {
 			object: (schema as z.ZodType).parse(JSON.parse(textContent)) as T,
 			modelVersion: data?.model ?? targetModel,
+			usage: usageFromResponse(data),
 		};
 	},
 };

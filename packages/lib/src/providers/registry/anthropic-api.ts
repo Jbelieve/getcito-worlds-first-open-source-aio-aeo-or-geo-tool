@@ -4,6 +4,7 @@ import { generateText, Output } from "ai";
 import type { Citation } from "../../text-extraction";
 import { extractTextFromAnthropic } from "../../text-extraction";
 import { localeCountryCode, localeSystemPrompt } from "../locale";
+import { usageFromResponse } from "../token-usage";
 import type {
 	Provider,
 	ProviderOptions,
@@ -142,6 +143,9 @@ async function runAnthropic(prompt: string, model: string, options?: ProviderOpt
 		textContent,
 		citations,
 		modelVersion: model,
+		// `input_tokens` / `output_tokens` del cuerpo de Anthropic. El costo no viene en la
+		// respuesta: sin tarifa del modelo queda `null`, con los tokens guardados.
+		usage: usageFromResponse(response),
 	};
 }
 
@@ -242,6 +246,7 @@ export const anthropicApi: Provider = {
 		return {
 			object: result.experimental_output as T,
 			modelVersion: targetModel,
+			usage: usageFromResponse({ usage: result.usage }),
 		};
 	},
 };

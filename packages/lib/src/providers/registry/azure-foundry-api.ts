@@ -3,6 +3,7 @@ import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
 import { extractCitationsFromChatCompletion } from "../../text-extraction";
 import { createGate } from "../concurrency";
 import { localeCountryCode, localeSystemMessages } from "../locale";
+import { usageFromResponse } from "../token-usage";
 import type {
 	Provider,
 	ProviderOptions,
@@ -154,6 +155,8 @@ export const azureFoundryApi: Provider = {
 			webQueries: citations.length > 0 ? [WEB_QUERIES_UNAVAILABLE] : [],
 			citations,
 			modelVersion: data?.model ?? targetModel,
+			// Foundry es OpenAI-compatible, así que `usage` viene cuando el deployment lo reporta.
+			usage: usageFromResponse(data),
 		};
 	},
 
@@ -203,6 +206,7 @@ export const azureFoundryApi: Provider = {
 		return {
 			object: (schema as z.ZodType).parse(JSON.parse(content)) as T,
 			modelVersion: data?.model ?? targetModel,
+			usage: usageFromResponse(data),
 		};
 	},
 };

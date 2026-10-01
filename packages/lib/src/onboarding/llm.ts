@@ -21,6 +21,7 @@
  */
 import type { z } from "zod";
 import {
+	callCostFromResult,
 	getProvider,
 	type Provider,
 	type ProviderOptions,
@@ -144,6 +145,9 @@ export async function runStructuredResearchPrompt<T>(
 				targetMarket: options?.targetMarket,
 				targetLanguage: options?.targetLanguage,
 			}),
+		// El onboarding también gasta: el resultado trae los tokens que reportó el
+		// proveedor y, si el proveedor informa el costo (OpenRouter), el costo.
+		callCostFromResult,
 	);
 	return result.object;
 }
@@ -170,14 +174,17 @@ export async function runStructuredCompletionPrompt<T>(
 	if (!provider.runStructuredResearch) {
 		throw new Error(`Provider "${provider.id}" does not implement structured research`);
 	}
-	return withProviderCallTracking({ provider: provider.id, model: version ?? provider.id, kind: "research" }, () =>
-		provider.runStructuredResearch!({
-			prompt,
-			schema,
-			version,
-			webSearch: false,
-			targetMarket: options?.targetMarket,
-			targetLanguage: options?.targetLanguage,
-		}),
+	return withProviderCallTracking(
+		{ provider: provider.id, model: version ?? provider.id, kind: "research" },
+		() =>
+			provider.runStructuredResearch!({
+				prompt,
+				schema,
+				version,
+				webSearch: false,
+				targetMarket: options?.targetMarket,
+				targetLanguage: options?.targetLanguage,
+			}),
+		callCostFromResult,
 	);
 }

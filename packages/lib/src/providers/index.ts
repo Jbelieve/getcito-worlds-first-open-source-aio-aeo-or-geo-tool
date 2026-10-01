@@ -17,17 +17,19 @@ export { localePromptInstruction } from "./locale";
 export type { ModelMeta } from "./models";
 export { getModelMeta, KNOWN_MODELS } from "./models";
 export { selectTargetsForBrand } from "./runner";
+export { costFromResponse, usageFromResponse } from "./token-usage";
 export type {
 	ModelConfig,
 	Provider,
 	ProviderOptions,
+	ProviderUsage,
 	ScrapeResult,
 	StructuredResearchOptions,
 	StructuredResearchResult,
 	TestResult,
 } from "./types";
-export type { ProviderCallKind, ProviderCallRecord } from "./usage";
-export { recordProviderCall, withProviderCallTracking } from "./usage";
+export type { PricingSource, ProviderCallCost, ProviderCallKind, ProviderCallRecord } from "./usage";
+export { callCostFromResult, recordProviderCall, withProviderCallTracking } from "./usage";
 
 const providerMap: Record<string, Provider> = {
 	olostep,

@@ -1,14 +1,15 @@
-import { openai, createOpenAI } from "@ai-sdk/openai";
+import { createOpenAI, openai } from "@ai-sdk/openai";
 import { generateText, Output } from "ai";
-import { extractTextFromOpenAI, extractCitationsFromOpenAI } from "../../text-extraction";
+import { extractCitationsFromOpenAI, extractTextFromOpenAI } from "../../text-extraction";
+import { localeCountryCode, localeSystemPrompt } from "../locale";
+import { usageFromResponse } from "../token-usage";
 import type {
 	Provider,
-	ScrapeResult,
 	ProviderOptions,
+	ScrapeResult,
 	StructuredResearchOptions,
 	StructuredResearchResult,
 } from "../types";
-import { localeCountryCode, localeSystemPrompt } from "../locale";
 
 const DEFAULT_RESEARCH_MODEL = "gpt-4o-mini";
 
@@ -17,9 +18,7 @@ function sanitizeForJson(obj: unknown): unknown {
 }
 
 function getOpenAIResponsesModel(model: string) {
-	const provider = process.env.OPENAI_API_KEY
-		? createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
-		: openai;
+	const provider = process.env.OPENAI_API_KEY ? createOpenAI({ apiKey: process.env.OPENAI_API_KEY }) : openai;
 	return provider.responses(model);
 }
 
@@ -63,6 +62,10 @@ async function runOpenAI(prompt: string, model: string, options?: ProviderOption
 		textContent: extractTextFromOpenAI(responseBody),
 		citations: extractCitationsFromOpenAI(responseBody),
 		modelVersion: model,
+		// El consumo que reporta la API. El costo NO se deriva de acá: OpenAI no lo informa en la
+		// respuesta y la tarifa del modelo no vive en el sistema, así que el costo queda `null` y
+		// el dato que sí existe (tokens) se guarda.
+		usage: usageFromResponse({ usage: result.usage }),
 	};
 }
 
@@ -112,6 +115,7 @@ export const openaiApi: Provider = {
 		return {
 			object: result.experimental_output as T,
 			modelVersion: targetModel,
+			usage: usageFromResponse({ usage: result.usage }),
 		};
 	},
 };

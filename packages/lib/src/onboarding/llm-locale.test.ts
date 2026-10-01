@@ -18,11 +18,14 @@ const fakeProvider = {
 
 // Only the provider lookup is stubbed — `resolveResearchProvider`'s selection
 // logic still runs against the fake, and call tracking is bypassed so the test
-// never touches the provider_calls table.
+// never touches the provider_calls table. `callCostFromResult` viaja en el mock
+// porque los dos caminos de onboarding le pasan el costo y el consumo de la
+// llamada: mockear `withProviderCallTracking` sin él deja la función indefinida.
 vi.mock("../providers", () => ({
 	getProvider: () => fakeProvider,
 	parseScrapeTargets: () => [],
 	withProviderCallTracking: (_meta: unknown, fn: () => Promise<unknown>) => fn(),
+	callCostFromResult: () => undefined,
 }));
 
 import { runStructuredCompletionPrompt, runStructuredResearchPrompt } from "./llm";
