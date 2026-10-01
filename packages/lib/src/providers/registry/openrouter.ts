@@ -1,14 +1,15 @@
 import { z } from "zod";
+import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
+import type { Citation } from "../../text-extraction";
+import { localeSystemMessages } from "../locale";
+import { costFromResponse, usageFromResponse } from "../token-usage";
 import type {
 	Provider,
-	ScrapeResult,
 	ProviderOptions,
+	ScrapeResult,
 	StructuredResearchOptions,
 	StructuredResearchResult,
 } from "../types";
-import type { Citation } from "../../text-extraction";
-import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
-import { localeSystemMessages } from "../locale";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const OPENROUTER_API_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
@@ -22,7 +23,8 @@ function openrouterHeaders(): Record<string, string> {
 	return {
 		Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 		"Content-Type": "application/json",
-		"HTTP-Referer": process.env.APP_URL ?? "https://github.com/ai-search-guru/getcito-worlds-first-open-source-aio-aeo-or-geo-tool",
+		"HTTP-Referer":
+			process.env.APP_URL ?? "https://github.com/ai-search-guru/getcito-worlds-first-open-source-aio-aeo-or-geo-tool",
 		"X-Title": "Getcito AEO",
 	};
 }
@@ -123,6 +125,8 @@ export const openrouter: Provider = {
 			// (e.g. "openai/gpt-5-mini" vs "openai/gpt-5-mini-2025-08-07") —
 			// matches what openai-api and anthropic-api do.
 			modelVersion: DEFAULT_RESEARCH_MODEL,
+			usage: usageFromResponse(data),
+			costUsd: costFromResponse(data),
 		};
 	},
 
@@ -131,7 +135,7 @@ export const openrouter: Provider = {
 		if (!modelSlug) {
 			throw new Error(
 				`OpenRouter requires a version slug in SCRAPE_TARGETS. ` +
-				`Example: ${model}:openrouter:openai/gpt-5-mini:online`,
+					`Example: ${model}:openrouter:openai/gpt-5-mini:online`,
 			);
 		}
 
@@ -149,7 +153,9 @@ export const openrouter: Provider = {
 			headers: {
 				Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 				"Content-Type": "application/json",
-				"HTTP-Referer": process.env.APP_URL ?? "https://github.com/ai-search-guru/getcito-worlds-first-open-source-aio-aeo-or-geo-tool",
+				"HTTP-Referer":
+					process.env.APP_URL ??
+					"https://github.com/ai-search-guru/getcito-worlds-first-open-source-aio-aeo-or-geo-tool",
 				"X-Title": "Getcito AEO",
 			},
 			body: JSON.stringify({
@@ -175,6 +181,10 @@ export const openrouter: Provider = {
 			webQueries,
 			citations,
 			modelVersion: data?.model ?? modelSlug.replace(":online", ""),
+			usage: usageFromResponse(data),
+			// OpenRouter es el único proveedor que informa el costo en su propia respuesta
+			// (`usage.cost`). Cuando lo hace, el costo es un dato medido y no una estimación.
+			costUsd: costFromResponse(data),
 		};
 	},
 };

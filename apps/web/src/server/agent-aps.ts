@@ -9,7 +9,6 @@ import { createServerFn } from "@tanstack/react-start";
 import {
 	canRegenerateLibrary,
 	categoryFromBrandContext,
-	generateLibraryWithGateway,
 	isLibraryUsable,
 	judgeConfigFromEnv,
 	libraryConfigFromEnv,
@@ -35,7 +34,13 @@ import {
 } from "@/lib/aps/library-message";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { getBoss } from "@/lib/boss-client";
-import { estimateApsRunForBrand, libraryCategoryForEntity, startApsRunForBrand } from "@/server/agent-aps-core";
+import {
+	costComparisonForRuns,
+	estimateApsRunForBrand,
+	generateLibraryRecordingCost,
+	libraryCategoryForEntity,
+	startApsRunForBrand,
+} from "@/server/agent-aps-core";
 
 const runInput = z.object({
 	brandId: z.string().min(1),
@@ -164,6 +169,11 @@ export const getApsRunsFn = createServerFn({ method: "POST" })
 			.where(eq(agentApsScores.entityId, runs[0]?.entityId ?? ""))
 			.orderBy(desc(agentApsScores.createdAt))
 			.limit(60);
+		// Estimado contra real: la comparación viaja ya resuelta para que la pantalla no
+		// tenga que rehacer la cuenta ni decidir por su cuenta si un total está completo.
+		const costs = await costComparisonForRuns(
+			runs.map((run) => ({ id: run.id, estimatedCostUsd: run.estimatedCostUsd })),
+		);
 		return runs.map((run) => ({
 			id: run.id,
 			entityId: run.entityId,
@@ -182,6 +192,7 @@ export const getApsRunsFn = createServerFn({ method: "POST" })
 			promptLibraryVersion: run.promptLibraryVersion,
 			error: run.error,
 			createdAt: run.createdAt.toISOString(),
+			cost: costs.get(run.id) ?? null,
 			scores: scores
 				.filter((score) => score.runId === run.id)
 				.map((score) => ({
@@ -328,7 +339,7 @@ export const generateApsLibraryFn = createServerFn({ method: "POST" })
 			.filter((part) => typeof part === "string" && part.length > 0)
 			.join(" | ");
 
-		const generated = await generateLibraryWithGateway(
+		const generated = await generateLibraryRecordingCost(
 			{
 				brandName: brand.name,
 				industry: category,
@@ -336,6 +347,7 @@ export const generateApsLibraryFn = createServerFn({ method: "POST" })
 				total: data.total,
 			},
 			config,
+			data.brandId,
 		);
 		const report: LibraryGenerationReport = {
 			returned: generated.prompts.length + generated.rejected.length,

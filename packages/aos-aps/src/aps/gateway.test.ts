@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	extractJsonObject,
 	GATEWAY_JUDGE_PIPELINE_VERSION,
+	type GatewayCallCost,
 	gatewayJudge,
 	gatewaySpendFromHeaders,
 	generateLibraryWithGateway,
@@ -409,7 +410,9 @@ describe("gateway cost and budget", () => {
 				headers: { "content-type": "application/json", "x-litellm-response-cost": "0.00002" },
 			})) as unknown as typeof fetch;
 
-		const judge = gatewayJudge(CONFIG, fetchImpl, (usd) => costs.push(usd));
+		const judge = gatewayJudge(CONFIG, fetchImpl, (spend) => {
+			if (spend.costUsd !== null) costs.push(spend.costUsd);
+		});
 		await judge.analyze({ brandName: "F", promptText: "p", response: "r" });
 		await judge.analyze({ brandName: "F", promptText: "p", response: "r" });
 		expect(costs).toEqual([0.00002, 0.00002]);
@@ -458,5 +461,125 @@ describe("gateway cost and budget", () => {
 				headers: { "content-type": "application/json" },
 			})) as unknown as typeof fetch;
 		expect(await readGatewayBudget(CONFIG, noInfo)).toBeNull();
+	});
+});
+
+/**
+ * El costo real del gateway, que hasta hace poco el código leía y tiraba.
+ *
+ * Estos tests cubren los tres estados del header —presente, ausente y basura— porque
+ * la diferencia entre "no vino" y "vino un número" es exactamente lo que decide si
+ * `cost_usd` guarda un valor o `null`. Un `0` inventado afirmaría que la llamada
+ * salió gratis.
+ */
+describe("costo real de una llamada al gateway", () => {
+	const response = (headers: Record<string, string>, usage?: unknown) =>
+		new Response(
+			JSON.stringify({ choices: [{ message: { content: JSON.stringify(VERDICT) } }], ...(usage ? { usage } : {}) }),
+			{
+				status: 200,
+				headers: { "content-type": "application/json", ...headers },
+			},
+		);
+
+	it("parsea el costo del header cuando está presente", async () => {
+		const spends: GatewayCallCost[] = [];
+		const fetchImpl = (async () => response({ "x-litellm-response-cost": "0.00002" })) as unknown as typeof fetch;
+		const judge = gatewayJudge(CONFIG, fetchImpl, (spend) => spends.push(spend));
+		await judge.analyze({ brandName: "F", promptText: "p", response: "r" });
+		expect(spends).toHaveLength(1);
+		expect(spends[0]?.costUsd).toBeCloseTo(0.00002, 10);
+		expect(spends[0]?.pricingSource).toBe("gateway_header");
+	});
+
+	it("sin el header el costo es null y no cero", async () => {
+		const spends: GatewayCallCost[] = [];
+		const fetchImpl = (async () => response({})) as unknown as typeof fetch;
+		const judge = gatewayJudge(CONFIG, fetchImpl, (spend) => spends.push(spend));
+		await judge.analyze({ brandName: "F", promptText: "p", response: "r" });
+		expect(spends[0]?.costUsd).toBeNull();
+		// Sin costo no hay origen que declarar: null dice "no lo sé", no "fue gratis".
+		expect(spends[0]?.pricingSource).toBeNull();
+	});
+
+	it("un valor basura en el header también es null, nunca cero", async () => {
+		for (const raw of ["no-es-numero", "", "-1", "NaN"]) {
+			const spends: GatewayCallCost[] = [];
+			const fetchImpl = (async () => response({ "x-litellm-response-cost": raw })) as unknown as typeof fetch;
+			const judge = gatewayJudge(CONFIG, fetchImpl, (spend) => spends.push(spend));
+			await judge.analyze({ brandName: "F", promptText: "p", response: "r" });
+			expect(spends[0]?.costUsd).toBeNull();
+			expect(spends[0]?.costUsd).not.toBe(0);
+		}
+	});
+
+	it("un costo de cero reportado por el gateway sí es cero: es un dato, no una ausencia", async () => {
+		const spends: GatewayCallCost[] = [];
+		const fetchImpl = (async () => response({ "x-litellm-response-cost": "0" })) as unknown as typeof fetch;
+		const judge = gatewayJudge(CONFIG, fetchImpl, (spend) => spends.push(spend));
+		await judge.analyze({ brandName: "F", promptText: "p", response: "r" });
+		expect(spends[0]?.costUsd).toBe(0);
+		expect(spends[0]?.pricingSource).toBe("gateway_header");
+	});
+
+	it("lee los tokens del cuerpo, con el razonamiento aparte", async () => {
+		const spends: GatewayCallCost[] = [];
+		const fetchImpl = (async () =>
+			response(
+				{ "x-litellm-response-cost": "0.0000165" },
+				{
+					prompt_tokens: 812,
+					completion_tokens: 140,
+					completion_tokens_details: { reasoning_tokens: 940 },
+				},
+			)) as unknown as typeof fetch;
+		const judge = gatewayJudge(CONFIG, fetchImpl, (spend) => spends.push(spend));
+		await judge.analyze({ brandName: "F", promptText: "p", response: "r" });
+		expect(spends[0]?.usage).toEqual({ promptTokens: 812, completionTokens: 140, reasoningTokens: 940 });
+	});
+
+	it("sin usage en el cuerpo no se inventan tokens", async () => {
+		const spends: GatewayCallCost[] = [];
+		const fetchImpl = (async () => response({ "x-litellm-response-cost": "0.00002" })) as unknown as typeof fetch;
+		const judge = gatewayJudge(CONFIG, fetchImpl, (spend) => spends.push(spend));
+		await judge.analyze({ brandName: "F", promptText: "p", response: "r" });
+		expect(spends[0]?.usage).toBeUndefined();
+	});
+
+	it("una llamada que falla no reporta costo, porque no gastó", async () => {
+		const spends: GatewayCallCost[] = [];
+		const fetchImpl = (async () => new Response("boom", { status: 500 })) as unknown as typeof fetch;
+		const judge = gatewayJudge(CONFIG, fetchImpl, (spend) => spends.push(spend));
+		expect(await judge.analyze({ brandName: "F", promptText: "p", response: "r" })).toBeNull();
+		expect(spends).toHaveLength(0);
+	});
+
+	it("la generación de la biblioteca también reporta su costo, aun cuando falla", async () => {
+		const spends: GatewayCallCost[] = [];
+		const fetchImpl = (async () =>
+			new Response(JSON.stringify({ choices: [{ message: { content: "no es json usable" } }] }), {
+				status: 200,
+				headers: { "content-type": "application/json", "x-litellm-response-cost": "0.0031" },
+			})) as unknown as typeof fetch;
+		const generated = await generateLibraryWithGateway({ brandName: "F" }, CONFIG, fetchImpl, (spend) =>
+			spends.push(spend),
+		);
+		expect(generated.failure).not.toBeNull();
+		// La llamada se pagó igual: es la que más duele, porque no produjo nada.
+		expect(spends[0]?.costUsd).toBeCloseTo(0.0031, 10);
+	});
+
+	it("una generación truncada también deja su costo registrado", async () => {
+		const spends: GatewayCallCost[] = [];
+		const fetchImpl = (async () =>
+			new Response(JSON.stringify({ choices: [{ message: { content: "{" }, finish_reason: "length" }] }), {
+				status: 200,
+				headers: { "content-type": "application/json", "x-litellm-response-cost": "0.02" },
+			})) as unknown as typeof fetch;
+		const generated = await generateLibraryWithGateway({ brandName: "F" }, CONFIG, fetchImpl, (spend) =>
+			spends.push(spend),
+		);
+		expect(generated.failure).toBe("truncated");
+		expect(spends[0]?.costUsd).toBeCloseTo(0.02, 10);
 	});
 });

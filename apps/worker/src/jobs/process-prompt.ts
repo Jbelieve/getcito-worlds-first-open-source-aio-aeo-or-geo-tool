@@ -1,5 +1,4 @@
 import { getDefaultDelayHours, PROCESS_PROMPT_JOB_POLICY, RUNS_PER_PROMPT } from "@workspace/lib/constants";
-import { failureBackoffHours } from "@workspace/lib/run-backoff";
 import { db } from "@workspace/lib/db/db";
 import {
 	type Brand,
@@ -11,6 +10,7 @@ import {
 	prompts,
 } from "@workspace/lib/db/schema";
 import {
+	callCostFromResult,
 	getProvider,
 	type ModelConfig,
 	type Provider,
@@ -18,6 +18,7 @@ import {
 	selectTargetsForBrand,
 	withProviderCallTracking,
 } from "@workspace/lib/providers";
+import { failureBackoffHours } from "@workspace/lib/run-backoff";
 import type { Citation } from "@workspace/lib/text-extraction";
 import { eq } from "drizzle-orm";
 import type { Job } from "pg-boss";
@@ -228,6 +229,9 @@ async function runModelIteration({
 				targetMarket: brand.targetMarket ?? undefined,
 				targetLanguage: brand.targetLanguage ?? undefined,
 			}),
+		// Tokens y costo reales que reportó el proveedor. Un scraper no reporta
+		// ninguno: la fila queda con `cost_usd` en null, que es "no lo sé".
+		callCostFromResult,
 	);
 
 	// `webQueries` is stored exactly as the provider reported it — engines do

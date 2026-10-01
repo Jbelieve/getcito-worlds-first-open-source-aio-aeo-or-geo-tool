@@ -4,6 +4,7 @@ import {
 	boolean,
 	integer,
 	json,
+	numeric,
 	pgTable,
 	text,
 	timestamp,
@@ -239,6 +240,31 @@ export const agentApsRuns = pgTable("agent_aps_runs", {
 	completedCalls: integer("completed_calls").default(0).notNull(),
 	/** AOS score feeding the capacidad_accion dimension. */
 	capacidadAccion: integer("capacidad_accion"),
+	/**
+	 * Lo que la corrida **estimó** antes de gastar, en USD. Sale de `estimateApsRun` y de los
+	 * precios de `APS_PRICES`; es el número que el operador aprobó al confirmar.
+	 */
+	estimatedCostUsd: numeric("estimated_cost_usd", { precision: 18, scale: 10 }),
+	/**
+	 * Lo que la corrida **costó de verdad**, en USD: la suma de `provider_calls.cost_usd` de sus
+	 * llamadas de medición. Es el número que hoy no existía en ningún lado, y por eso el precio de
+	 * `APS_PRICES` sobrevivía sin que nadie lo notara.
+	 *
+	 * **Null cuando el costo está incompleto**, y ahí es donde está el cuidado: si alguna llamada
+	 * quedó sin costo, un total parcial no se guarda como si fuera el total. El dato incompleto se
+	 * declara incompleto en `unpricedCalls` en vez de mentir con un número que parece terminado.
+	 */
+	actualMeasurementUsd: numeric("actual_measurement_usd", { precision: 18, scale: 10 }),
+	/** Costo real de las llamadas del juez (el gateway las factura y las informa). */
+	actualJudgeUsd: numeric("actual_judge_usd", { precision: 18, scale: 10 }),
+	/**
+	 * Cuántas llamadas de la corrida quedaron **sin costo conocido**. Junto a los tres números de
+	 * arriba es lo que hace legible el dato: un total sin esta cuenta no se puede distinguir de un
+	 * total completo.
+	 */
+	unpricedCalls: integer("unpriced_calls"),
+	/** Total de llamadas que la corrida efectivamente registró (medición + juez). */
+	costedCalls: integer("costed_calls"),
 	estimation: json("estimation"),
 	budgetReasons: json("budget_reasons"),
 	scoringVersion: text("scoring_version").notNull(),

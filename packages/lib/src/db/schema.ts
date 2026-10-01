@@ -3,6 +3,7 @@ import {
 	index,
 	integer,
 	json,
+	numeric,
 	pgEnum,
 	pgTable,
 	primaryKey,
@@ -252,10 +253,58 @@ export const providerCalls = pgTable(
 		success: boolean("success").notNull(),
 		errorMessage: text("error_message"),
 		durationMs: integer("duration_ms"),
+		/**
+		 * **El costo real de esta llamada, en USD.** Null significa "no lo sé", nunca "fue
+		 * gratis": `0` es un costo conocido de cero —una llamada que entró en el plan— y `null`
+		 * es un costo que no se pudo obtener. Confundirlos es lo que hace que un total parezca
+		 * completo y mienta.
+		 *
+		 * Sale del gateway (`x-litellm-response-cost`, el número facturado con márgenes y
+		 * descuentos) o del propio proveedor cuando lo reporta (OpenRouter). Nunca se deriva de
+		 * los tokens: sin la tarifa del modelo, `tokens x precio` es un número inventado.
+		 */
+		costUsd: numeric("cost_usd", { precision: 18, scale: 10 }),
+		/**
+		 * De dónde salió `cost_usd`, para poder distinguir **por qué** falta un costo. Null
+		 * cuando no hay costo, y entonces dice cuál de las dos cosas pasó:
+		 *
+		 *   - `"gateway_header"`: el gateway lo facturó y lo informó en la respuesta.
+		 *   - `"provider"`: el proveedor lo devolvió en su propio cuerpo (OpenRouter).
+		 *   - `"tokens_only"`: el proveedor reportó tokens pero **ningún** costo. El dato existe
+		 *     y es insuficiente por sí solo: falta la tarifa del modelo para convertirlo en
+		 *     dólares, y esa tarifa no está en ninguna parte del sistema. Es el estado de los
+		 *     modelos de medición que no pasan por el gateway.
+		 *   - `null`: el camino no puede reportar costo (scrapers) o la llamada falló.
+		 *
+		 * Un `unpriced` booleano no alcanzaba: no distingue "el proveedor no lo reporta" de "no
+		 * lo capturamos", que es exactamente la diferencia que hay que ver para saber si el
+		 * arreglo es de código o de contrato con el proveedor.
+		 */
+		pricingSource: text("pricing_source").$type<"gateway_header" | "provider" | "tokens_only">(),
+		/** Tokens de entrada que reportó el proveedor. Null si no reportó `usage`. */
+		promptTokens: integer("prompt_tokens"),
+		/** Tokens de salida que reportó el proveedor. Null si no reportó `usage`. */
+		completionTokens: integer("completion_tokens"),
+		/**
+		 * Tokens de razonamiento, cuando el modelo los separa. Se guardan aparte porque son costo
+		 * puro: en la biblioteca el razonamiento se comió hasta el 100% del tope y esa es la
+		 * diferencia entre una llamada que devuelve JSON y una que no devuelve nada.
+		 */
+		reasoningTokens: integer("reasoning_tokens"),
+		/**
+		 * La corrida APS a la que pertenece esta llamada, para poder sumar el costo real de una
+		 * corrida —medición **y** juez— sin adivinar por fecha ni por marca. Null en toda llamada
+		 * que no sea de una corrida APS (tracking diario, reportes, onboarding).
+		 *
+		 * Sin foreign key, igual que `brand_id`: este log es append-only y tiene que sobrevivir a
+		 * la corrida que lo generó.
+		 */
+		agentApsRunId: uuid("agent_aps_run_id"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => ({
 		providerCreatedIdx: index("provider_calls_provider_created_at_idx").on(table.provider, table.createdAt),
+		apsRunIdx: index("provider_calls_agent_aps_run_id_idx").on(table.agentApsRunId),
 		promptCreatedIdx: index("provider_calls_prompt_id_created_at_idx").on(table.promptId, table.createdAt),
 		providerModelCreatedIdx: index("provider_calls_provider_model_created_at_idx").on(
 			table.provider,
