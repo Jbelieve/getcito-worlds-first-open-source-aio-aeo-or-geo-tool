@@ -37,7 +37,7 @@ export const agentBrandEntities = pgTable("agent_brand_entities", {
 		.defaultNow()
 		.$onUpdate(() => new Date())
 		.notNull(),
-});
+}).enableRLS();
 
 export const agentAosAudits = pgTable("agent_aos_audits", {
 	id: uuid("id").defaultRandom().primaryKey().notNull(),
@@ -59,7 +59,7 @@ export const agentAosAudits = pgTable("agent_aos_audits", {
 	scoringVersion: text("scoring_version"),
 	error: text("error"),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const agentBrandDnaSnapshots = pgTable("agent_brand_dna_snapshots", {
 	id: uuid("id").defaultRandom().primaryKey().notNull(),
@@ -74,7 +74,7 @@ export const agentBrandDnaSnapshots = pgTable("agent_brand_dna_snapshots", {
 	payload: json("payload").notNull(),
 	hash: text("hash").notNull(),
 	syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const agentAssets = pgTable("agent_assets", {
 	id: uuid("id").defaultRandom().primaryKey().notNull(),
@@ -89,7 +89,7 @@ export const agentAssets = pgTable("agent_assets", {
 	content: text("content").notNull(),
 	hash: text("hash").notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 /**
  * Los claims que BeAOS **confirmó con un humano**, con la prueba que los sostiene.
@@ -172,7 +172,7 @@ export const agentBrandClaims = pgTable(
 			.notNull(),
 	},
 	(table) => [uniqueIndex("agent_brand_claims_entity_claim_uidx").on(table.entityId, table.claimId)],
-);
+).enableRLS();
 
 /**
  * APS Fase 4 — the measuring instrument. Locked for 90 days: while a library is locked its prompts
@@ -191,7 +191,7 @@ export const agentApsPromptLibraries = pgTable("agent_aps_prompt_libraries", {
 	lockedAt: timestamp("locked_at", { withTimezone: true }).defaultNow().notNull(),
 	unlocksAt: timestamp("unlocks_at", { withTimezone: true }).notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const agentApsPrompts = pgTable("agent_aps_prompts", {
 	id: uuid("id").defaultRandom().primaryKey().notNull(),
@@ -204,7 +204,7 @@ export const agentApsPrompts = pgTable("agent_aps_prompts", {
 	funnelStage: text("funnel_stage").$type<"awareness" | "consideration" | "decision">().notNull(),
 	enabled: boolean("enabled").default(true).notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 /**
  * One measurement run. Versions are fixed per run, never per observation: a judge or formula change
@@ -277,7 +277,7 @@ export const agentApsRuns = pgTable("agent_aps_runs", {
 	startedAt: timestamp("started_at", { withTimezone: true }),
 	finishedAt: timestamp("finished_at", { withTimezone: true }),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 /**
  * Fase 0 capture then Fase 1 analysis, kept in one row on purpose: the raw answer is stored once and
@@ -309,7 +309,7 @@ export const agentApsObservations = pgTable("agent_aps_observations", {
 	judgeModelVersion: text("judge_model_version"),
 	analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 /** One row per model: a denominator never mixes models. */
 export const agentApsScores = pgTable("agent_aps_scores", {
@@ -343,7 +343,7 @@ export const agentApsScores = pgTable("agent_aps_scores", {
 	judgeModelVersion: text("judge_model_version").notNull(),
 	promptLibraryVersion: integer("prompt_library_version").notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 /**
  * Credencial por producto para el MCP.
@@ -371,7 +371,7 @@ export const agentApiTokens = pgTable(
 		revokedAt: timestamp("revoked_at", { withTimezone: true }),
 	},
 	(table) => [uniqueIndex("agent_api_tokens_token_hash_uidx").on(table.tokenHash)],
-);
+).enableRLS();
 
 export type AgentApiToken = typeof agentApiTokens.$inferSelect;
 export type NewAgentApiToken = typeof agentApiTokens.$inferInsert;
