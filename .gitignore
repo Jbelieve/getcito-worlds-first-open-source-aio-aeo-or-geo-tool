@@ -104,4 +104,8 @@ docs/
 # worktrees de agentes (aislamiento entre sesiones)
 .worktrees/
 
+# WordPress local para probar apps/beaos-wordpress/ (SQLite, autocontenido).
+# No entra al repo: es un WordPress completo con base, plugins y contenido de prueba.
+.wp-local/
+
 # Worktrees de agentes en paralelo: no entran al repo ni a los tests.
