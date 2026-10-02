@@ -229,6 +229,138 @@ function beaos_aos_retry_after( $value, $fallback = 0 ) {
 	return max( 0, $when - time() );
 }
 
+// ── El canje del código de conexión ─────────────────────────────────────────────────────────────
+//
+// El paso 1 dejó de pedir un token pegado a mano: pide un **código de conexión** —el que se genera en
+// BeAOS, Configuración → Brand, o con `scripts/beaos-enroll.sh create <brandId> <entityId>`— y lo
+// canjea por el token del sitio. El código sirve una sola vez y vence.
+//
+// **Este es el único `/api/v1/*` que el plugin usa, y puede usarlo porque es público.** El resto de
+// `/api/v1/*` valida sólo contra `ADMIN_API_KEYS`, la llave maestra compartida que abre todas las marcas
+// y no se revoca por sitio: mandarla a un WordPress ajeno es exactamente lo que este flujo existe para
+// evitar. El endpoint de canje no pide credencial previa justamente porque el código *es* la
+// credencial; su cota es un cupo por IP. `tests/pure.php` tiene la guarda que lo exige: `/api/v1/enroll`
+// está permitido y cualquier otro `/api/v1/*` la hace fallar.
+
+/** La ruta del canje. Una sola constante, para que la guarda del test tenga un único literal que leer. */
+const BEAOS_AOS_ENROLL_PATH = '/api/v1/enroll';
+
+/**
+ * La URL del canje, a partir de la base de BeAOS (`api`). Vacía si no hay base configurada: mejor no
+ * intentar el pedido que mandarlo a cualquier lado.
+ */
+function beaos_aos_enroll_url( $api ) {
+	$base = beaos_aos_normalize_https( $api );
+	if ( '' === $base ) {
+		return '';
+	}
+	return $base . BEAOS_AOS_ENROLL_PATH;
+}
+
+/**
+ * El cuerpo del `POST /api/v1/enroll`: `{ "code": "…" }`, siempre un objeto JSON.
+ *
+ * Se arma con `json_encode` y no con el `wp_json_encode` de WordPress porque este archivo no puede
+ * llamar a ninguna función de WordPress (es lo que lo hace probable con un `php` pelado, y hay un test
+ * que lo exige). El código se recorta: un espacio pegado de más al copiar no tiene por qué ser un
+ * rechazo.
+ *
+ * Devuelve `''` si el código está vacío: un cuerpo vacío no se manda, se corta antes.
+ */
+function beaos_aos_enroll_body( $code ) {
+	$code = is_string( $code ) ? trim( $code ) : '';
+	if ( '' === $code ) {
+		return '';
+	}
+	$encoded = json_encode( array( 'code' => $code ) );
+	return is_string( $encoded ) ? $encoded : '';
+}
+
+/**
+ * El mensaje de un rechazo del canje.
+ *
+ * El endpoint contesta **el mismo texto** para un código inexistente, uno vencido y uno ya usado —a
+ * propósito: distinguirlos le diría a quien prueba cuáles existen—, así que acá no se puede "mejorar" el
+ * mensaje inventando el motivo. Lo que sí se agrega es el `429`, que no habla del código sino del
+ * límite: es lo único que el operador puede accionar (esperar, o mirar de dónde sale la IP).
+ */
+function beaos_aos_enroll_http_error( $status, $body = '', $retry_after = 0 ) {
+	$status = (int) $status;
+	if ( $status < 400 ) {
+		return '';
+	}
+	$decoded = is_string( $body ) && '' !== trim( $body ) ? json_decode( $body, true ) : null;
+	$message = is_array( $decoded ) && isset( $decoded['message'] ) && is_string( $decoded['message'] )
+		? trim( $decoded['message'] )
+		: '';
+
+	if ( 400 === $status ) {
+		return '' !== $message
+			? $message
+			: 'El código no sirve: no existe, ya venció o ya se usó. Generá uno nuevo en BeAOS (Configuración → Brand).';
+	}
+	if ( 404 === $status ) {
+		return 'La ruta de conexión no existe en BeAOS (404). Revisá la base de BeAOS en los ajustes.';
+	}
+	if ( 405 === $status ) {
+		return 'BeAOS no acepta POST en la ruta de conexión (405).';
+	}
+	if ( 429 === $status ) {
+		$espera = (int) $retry_after;
+		return 'Se alcanzó el límite de intentos de conexión desde esta IP.'
+			. ( $espera > 0 ? ' Reintentá en ' . $espera . ' segundos.' : ' Reintentá más tarde.' );
+	}
+	if ( $status >= 500 ) {
+		return 'BeAOS respondió ' . $status . ' (problema del servidor).' . ( '' !== $message ? ' ' . $message : '' );
+	}
+	return 'BeAOS respondió ' . $status . '.' . ( '' !== $message ? ' ' . $message : '' );
+}
+
+/**
+ * Lee la respuesta del canje.
+ *
+ * Tres cosas pueden faltar y las tres se dicen distinto **porque se arreglan distinto**: el token (sin
+ * él no hay conexión), el `brandId` y el `entityId` (el plugin guarda los tres; el `entityId` es lo que
+ * después le pide el kit al MCP). Un 200 sin token es una respuesta que no se puede usar, no un éxito.
+ *
+ * Devuelve `array( 'ok' => bool, 'token' =>, 'brandId' =>, 'entityId' =>, 'error' => )`.
+ */
+function beaos_aos_enroll_read( $status, $body, $retry_after = 0 ) {
+	$status = (int) $status;
+	if ( $status < 200 || $status >= 300 ) {
+		return beaos_aos_enroll_result( false, '', '', '', beaos_aos_enroll_http_error( $status, $body, $retry_after ) );
+	}
+
+	$decoded = is_string( $body ) ? json_decode( $body, true ) : null;
+	if ( ! is_array( $decoded ) ) {
+		return beaos_aos_enroll_result( false, '', '', '', 'BeAOS contestó algo que no es JSON. Puede ser un proxy o un WAF en el medio.' );
+	}
+
+	$token  = isset( $decoded['token'] ) && is_string( $decoded['token'] ) ? trim( $decoded['token'] ) : '';
+	$brand  = isset( $decoded['brandId'] ) && is_string( $decoded['brandId'] ) ? trim( $decoded['brandId'] ) : '';
+	$entity = isset( $decoded['entityId'] ) && is_string( $decoded['entityId'] ) ? trim( $decoded['entityId'] ) : '';
+
+	if ( '' === $token ) {
+		return beaos_aos_enroll_result( false, '', $brand, $entity, 'BeAOS aceptó el código pero no devolvió ningún token: no se guardó nada y el código ya se consumió. Generá otro.' );
+	}
+	if ( '' === $entity ) {
+		return beaos_aos_enroll_result( false, $token, $brand, '', 'BeAOS devolvió un token pero no el entityId, y sin eso no hay a quién pedirle el kit. Generá otro código.' );
+	}
+
+	return beaos_aos_enroll_result( true, $token, $brand, $entity, '' );
+}
+
+/** La forma de la respuesta del canje, en un solo lugar. */
+function beaos_aos_enroll_result( $ok, $token = '', $brand = '', $entity = '', $error = '' ) {
+	return array(
+		'ok'       => (bool) $ok,
+		'token'    => (string) $token,
+		'brandId'  => (string) $brand,
+		'entityId' => (string) $entity,
+		'error'    => (string) $error,
+	);
+}
+
 // ── Rutas del kit ───────────────────────────────────────────────────────────────────────────────
 
 /** El path de una request, sin query. `REQUEST_URI` puede venir como URL absoluta en algunos proxies. */

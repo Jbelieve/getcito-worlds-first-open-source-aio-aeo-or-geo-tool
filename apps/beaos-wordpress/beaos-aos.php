@@ -539,11 +539,89 @@ register_deactivation_hook(
 	}
 );
 
+// ── El canje del código de conexión ─────────────────────────────────────────────────────────────
+//
+// El paso 1 del asistente pide un **código de conexión** y lo canjea acá. El código se genera en BeAOS
+// (Configuración → Brand, o `scripts/beaos-enroll.sh create <brandId> <entityId>`), sirve una sola vez,
+// vence en 24 h y está atado a una marca y una entidad: lo que el plugin recibe es **su** token de
+// producto, no una llave maestra. La decisión de qué hacer con cada respuesta vive en el archivo puro
+// (`beaos_aos_enroll_*`), que es lo que se prueba sin WordPress; acá vive el `wp_remote_post`.
+
+/**
+ * Canjea el código contra `POST /api/v1/enroll` y, si sale bien, guarda token, `brandId` y `entityId`.
+ *
+ * El token se guarda con `update_option` y **nunca** vuelve al navegador: la pantalla lo único que
+ * muestra es "conectado". Un canje fallido no toca la credencial que ya estuviera guardada.
+ */
+function beaos_aos_enroll( $code ) {
+	$o   = beaos_aos_opts();
+	$url = beaos_aos_enroll_url( $o['api'] );
+	if ( '' === $url ) {
+		return beaos_aos_enroll_result( false, '', '', '', 'Falta la base de BeAOS en los ajustes: sin eso no hay a dónde mandar el código.' );
+	}
+
+	$body = beaos_aos_enroll_body( $code );
+	if ( '' === $body ) {
+		return beaos_aos_enroll_result( false, '', '', '', 'Pegá el código de conexión que generaste en BeAOS.' );
+	}
+
+	$response = wp_remote_post(
+		$url,
+		array(
+			'timeout' => BEAOS_AOS_TIMEOUT,
+			'headers' => array(
+				'Content-Type' => 'application/json',
+				'Accept'       => 'application/json',
+			),
+			'body'    => $body,
+		)
+	);
+
+	if ( is_wp_error( $response ) ) {
+		return beaos_aos_enroll_result( false, '', '', '', 'No se pudo llegar a BeAOS: ' . $response->get_error_message() );
+	}
+
+	$result = beaos_aos_enroll_read(
+		wp_remote_retrieve_response_code( $response ),
+		wp_remote_retrieve_body( $response ),
+		beaos_aos_retry_after( wp_remote_retrieve_header( $response, 'retry-after' ) )
+	);
+	if ( ! $result['ok'] ) {
+		return $result;
+	}
+
+	// Los cuatro campos juntos: la marca y la entidad las decide BeAOS, no el operador. Escribir el
+	// token sin ellas dejaría una conexión que no sirve para pedir el kit.
+	$saved                       = beaos_aos_opts();
+	$saved['token']              = $result['token'];
+	$saved['brand_id']           = $result['brandId'];
+	$saved['entity_id']          = $result['entityId'];
+	update_option( BEAOS_AOS_OPTION, $saved );
+
+	return $result;
+}
+
 // ── Los ajustes ─────────────────────────────────────────────────────────────────────────────────
 
 add_action(
 	'admin_init',
 	function () {
+		// El paso 1: canjear el código de conexión. Va **antes** de `register_setting` para que el canje se
+		// resuelva primero y la pantalla pueda mostrar el resultado en el mismo request. Con el mismo
+		// `action="options.php"` y el mismo `settings_fields`, WordPress guarda el resto de los ajustes en
+		// la misma pasada: el código no se guarda —se canjea y se tira—, pero la marca y la web que el
+		// operador escribió al lado no se pierden.
+		if ( isset( $_POST['beaos-aos-enroll'] ) && current_user_can( 'manage_options' ) ) {
+			check_admin_referer( 'beaos_aos_enroll', 'beaos_aos_enroll_nonce' );
+			$code   = isset( $_POST['beaos_aos_code'] ) ? sanitize_text_field( wp_unslash( $_POST['beaos_aos_code'] ) ) : '';
+			$result = beaos_aos_enroll( $code );
+			// El aviso viaja por transient y no por query string: el token y el entityId no tienen por qué
+			// pasar por la barra de direcciones.
+			set_transient( 'beaos_aos_enroll_notice_' . get_current_user_id(), $result, 60 );
+			wp_safe_redirect( add_query_arg( array( 'page' => BEAOS_AOS_PAGE ), admin_url( 'options-general.php' ) ) );
+			exit;
+		}
+
 		register_setting(
 			'beaos_aos',
 			BEAOS_AOS_OPTION,
@@ -634,10 +712,43 @@ function beaos_aos_settings_page() {
 			<?php settings_fields( 'beaos_aos' ); ?>
 
 			<h2>1 · Conexión</h2>
-			<p class="description">El asistente de 3 pasos todavía no está: falta elegir el flujo con el que
-			BeAOS le entrega la credencial al sitio. Mientras tanto, el camino manual funciona: creá un token
-			por producto con <code>scripts/beaos-token.sh create wordpress-tu-sitio</code> en BeAOS, sacá el
-			<code>entityId</code> con <code>get_brand</code> y pegá los dos acá.</p>
+			<?php
+			// El aviso del canje, si lo hubo. Se lee una sola vez: el transient se borra al mostrarlo para
+			// que un F5 no repita un mensaje viejo.
+			$notice = get_transient( 'beaos_aos_enroll_notice_' . get_current_user_id() );
+			if ( is_array( $notice ) ) {
+				delete_transient( 'beaos_aos_enroll_notice_' . get_current_user_id() );
+				if ( ! empty( $notice['ok'] ) ) {
+					printf(
+						'<div class="notice notice-success"><p><strong>Conectado.</strong> BeAOS emitió el token de este sitio para la marca <code>%s</code> y la entidad <code>%s</code>. Ya se puede sincronizar el kit.</p></div>',
+						esc_html( $notice['brandId'] ),
+						esc_html( $notice['entityId'] )
+					);
+				} else {
+					printf( '<div class="notice notice-error"><p><strong>No se pudo conectar.</strong> %s</p></div>', esc_html( $notice['error'] ) );
+				}
+			}
+			?>
+			<p class="description">Generá un <strong>código de conexión</strong> en BeAOS (Configuración → Brand,
+			o <code>scripts/beaos-enroll.sh create &lt;brandId&gt; &lt;entityId&gt;</code>) y pegalo acá. El
+			código sirve <strong>una sola vez</strong>, vence en 24 horas y sólo emite un token para su marca:
+			lo que viaja a este WordPress es un secreto corto y revocable, no la llave maestra de BeAOS.</p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="beaos-aos-code">Código de conexión</label></th>
+					<td>
+						<?php wp_nonce_field( 'beaos_aos_enroll', 'beaos_aos_enroll_nonce' ); ?>
+						<input id="beaos-aos-code" class="regular-text" type="text" autocomplete="off" spellcheck="false" name="beaos_aos_code" value="" placeholder="beaos_…">
+						<button type="submit" class="button button-primary" name="beaos-aos-enroll" value="1">Conectar</button>
+						<p class="description">El código se canjea contra <code><?php echo esc_html( beaos_aos_enroll_url( $o['api'] ) ); ?></code>
+						y se tira: no se guarda. Si el canje no sale, el aviso dice por qué (código vencido o ya
+						usado, límite de intentos alcanzado) y la credencial que ya estuviera guardada no se toca.</p>
+					</td>
+				</tr>
+			</table>
+
+			<p class="description">Los cuatro campos de abajo los llena la conexión sola. Quedan a la vista
+			para poder revisar o corregir a mano lo que BeAOS devolvió; el token nunca se imprime.</p>
 			<table class="form-table" role="presentation">
 				<tr>
 					<th scope="row"><label for="beaos-token">Token del producto</label></th>
