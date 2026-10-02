@@ -596,5 +596,113 @@ if ( check( false !== $core_src, 'encuentro agent-assets-core.ts' ) ) {
 	}
 }
 
+// ── 14 · El contrato con la guarda de rutas de BeAOS ────────────────────────────────────────────
+//
+// La forma de una ruta del kit la conocen **tres** lugares: el generador (`generate.ts`), la lista
+// blanca de este plugin (`beaos-aos-pure.php`) y la guarda de BeAOS
+// (`packages/aos-aps/src/assets/kit-routes.ts`), que es la que usan la escritura, la lectura del bundle
+// y el `CHECK` de la base. PHP y TypeScript no comparten código, así que la atadura no puede ser un
+// import: es este test, que **lee la definición de BeAOS** y la compara, lista por lista y caso por caso.
+//
+// Lo que se compara:
+//   - los cinco archivos fijos de la raíz, el prefijo de `/.well-known/`, la lista de prohibidas y el
+//     tope de largo: **iguales**, en el mismo orden;
+//   - y el corpus compartido (`KIT_ROUTE_VECTORS`): cada caso tiene que dar el mismo veredicto acá que
+//     allá. Un caso nuevo se agrega una sola vez, en `kit-routes.ts`, y los dos tests lo exigen.
+echo "14 · el contrato con la guarda de rutas de BeAOS\n";
+
+/** El contenido del `= [ … ];` de un `export const NOMBRE` de un archivo TypeScript. */
+function beaos_aos_ts_block( $source, $name ) {
+	$i = strpos( (string) $source, 'export const ' . $name );
+	if ( false === $i ) {
+		return null;
+	}
+	$start = strpos( (string) $source, '= [', $i );
+	$end   = strpos( (string) $source, "\n];", (int) $start );
+	if ( false === $start || false === $end ) {
+		return null;
+	}
+	return substr( (string) $source, $start + 3, $end - $start - 3 );
+}
+
+/** Los literales de texto de un bloque, en orden de aparición. */
+function beaos_aos_ts_strings( $block ) {
+	preg_match_all( '/"([^"]*)"/', (string) $block, $matches );
+	return $matches[1];
+}
+
+/**
+ * Las entradas del corpus: `["/ruta", true],` una por línea. Una línea que no se pueda leer y no sea un
+ * comentario ni un espacio se devuelve en `no_verificables`: un caso que el test no puede leer es un
+ * caso sobre el que no puede garantizar nada, y eso se denuncia.
+ */
+function beaos_aos_ts_vectors( $block ) {
+	$vectors = array();
+	$no      = array();
+	foreach ( preg_split( '/\R/', (string) $block ) as $linea ) {
+		if ( preg_match( '#^\s*(//|/\*|\*)#', $linea ) ) {
+			continue;
+		}
+		if ( '' === trim( $linea ) ) {
+			continue;
+		}
+		if ( preg_match( '/^\s*\["([^"]*)",\s*(true|false)\],\s*$/', $linea, $m ) ) {
+			$vectors[] = array(
+				'path' => $m[1],
+				'ok'   => 'true' === $m[2],
+			);
+			continue;
+		}
+		$no[] = trim( $linea );
+	}
+	return array(
+		'vectors'         => $vectors,
+		'no_verificables' => $no,
+	);
+}
+
+$rutas_ts = dirname( __DIR__, 3 ) . '/packages/aos-aps/src/assets/kit-routes.ts';
+$rutas    = @file_get_contents( $rutas_ts );
+if ( ! check( false !== $rutas, 'encuentro la guarda de rutas de BeAOS (packages/aos-aps/src/assets/kit-routes.ts)' ) ) {
+	echo "pure: FALLA\n";
+	exit( 1 );
+}
+
+check_same(
+	BEAOS_AOS_ROOT_PATHS,
+	beaos_aos_ts_strings( beaos_aos_ts_block( $rutas, 'KIT_ROOT_PATHS' ) ),
+	'los cinco archivos fijos de la raíz son los mismos que los de BeAOS'
+);
+check_same(
+	BEAOS_AOS_DENIED_PATHS,
+	beaos_aos_ts_strings( beaos_aos_ts_block( $rutas, 'KIT_DENIED_PATHS' ) ),
+	'la lista de rutas prohibidas es la misma que la de BeAOS'
+);
+
+preg_match( '/KIT_WELL_KNOWN_PREFIX\s*=\s*"([^"]*)"/', $rutas, $prefijo_ts );
+check_same( BEAOS_AOS_WELL_KNOWN, $prefijo_ts[1] ?? '', 'el prefijo de .well-known es el mismo' );
+
+preg_match( '/KIT_PATH_MAX_LENGTH\s*=\s*(\d+)/', $rutas, $max_ts );
+check_same( BEAOS_AOS_PATH_MAX, (int) ( $max_ts[1] ?? 0 ), 'el tope de largo es el mismo' );
+
+$corpus = beaos_aos_ts_vectors( beaos_aos_ts_block( $rutas, 'KIT_ROUTE_VECTORS' ) );
+check_same( array(), $corpus['no_verificables'], 'el corpus compartido se puede leer entero (ninguna entrada rara)' );
+check(
+	count( $corpus['vectors'] ) >= 30,
+	'el corpus compartido trae casos de sobra (encontré ' . count( $corpus['vectors'] ) . ', esperaba 30 o más)'
+);
+
+$discrepancias = array();
+foreach ( $corpus['vectors'] as $caso ) {
+	if ( beaos_aos_claimable_path( $caso['path'] ) !== $caso['ok'] ) {
+		$discrepancias[] = $caso['path'] . ' (esperado ' . var_export( $caso['ok'], true ) . ', la lista blanca dice ' . var_export( beaos_aos_claimable_path( $caso['path'] ), true ) . ')';
+	}
+}
+check_same( array(), $discrepancias, 'la lista blanca del plugin y la guarda de BeAOS dan el mismo veredicto en todo el corpus' );
+
+// Y las anclas: el test no puede pasar por tener un corpus vacío o mal leído.
+check( in_array( array( 'path' => '/wp-login.php', 'ok' => false ), $corpus['vectors'], true ), 'el corpus trae /wp-login.php como prohibida' );
+check( in_array( array( 'path' => '/llms.txt', 'ok' => true ), $corpus['vectors'], true ), 'y /llms.txt como legítima' );
+
 echo $fail ? "\npure: FALLA ($fail)\n" : "\npure: OK\n";
 exit( $fail ? 1 : 0 );

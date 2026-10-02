@@ -294,6 +294,13 @@ const BEAOS_AOS_ROOT_PATHS = array(
 const BEAOS_AOS_WELL_KNOWN = '/.well-known/';
 
 /**
+ * El tope de largo de una ruta del kit. Espejo de `KIT_PATH_MAX_LENGTH` de
+ * `packages/aos-aps/src/assets/kit-routes.ts`: la sección 14 de `tests/pure.php` compara los dos números
+ * y falla si se despegan.
+ */
+const BEAOS_AOS_PATH_MAX = 256;
+
+/**
  * Las rutas peligrosas conocidas. La regla del `.php` ya las cubre casi todas; están igual porque una
  * lista explícita se lee y se audita, y porque es la capa que no depende de que la forma siga bien.
  */
@@ -362,8 +369,8 @@ function beaos_aos_rejection_reason( $path ) {
 	if ( false !== strpos( $path, '..' ) ) {
 		return 'tiene ..';
 	}
-	if ( strlen( $path ) > 256 ) {
-		return 'es más larga que 256 caracteres';
+	if ( strlen( $path ) > BEAOS_AOS_PATH_MAX ) {
+		return 'es más larga que ' . BEAOS_AOS_PATH_MAX . ' caracteres';
 	}
 	if ( ! preg_match( '#^/[A-Za-z0-9._/-]+$#', $path ) ) {
 		return 'tiene caracteres que ninguna ruta del kit usa';

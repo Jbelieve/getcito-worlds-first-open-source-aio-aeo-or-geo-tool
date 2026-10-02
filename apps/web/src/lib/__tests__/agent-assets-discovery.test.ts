@@ -15,6 +15,7 @@ import {
 	linkByRel,
 	parseLinkHeader,
 	parseSecurityContact,
+	splitKitAssets,
 } from "@/server/agent-assets-core";
 
 describe("parseSecurityContact", () => {
@@ -481,5 +482,73 @@ describe("declaredMcp", () => {
 		vi.stubGlobal("fetch", fetchSpy);
 		expect(await declaredMcp(undefined)).toBeUndefined();
 		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+});
+
+/**
+ * La guarda de forma, en la ESCRITURA: la mitad que hace que una ruta peligrosa **no entre** a la base.
+ *
+ * La otra mitad está en `buildBundle()` (la lectura) y la tercera en el `CHECK` de `agent_assets.path`;
+ * las tres usan la misma definición (`@workspace/aos-aps/assets`), no tres reglas parecidas.
+ */
+describe("splitKitAssets: la guarda de forma antes del insert", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("una ruta peligrosa no pasa, y su motivo viaja en el reporte", () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const { accept, rejected } = splitKitAssets([
+			{ path: "/llms.txt" },
+			{ path: "/wp-login.php" },
+			{ path: "/.well-known/brand.json" },
+		]);
+
+		expect(accept.map((asset) => asset.path)).toEqual(["/llms.txt", "/.well-known/brand.json"]);
+		expect(rejected).toEqual(["/wp-login.php (está en la lista de rutas prohibidas)"]);
+		// No desaparece en silencio: se grita, con la ruta y el motivo.
+		expect(error).toHaveBeenCalledTimes(1);
+		expect(String(error.mock.calls[0]?.[0])).toContain("/wp-login.php");
+	});
+
+	it("el kit legítimo pasa entero, sin tocar el log", () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const delKit = [
+			"/llms.txt",
+			"/llms-full.txt",
+			"/AGENTS.md",
+			"/robots.txt",
+			"/sitemap.xml",
+			"/.well-known/brand.json",
+			"/.well-known/brand.json.sig",
+			"/.well-known/keys.json",
+			"/.well-known/agent-card.json",
+			"/.well-known/agent-permissions.json",
+			"/.well-known/mcp/server-card.json",
+			"/.well-known/security.txt",
+			"/.well-known/api-catalog",
+			"/.well-known/ai-catalog.json",
+			"/.well-known/http-message-signatures-directory",
+		];
+		const { accept, rejected } = splitKitAssets(delKit.map((path) => ({ path })));
+
+		expect(accept.map((asset) => asset.path)).toEqual(delKit);
+		expect(accept.length).toBe(15);
+		expect(rejected).toEqual([]);
+		expect(error).not.toHaveBeenCalled();
+	});
+
+	it("varias rutas malas se cuentan todas, no se corta en la primera", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const { accept, rejected } = splitKitAssets([
+			{ path: "/wp-login.php" },
+			{ path: "/muestra" },
+			{ path: "/wp-admin/options-general.php" },
+			{ path: "/llms.txt" },
+		]);
+
+		expect(accept.map((asset) => asset.path)).toEqual(["/llms.txt"]);
+		expect(rejected.length).toBe(3);
+		expect(rejected[1]).toBe("/muestra (no tiene forma de kit)");
 	});
 });

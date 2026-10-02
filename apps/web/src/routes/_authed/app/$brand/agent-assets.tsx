@@ -41,8 +41,14 @@ mutationFn: async () => {
 if (brandId === undefined || entityId.length === 0) throw new Error("Selecciona una entidad");
 return generateAgentAssetsFn({ data: { brandId, entityId } });
 },
-onSuccess: async () => {
-setError(null);
+onSuccess: async (report) => {
+// La guarda de forma cuenta lo que descartó: una ruta que el kit no acepta es un bug nuestro y tiene
+// que verse, no desaparecer. Los assets que sí pasaron ya quedaron guardados.
+setError(
+report.rejected.length === 0
+? null
+: `Se descartaron ${report.rejected.length} ruta(s) que el kit no acepta: ${report.rejected.join(", ")}. Es un bug del generador: revisá el log del servidor.`,
+);
 await assets.refetch();
 },
 onError: (mutationError) => {

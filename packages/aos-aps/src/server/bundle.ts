@@ -2,15 +2,21 @@
  * The publishable asset bundle: what a delivery agent (Maasy MCP -> the brand's be agent) receives
  * and mounts on a site.
  *
- * Two invariants:
+ * Three invariants:
  *   1. Closed by default. An entity that is not explicitly published produces no bundle, and an
  *      entity with no brand.json is not publishable — there is nothing for an agent to verify.
  *   2. Byte-exact delivery. The Ed25519 signature covers the exact bytes of brand.json, so the
  *      bundle carries the content verbatim plus its sha256. A consumer that re-serializes the JSON
  *      breaks the signature; the hash is there to catch that before the file reaches a website.
+ *   3. Only kit-shaped routes leave. `agent_assets.path` had no `CHECK` and this function copied every
+ *      row into the bundle, so a row inserted by a refactor, a seed, an import or a manual `INSERT`
+ *      reached the client's website — `/wp-login.php` there means **covering the login screen**. The
+ *      shape guard runs here, on the way out, which is the side that protects every integrator even
+ *      when the database is already dirty.
  */
 
 import { createHash } from "node:crypto";
+import { isKitRoute, kitRouteRejectionReason } from "../assets/kit-routes";
 
 export interface AssetRow {
 	path: string;
@@ -127,19 +133,54 @@ export function signingIdentityFromAssets(assets: BundleAsset[]): SigningIdentit
 }
 
 /**
+ * Las rutas de las filas que la guarda de forma ya **no** acepta: la última versión de cada una, con su
+ * motivo. Debería ser siempre vacío; no lo es cuando la base quedó con basura (una versión vieja del
+ * generador, un seed, un `INSERT` a mano).
+ *
+ * Se expone aparte de `buildBundle()` por dos razones: se puede probar sin armar un bundle, y un
+ * llamador que quiera contarlas no tiene que adivinar qué se descartó. El bundle no las lleva.
+ */
+export function rejectedAssetRows(rows: AssetRow[]): Array<{ path: string; reason: string }> {
+	const out: Array<{ path: string; reason: string }> = [];
+	for (const row of latestByPath(rows)) {
+		if (isKitRoute(row.path) === false) out.push({ path: row.path, reason: kitRouteRejectionReason(row.path) });
+	}
+	return out;
+}
+
+/**
  * Builds the bundle a delivery agent may mount. Returns null when the entity is not published or
  * when the required brand.json is missing: the caller answers 404, never a partial bundle.
+ *
+ * Una ruta que no tiene forma de kit **no sale**, y tampoco desaparece en silencio: se anota en el log
+ * del servidor con su motivo. Del lado de BeAOS una ruta así es un bug nuestro, no un dato del cliente,
+ * y el log es lo que hace que alguien se entere. Se emite **una** línea por bundle (con todas las rutas
+ * malas juntas) y no una por ruta: la primera es un grito, la segunda inunda el log de un endpoint que
+ * se pide en cada request.
+ *
+ * Una ruta mala **no** tumba el bundle: tirarlo entero por una fila envenenada cambiaría un bug de una
+ * ruta por una caída del kit completo, que es peor. El resto del kit se sigue sirviendo.
  */
 export function buildBundle(entity: BundleSource, rows: AssetRow[]): AssetBundle | null {
 	if (entity.isPublished !== true) return null;
 
-	const assets: BundleAsset[] = latestByPath(rows).map((row) => ({
-		path: row.path,
-		type: row.type,
-		content: row.content,
-		sha256: sha256Hex(row.content),
-		bytes: Buffer.byteLength(row.content, "utf8"),
-	}));
+	const malas = rejectedAssetRows(rows);
+	if (malas.length > 0) {
+		console.error(
+			`[aos-aps] ${malas.length} ruta(s) de agent_assets con forma que el kit no acepta y que NO se sirven (bug nuestro, revisar la base): ` +
+				malas.map((mala) => `${mala.path} (${mala.reason})`).join(", "),
+		);
+	}
+
+	const assets: BundleAsset[] = latestByPath(rows)
+		.filter((row) => isKitRoute(row.path))
+		.map((row) => ({
+			path: row.path,
+			type: row.type,
+			content: row.content,
+			sha256: sha256Hex(row.content),
+			bytes: Buffer.byteLength(row.content, "utf8"),
+		}));
 	if (assets.some((asset) => asset.path === REQUIRED_BUNDLE_PATH) === false) return null;
 
 	const identity = signingIdentityFromAssets(assets);
