@@ -2,23 +2,20 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
-import { beaosI18nEs } from "./src/lib/i18n-plugin";
-import { tanstackStart } from "@tanstack/react-start/plugin/vite";
-import { nitro } from "nitro/vite";
-import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import viteReact from "@vitejs/plugin-react";
 import { embedBinaries } from "@workspace/og/vite-plugin";
+import { nitro } from "nitro/vite";
+import { defineConfig } from "vite";
+import { readWpPluginVersion } from "../../scripts/beaos-wp-plugin.mjs";
 import pkg from "./package.json" with { type: "json" };
+import { beaosI18nEs } from "./src/lib/i18n-plugin";
 
 const tslibEsm = fileURLToPath(import.meta.resolve("tslib/tslib.es6.mjs"));
 const require = createRequire(import.meta.url);
-const takumiCorePkgPath = resolve(
-	dirname(require.resolve("@takumi-rs/core")),
-	"..",
-	"package.json",
-);
+const takumiCorePkgPath = resolve(dirname(require.resolve("@takumi-rs/core")), "..", "package.json");
 const takumiNativeBindings = Object.keys(
 	(
 		JSON.parse(readFileSync(takumiCorePkgPath, "utf8")) as {
@@ -47,6 +44,10 @@ export default defineConfig({
 	},
 	define: {
 		__APP_VERSION__: JSON.stringify(pkg.version),
+		// La versión del plugin de WordPress se lee de su cabecera al compilar, no se escribe a mano: así
+		// el panel no puede mostrar una versión distinta a la del ZIP que se descarga. Lo verifica
+		// src/lib/aos/__tests__/wordpress-plugin.test.ts.
+		__BEAOS_PLUGIN_VERSION__: JSON.stringify(readWpPluginVersion()),
 	},
 	resolve: {
 		tsconfigPaths: true,
