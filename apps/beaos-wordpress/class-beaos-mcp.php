@@ -119,6 +119,14 @@ if ( ! class_exists( 'BeAOS_MCP' ) ) {
 			$status = (int) wp_remote_retrieve_response_code( $response );
 			$raw    = (string) wp_remote_retrieve_body( $response );
 
+			// Un 0 **no es un status**: es que no hubo respuesta, que es lo que devuelve `wp_remote_post`
+			// cuando el pedido no llega. Sin esta rama, el cuerpo vacío caía en el chequeo de JSON y el
+			// error decía "puede haber un proxy o un WAF reescribiéndola": manda a buscar el problema al
+			// lugar equivocado, porque no hay proxy ni respuesta.
+			if ( 0 === $status ) {
+				return $this->fail( 'No hubo respuesta del MCP: no se pudo llegar al servidor (DNS, TLS o tiempo de espera agotado).' );
+			}
+
 			// Una notificación responde 202 y sin cuerpo. El plugin nunca manda una (siempre lleva `id`),
 			// así que verlo acá es una anomalía, no un caso a manejar en silencio.
 			if ( 202 === $status ) {

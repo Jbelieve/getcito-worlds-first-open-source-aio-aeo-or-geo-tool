@@ -471,6 +471,17 @@ $roto = beaos_aos_enroll_read( 200, '<html>un WAF</html>' );
 check_same( false, $roto['ok'], 'un 200 que no es JSON no canjea' );
 check( false !== strpos( $roto['error'], 'no es JSON' ), 'y lo dice, en vez de guardar basura como token' );
 
+// Un status 0 no es un status: es que **no hubo respuesta** (DNS, TLS, timeout). Es el caso que más va a
+// pasar en un WordPress real y el que encontró la prueba del camino real: devolvía el mensaje **vacío**,
+// así que la pantalla decía "No se pudo conectar." sin decir por qué. Un stub siempre devuelve un código
+// HTTP, así que esto sólo se ve corriendo el camino de verdad contra un servidor que no contesta.
+$sin_respuesta = beaos_aos_enroll_read( false, false );
+check_same( false, $sin_respuesta['ok'], 'un fallo de transporte (status 0) no canjea' );
+check( '' !== $sin_respuesta['error'], 'y el mensaje NO queda vacío (era el bug: ok=false con error="")' );
+check( false !== strpos( $sin_respuesta['error'], 'No hubo respuesta' ), 'dice que no hubo respuesta' );
+check( false !== strpos( $sin_respuesta['error'], 'DNS' ), 'y por dónde buscar (DNS, TLS, timeout), en vez de mandar al proxy' );
+check_same( '', beaos_aos_enroll_http_error( 200, '{"token":"x"}' ), 'un 200 sigue sin ser un error' );
+
 // Dos respuestas que se pueden usar mal: un 200 sin token, y uno sin entityId. La segunda además avisa
 // que el código ya se consumió, que es lo que el operador necesita saber para generar otro.
 $sin_token = beaos_aos_enroll_read( 200, '{"brandId":"acme-com","entityId":"e1"}' );

@@ -286,6 +286,13 @@ function beaos_aos_enroll_body( $code ) {
  */
 function beaos_aos_enroll_http_error( $status, $body = '', $retry_after = 0 ) {
 	$status = (int) $status;
+	// Un 0 **no es un status**: es que no hubo respuesta (DNS, TLS, timeout, `wp_remote_post` devolviendo
+	// `false`). Sin esta rama el rechazo salía con el mensaje **vacío** y la pantalla mostraba "No se pudo
+	// conectar." sin decir por qué. Lo encontró la prueba del camino real, no el test puro: los stubs
+	// devolvían un código HTTP.
+	if ( 0 === $status ) {
+		return 'No hubo respuesta de BeAOS: no se pudo llegar al servidor (DNS, TLS o tiempo de espera agotado). Revisá la base de BeAOS en los ajustes y la red de este sitio.';
+	}
 	if ( $status < 400 ) {
 		return '';
 	}
