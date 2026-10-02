@@ -1,0 +1,24 @@
+README.md
+  h_c5ca005a78c880 437-474
+RLS-ROL-Y-ACTIVACION.md
+  h_c5ca005a78c880 70-74,82
+apps/beaos-wordpress/README.md
+  h_c5ca005a78c880 28,30,42-59,61-62
+apps/web/src/lib/aos/__tests__/public-enroll.test.ts
+  h_c5ca005a78c880 29,135-159
+apps/web/src/lib/aos/public-audit.ts
+  h_c5ca005a78c880 502-518
+apps/web/src/routes/api/v1/enroll.ts
+  h_c5ca005a78c880 71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8f89d3f5bb1d8f34a95484369f870c9e828535da",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
