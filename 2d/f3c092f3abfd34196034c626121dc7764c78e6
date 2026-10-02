@@ -1,0 +1,14 @@
+apps/beaos-wordpress/tests/pure.php
+  h_c5ca005a78c880 187-255,280-296,481-557
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2df3c092f3abfd34196034c626121dc7764c78e6",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
