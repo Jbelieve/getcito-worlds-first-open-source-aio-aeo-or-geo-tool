@@ -18,10 +18,16 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
 require_once __DIR__ . '/beaos-aos-pure.php';
 
-/** Lo que se borra en un sitio. En multisitio, una vez por sitio: cada uno tiene su propia opción. */
+/**
+ * Lo que se borra en un sitio. En multisitio, una vez por sitio: cada uno tiene su propia opción.
+ *
+ * El candado se borra en sus dos formas: la opción (la primitiva actual) y el transient con el mismo
+ * nombre (la primitiva vieja). Dejar cualquiera de las dos trabaja el cron de una reinstalación.
+ */
 function beaos_aos_uninstall_site() {
 	delete_option( BEAOS_AOS_OPTION );
 	delete_option( BEAOS_AOS_BUNDLE );
+	delete_option( BEAOS_AOS_LOCK );
 	delete_transient( BEAOS_AOS_LOCK );
 	wp_clear_scheduled_hook( BEAOS_AOS_CRON );
 }

@@ -15,6 +15,8 @@ import {
 	type DeclaredMcp,
 	declaredMcpFromCard,
 	generateAgentAssets,
+	isKitRoute,
+	kitRouteRejectionReason,
 } from "@workspace/aos-aps/assets";
 import { resolveBundleClaims } from "@workspace/aos-aps/claims";
 import {
@@ -408,12 +410,66 @@ export interface GeneratedAsset {
 }
 
 /**
+ * La guarda de forma, en la escritura: separa lo que tiene forma de kit de lo que no, **lo grita** y
+ * devuelve las dos listas.
+ *
+ * Las tres cosas juntas a propósito. Una ruta sin forma de kit es, de este lado, un bug nuestro (un
+ * refactor del generador, una plantilla mal armada), no un dato del cliente: se saltea —tirar la
+ * generación entera por una ruta mala cambiaría un bug por una pantalla rota— pero no puede desaparecer
+ * en silencio, así que queda el `console.error` (el log del servidor) y queda el reporte que devuelve
+ * `generateAssetsForEntity()`, que es lo que la UI y el MCP muestran.
+ *
+ * Es una función aparte —y no un `filter` adentro de `generateAssetsForEntity()`— para poder probar las
+ * tres cosas sin base, sin red y sin un generador de por medio. La regla es la de
+ * `@workspace/aos-aps/assets`, la misma que mira `buildBundle()` al salir y el `CHECK` de la base.
+ */
+export function splitKitAssets<T extends { path: string }>(assets: T[]): { accept: T[]; rejected: string[] } {
+	const accept: T[] = [];
+	const rejected: string[] = [];
+	for (const asset of assets) {
+		if (isKitRoute(asset.path)) {
+			accept.push(asset);
+			continue;
+		}
+		rejected.push(`${asset.path} (${kitRouteRejectionReason(asset.path)})`);
+	}
+	if (rejected.length > 0) {
+		console.error(
+			`[agent-assets] el generador emitió ${rejected.length} ruta(s) que el kit no acepta y que NO se guardan (bug nuestro, revisar el generador): ${rejected.join(", ")}`,
+		);
+	}
+	return { accept, rejected };
+}
+
+/**
+ * El resultado de una generación: lo que se guardó **y** lo que la guarda de forma rechazó.
+ *
+ * El reporte existe porque una ruta que el kit no acepta es, de este lado, **un bug nuestro** (un
+ * refactor del generador, una plantilla mal armada), no un dato del cliente que se pueda saltear en
+ * silencio. Va vacío siempre; cuando no lo está, las dos puertas —la UI y el MCP— lo muestran, y el
+ * log del servidor lo dice. Es la mitad de "no puede desaparecer en silencio"; la otra mitad es que la
+ * ruta no llega a la base.
+ */
+export interface GenerationReport {
+	/** Los assets que sí quedaron guardados, y por lo tanto los únicos que el bundle puede llevar. */
+	assets: GeneratedAsset[];
+	/** Las rutas rechazadas con su motivo, tal como las da la guarda: `path (motivo)`. */
+	rejected: string[];
+}
+
+/**
  * Genera el bundle de una entidad y lo persiste.
  *
  * Sub-marcas heredan la llave canónica del umbrella: se firma con la identidad de la raíz de la
  * jerarquía, nunca con una llave propia de la entidad.
+ *
+ * La guarda de forma corre **antes del insert**: una ruta que no tiene forma de kit no entra a la base.
+ * Es la mitad del arreglo; la otra mitad está en `buildBundle()` (`@workspace/aos-aps/server`), que la
+ * vuelve a mirar al salir — así una fila que ya estaba envenenada tampoco llega al sitio del cliente.
+ * Dos guardas con **la misma** definición (`isKitRoute`, en `@workspace/aos-aps/assets`), no dos
+ * reglas parecidas.
  */
-export async function generateAssetsForEntity(brandId: string, entityId: string): Promise<GeneratedAsset[]> {
+export async function generateAssetsForEntity(brandId: string, entityId: string): Promise<GenerationReport> {
 	const entity = await db
 		.select()
 		.from(agentBrandEntities)
@@ -539,18 +595,28 @@ export async function generateAssetsForEntity(brandId: string, entityId: string)
 		signing: signing ?? undefined,
 	});
 
-	await db.insert(agentAssets).values(
-		generated.map((asset) => ({
-			brandId,
-			entityId,
-			path: asset.path,
-			type: asset.type,
-			content: asset.content,
-			hash: hashContent(asset.content),
-		})),
-	);
+	// La guarda de forma, en la escritura: saltea la ruta mala, la grita en el log y la cuenta en el
+	// reporte. Ver `splitKitAssets()`.
+	const { accept, rejected } = splitKitAssets(generated);
 
-	return generated.map((asset) => ({ ...asset, hash: hashContent(asset.content) }));
+	// Sin rutas aceptadas no hay nada que insertar, y un `values([])` de Drizzle es una consulta inválida.
+	if (accept.length > 0) {
+		await db.insert(agentAssets).values(
+			accept.map((asset) => ({
+				brandId,
+				entityId,
+				path: asset.path,
+				type: asset.type,
+				content: asset.content,
+				hash: hashContent(asset.content),
+			})),
+		);
+	}
+
+	return {
+		assets: accept.map((asset) => ({ ...asset, hash: hashContent(asset.content) })),
+		rejected,
+	};
 }
 
 export type PublishResult =

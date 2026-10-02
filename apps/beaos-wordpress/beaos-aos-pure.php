@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
 
 const BEAOS_AOS_OPTION = 'beaos_aos';                   // ajustes del plugin (sin autoload)
 const BEAOS_AOS_BUNDLE = 'beaos_aos_bundle';            // copia local del kit (sin autoload)
-const BEAOS_AOS_LOCK   = 'beaos_aos_lock';              // transient: una corrida de sync por vez
+const BEAOS_AOS_LOCK   = 'beaos_aos_lock';              // opción sin autoload: una corrida de sync por vez
 const BEAOS_AOS_CRON   = 'beaos_aos_sync';              // el hook del cron
 
 // El MCP de BeAOS. Es la única puerta que acepta un token por producto (el token de `agent_api_tokens`
@@ -294,6 +294,13 @@ const BEAOS_AOS_ROOT_PATHS = array(
 const BEAOS_AOS_WELL_KNOWN = '/.well-known/';
 
 /**
+ * El tope de largo de una ruta del kit. Espejo de `KIT_PATH_MAX_LENGTH` de
+ * `packages/aos-aps/src/assets/kit-routes.ts`: la sección 14 de `tests/pure.php` compara los dos números
+ * y falla si se despegan.
+ */
+const BEAOS_AOS_PATH_MAX = 256;
+
+/**
  * Las rutas peligrosas conocidas. La regla del `.php` ya las cubre casi todas; están igual porque una
  * lista explícita se lee y se audita, y porque es la capa que no depende de que la forma siga bien.
  */
@@ -362,8 +369,8 @@ function beaos_aos_rejection_reason( $path ) {
 	if ( false !== strpos( $path, '..' ) ) {
 		return 'tiene ..';
 	}
-	if ( strlen( $path ) > 256 ) {
-		return 'es más larga que 256 caracteres';
+	if ( strlen( $path ) > BEAOS_AOS_PATH_MAX ) {
+		return 'es más larga que ' . BEAOS_AOS_PATH_MAX . ' caracteres';
 	}
 	if ( ! preg_match( '#^/[A-Za-z0-9._/-]+$#', $path ) ) {
 		return 'tiene caracteres que ninguna ruta del kit usa';
@@ -402,6 +409,58 @@ function beaos_aos_rejected_assets( $assets ) {
 		}
 	}
 	return $out;
+}
+
+// ── El candado del sync ─────────────────────────────────────────────────────────────────────────
+//
+// Dos corridas del sync no pueden pisarse. La versión anterior lo intentaba con
+// `get_transient()` + `set_transient()`, y **eso no es un candado**: entre el `get` y el `set` hay una
+// ventana en la que las dos corridas leen "libre". Medido: con dos sync en paralelo, el MCP recibía 1
+// llamada o 2, según el timing.
+//
+// Lo que se usa ahora: una **opción** (`wp_options`) tomada con un `INSERT IGNORE` y soltada con un
+// `DELETE` condicional. Por qué eso sí es atómico: `wp_options.option_name` tiene **índice único** en
+// el esquema de WordPress, así que de N `INSERT` simultáneos con el mismo nombre **uno solo** inserta
+// una fila; los demás chocan con la restricción y `INSERT IGNORE` los convierte en "0 filas" en vez de
+// un error. La decisión la toma el motor de la base, no el código PHP, y por eso no hay ventana.
+//
+// **`add_option()` no sirve para esto**, aunque el folclore diga que devuelve `false` si la opción ya
+// existe. Medido en el WordPress de este repo (7.1.2): `add_option()` usa
+// `INSERT ... ON DUPLICATE KEY UPDATE`, así que (a) el chequeo previo es TOCTOU igual que el transient
+// y (b) el que llega segundo **sobrescribe** al primero y devuelve `true`. Diez procesos sincronizados
+// con `add_option()` sobre la misma opción: **nueve** contestaron que sí.
+//
+// El valor guardado es el **vencimiento** (epoch en segundos), no un `1`. De ahí salen las dos
+// propiedades que hacen falta:
+//
+//   - **Vence**: un proceso que murió (o un PHP colgado) deja la fila, pero la fila dice hasta cuándo
+//     vale. Pasado ese instante, el siguiente que llega la borra y la vuelve a tomar. Un candado sin
+//     vencimiento dejaría el cron muerto para siempre; por eso `BEAOS_AOS_LOCK_TTL` no es opcional.
+//   - **Se puede soltar sin robar**: el `DELETE` dice `WHERE option_name = ... AND option_value = <el
+//     vencimiento que yo escribí>`. Como cada toma escribe un vencimiento **estrictamente mayor** que
+//     el anterior (una toma solo ocurre después de que el anterior venció, así que
+//     `nuevo = ahora + ttl > viejo_vencimiento`), el que perdió el candado por vencimiento no puede
+//     borrar el de otro al volver de un `finally` tardío.
+//
+// Acá van sólo las dos funciones puras: el valor y si venció. La parte que toca la base vive en
+// `beaos-aos.php` (`beaos_aos_lock_acquire()` / `beaos_aos_lock_release()`), porque un archivo puro no
+// puede hablar con la base: el test lo verifica y no se toca.
+
+/**
+ * El valor que se guarda en el candado: cuándo vence, en segundos epoch. Un TTL de 0 o negativo se
+ * sube a 1 segundo: un candado que vence en el mismo instante en que se toma no es un candado.
+ */
+function beaos_aos_lock_value( $now, $ttl ) {
+	return (string) ( (int) $now + max( 1, (int) $ttl ) );
+}
+
+/**
+ * ¿El candado guardado ya venció? Un valor vacío, ilegible o no numérico cuenta como **vencido**: la
+ * alternativa (tratarlo como vigente) dejaría el cron trabado para siempre por una fila corrupta, que
+ * es exactamente el modo de falla que el vencimiento existe para evitar.
+ */
+function beaos_aos_lock_is_expired( $stored, $now ) {
+	return (int) trim( (string) $stored ) <= (int) $now;
 }
 
 // ── La copia local del kit ──────────────────────────────────────────────────────────────────────

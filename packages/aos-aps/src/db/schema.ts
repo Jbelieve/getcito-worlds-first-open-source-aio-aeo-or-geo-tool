@@ -1,8 +1,10 @@
 import { brandIsolationPolicy } from "@workspace/lib/db/brand-isolation";
 import { brands } from "@workspace/lib/db/schema";
+import { type SQL, sql } from "drizzle-orm";
 import {
 	type AnyPgColumn,
 	boolean,
+	check,
 	integer,
 	json,
 	numeric,
@@ -12,6 +14,13 @@ import {
 	uniqueIndex,
 	uuid,
 } from "drizzle-orm/pg-core";
+import {
+	KIT_PATH_MAX_LENGTH,
+	KIT_PATH_SHAPE_SOURCE,
+	KIT_PHP_SUFFIX_SOURCE,
+	KIT_ROOT_PATHS,
+	KIT_WELL_KNOWN_PREFIX,
+} from "../assets/kit-routes";
 
 export const agentBrandEntities = pgTable(
 	"agent_brand_entities",
@@ -89,6 +98,53 @@ export const agentBrandDnaSnapshots = pgTable(
 	(table) => [brandIsolationPolicy(table.brandId)],
 ).enableRLS();
 
+/**
+ * La guarda de forma de `agent_assets.path`, **en la base**.
+ *
+ * `path` era `text NOT NULL` sin `CHECK`: nada impedía que una fila con `/wp-login.php` entrara, y el
+ * bundle la llevaba al sitio del cliente, donde tapa la pantalla de login. Las guardas de la aplicación
+ * (la escritura en `generateAssetsForEntity()` y la lectura en `buildBundle()`) son las que deciden; esto
+ * es la red que hace que la decisión no dependa de que todos los caminos de escritura la respeten —un
+ * `INSERT` a mano, un seed, un import, un `UPDATE` desde psql—.
+ *
+ * **No es una cuarta copia de la regla**: la lista de los cinco archivos de la raíz, el prefijo de
+ * `/.well-known/`, el tope de largo, el juego de caracteres y el sufijo `.php` salen de
+ * `../assets/kit-routes`, que es la definición única. Lo único que se escribe a mano acá es la
+ * traducción de cada regla a SQL (`position('..' in …) = 0`, `IN (…)`, `LIKE …`).
+ *
+ * La lista explícita de rutas prohibidas **no** está en el `CHECK` a propósito: cada una de sus
+ * entradas o termina en `.php` (que ya se rechaza) o cae fuera de la forma del kit (`/wp-admin`,
+ * `/wp-json`, `/readme.html`, `/.htaccess`…). Repetirla sería una copia sin poder de decisión; que siga
+ * siendo cierto lo verifica `packages/aos-aps/src/assets/kit-routes.test.ts`, y que el SQL y la regla de
+ * TypeScript coincidan caso por caso lo mide `scripts/agent-assets-path-guard-check.sh` contra un
+ * Postgres real, insertando el corpus compartido de verdad.
+ *
+ * Por qué `NOT VALID` en la migración: una fila vieja que no pase la guarda haría fallar el `ALTER TABLE`
+ * y con él el despliegue. `NOT VALID` aplica igual, la hace cumplir para **todo** `INSERT`/`UPDATE`
+ * nuevo, y avisa por `WARNING` que quedaron filas sin validar (con el comando para terminarlo a mano).
+ * Ver `packages/lib/src/db/migrations/0031_agent_assets_path_guard.sql`.
+ */
+export const AGENT_ASSETS_PATH_CONSTRAINT = "agent_assets_path_shape";
+
+/** Un literal de texto para SQL. Las comillas se doblan: los valores salen de constantes, no de entrada. */
+function sqlLiteral(value: string): string {
+	return `'${value.replaceAll("'", "''")}'`;
+}
+
+/**
+ * El `CHECK` armado con `sql.raw` para **todo lo que es literal**, y con la columna interpolada por
+ * Drizzle.
+ *
+ * No es un capricho: un `CHECK` es DDL y **no admite parámetros ligados**. La primera versión de esto
+ * usaba `${KIT_ROOT_PATHS}` dentro de la plantilla y `drizzle-kit` escribió
+ * `... IN ($4, $5, $6, $7, $8) ...` en el archivo de migración, que Postgres rechaza. Es la misma razón
+ * por la que `brandIsolationPredicate()` usa `sql.raw` para el nombre del parámetro de sesión.
+ */
+function agentAssetsPathShape(column: AnyPgColumn): SQL {
+	const roots = KIT_ROOT_PATHS.map(sqlLiteral).join(", ");
+	return sql`${column} ~ ${sql.raw(sqlLiteral(KIT_PATH_SHAPE_SOURCE))} AND length(${column}) <= ${sql.raw(String(KIT_PATH_MAX_LENGTH))} AND position('..' in ${column}) = 0 AND lower(${column}) !~ ${sql.raw(sqlLiteral(KIT_PHP_SUFFIX_SOURCE))} AND (${column} IN (${sql.raw(roots)}) OR ${column} LIKE ${sql.raw(sqlLiteral(`${KIT_WELL_KNOWN_PREFIX}_%`))})`;
+}
+
 export const agentAssets = pgTable(
 	"agent_assets",
 	{
@@ -105,7 +161,10 @@ export const agentAssets = pgTable(
 		hash: text("hash").notNull(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [brandIsolationPolicy(table.brandId)],
+	(table) => [
+		brandIsolationPolicy(table.brandId),
+		check(AGENT_ASSETS_PATH_CONSTRAINT, agentAssetsPathShape(table.path)),
+	],
 ).enableRLS();
 
 /**

@@ -436,11 +436,15 @@ const generateAgentAssetsTool: McpTool = {
 	handler: async (args) => {
 		const brandId = requireString(args, "brandId");
 		const entityId = requireUuid(args, "entityId");
-		const assets = await generateAssetsForEntity(brandId, entityId);
+		const report = await generateAssetsForEntity(brandId, entityId);
 		const payload = {
 			entityId,
-			count: assets.length,
-			assets: assets.map((asset) => ({ path: asset.path, type: asset.type, sha256: asset.hash })),
+			count: report.assets.length,
+			assets: report.assets.map((asset) => ({ path: asset.path, type: asset.type, sha256: asset.hash })),
+			// La guarda de forma no puede desaparecer en silencio: si el generador emitió una ruta que el
+			// kit no acepta, el reporte la cuenta. La clave se agrega **sólo** cuando hay algo que contar,
+			// así el payload de una generación sana queda igual que antes (es contrato público).
+			...(report.rejected.length === 0 ? {} : { rejected: report.rejected }),
 		};
 		return textResult(json(payload), payload);
 	},

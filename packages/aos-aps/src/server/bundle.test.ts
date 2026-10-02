@@ -1,12 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	type AssetRow,
-	type BundleSource,
 	assetMatches,
+	type BundleSource,
 	buildBundle,
 	bundleHash,
 	findAsset,
+	KEYS_PATH,
 	latestByPath,
+	REQUIRED_BUNDLE_PATH,
+	rejectedAssetRows,
+	SIGNATURE_PATH,
 	sha256Hex,
 } from "./bundle";
 
@@ -142,5 +146,81 @@ describe("findAsset and assetMatches", () => {
 		expect(reserialized).not.toBe(BRAND_JSON);
 		expect(assetMatches(asset, reserialized)).toBe(false);
 		expect(assetMatches(asset, `${BRAND_JSON}\n`)).toBe(false);
+	});
+});
+
+/**
+ * La guarda de forma, **en la lectura**: es la que protege a todos los integradores aunque la base ya
+ * tenga basura. Una fila con `/wp-login.php` en un WordPress tapa la pantalla de login; en otro
+ * integrador, lo que sea. La ruta mala no sale —y tampoco desaparece en silencio.
+ */
+describe("la guarda de forma de las rutas, al armar el bundle", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("una ruta peligrosa en la base NO sale en el bundle", () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const bundle = bundleOf([
+			row(),
+			row({ path: "/llms.txt", content: "# Felix" }),
+			row({ path: "/wp-login.php", content: "<form>señuelo</form>" }),
+		]);
+
+		expect(bundle.assets.map((asset) => asset.path)).toEqual(["/.well-known/brand.json", "/llms.txt"]);
+		expect(findAsset(bundle, "/wp-login.php")).toBeNull();
+		// Y no desaparece en silencio: se grita, con el motivo.
+		expect(error).toHaveBeenCalledTimes(1);
+		expect(String(error.mock.calls[0]?.[0])).toContain("/wp-login.php");
+		expect(String(error.mock.calls[0]?.[0])).toContain("está en la lista de rutas prohibidas");
+	});
+
+	it("una ruta sin forma de kit tampoco sale, y también se ve", () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const bundle = bundleOf([row(), row({ path: "/una-pagina", content: "x" })]);
+
+		expect(bundle.assets.map((asset) => asset.path)).toEqual(["/.well-known/brand.json"]);
+		expect(error).toHaveBeenCalledTimes(1);
+		expect(String(error.mock.calls[0]?.[0])).toContain("no tiene forma de kit");
+	});
+
+	it("una ruta mala NO tumba el bundle entero: el resto del kit se sirve igual", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const bundle = bundleOf([
+			row(),
+			row({ path: "/wp-config.php", content: "<?php" }),
+			row({ path: "/llms.txt", content: "# Felix" }),
+			row({ path: "/.well-known/keys.json", content: KEYS_JSON }),
+		]);
+
+		expect(bundle.assets.map((asset) => asset.path)).toEqual([
+			"/.well-known/brand.json",
+			"/.well-known/keys.json",
+			"/llms.txt",
+		]);
+		// El hash del bundle se calcula sobre lo que sale: una fila descartada no lo ensucia ni lo esconde.
+		expect(bundle.bundleSha256).toBe(bundleHash(bundle.assets));
+	});
+
+	it("un kit sano no ensucia el log", () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const bundle = bundleOf(signedRows());
+		expect(bundle.assets.length).toBe(3);
+		expect(error).not.toHaveBeenCalled();
+	});
+
+	it("el bundle de un kit sano es exactamente el mismo que antes de la guarda", () => {
+		// La guarda no puede cambiar el bundle legítimo: mismas rutas, mismo hash, mismos bytes.
+		const bundle = bundleOf(signedRows());
+		const esperado = [SIGNATURE_PATH, KEYS_PATH, REQUIRED_BUNDLE_PATH].sort((a, b) => a.localeCompare(b));
+		expect(bundle.assets.map((asset) => asset.path)).toEqual(esperado);
+		expect(bundle.assets.every((asset) => assetMatches(asset, asset.content))).toBe(true);
+	});
+
+	it("rejectedAssetRows dice cuáles y por qué, sin armar un bundle", () => {
+		expect(rejectedAssetRows([row(), row({ path: "/wp-login.php" })])).toEqual([
+			{ path: "/wp-login.php", reason: "está en la lista de rutas prohibidas" },
+		]);
+		expect(rejectedAssetRows(signedRows())).toEqual([]);
 	});
 });
