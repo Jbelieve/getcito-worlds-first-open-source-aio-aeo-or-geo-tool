@@ -1,0 +1,22 @@
+apps/beaos-wordpress/beaos-aos-pure.php
+  h_c5ca005a78c880 21,407-458
+apps/beaos-wordpress/beaos-aos.php
+  h_c5ca005a78c880 47-189,305-308,324-328,332-337,426-428,532-533,538
+apps/beaos-wordpress/tests/candado.sh
+  h_c5ca005a78c880 1-245
+apps/beaos-wordpress/tests/pure.php
+  h_c5ca005a78c880 333-357,477-492
+apps/beaos-wordpress/uninstall.php
+  h_c5ca005a78c880 21-26,30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "50ba54bcc20575a05ba49537befc6c31df6626d5",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
