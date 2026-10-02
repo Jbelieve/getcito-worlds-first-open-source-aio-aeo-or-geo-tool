@@ -30,6 +30,13 @@ out/
 # extensión de Chrome: el zip de la release lo escribe scripts/release-extension.sh
 /dist/
 
+# plugin de WordPress de BeAOS: el zip de la release lo escribe
+# scripts/release-wordpress-plugin.mjs y la copia que sirve BeAOS la genera el build del panel
+# (apps/web/package.json). No se commitea: el repositorio es público y un zip versionado engorda el
+# repo y se desincroniza de la cabecera del plugin.
+/apps/web/public/beaos-aos.zip
+/apps/web/public/beaos-aos-version.json
+
 # misc / secrets
 .DS_Store
 *.pem
