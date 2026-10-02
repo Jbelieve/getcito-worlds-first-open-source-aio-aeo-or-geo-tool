@@ -1,0 +1,14 @@
+apps/beaos-wordpress/README.md
+  h_c5ca005a78c880 90-121,149-150,154-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "08997f3e105c593f39d0eaa1a10c0fcbaa81d121",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
