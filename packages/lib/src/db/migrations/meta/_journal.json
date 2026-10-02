@@ -204,6 +204,20 @@
       "when": 1790909447183,
       "tag": "0028_common_expediter",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790911898185,
+      "tag": "0029_beaos_rls_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790911906260,
+      "tag": "0030_beaos_app_role",
+      "breakpoints": true
     }
   ]
 }

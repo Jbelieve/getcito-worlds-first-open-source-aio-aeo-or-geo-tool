@@ -11,6 +11,8 @@
   "exports": {
     "./db/db": "./src/db/db.ts",
     "./db/schema": "./src/db/schema.ts",
+    "./db/brand-isolation": "./src/db/brand-isolation.ts",
+    "./db/brand-scope": "./src/db/brand-scope.ts",
     "./db/auth-sync": "./src/db/auth-sync.ts",
     "./db/provisioning": "./src/db/provisioning.ts",
     "./auth/server": "./src/auth/server.ts",

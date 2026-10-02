@@ -1,3 +1,4 @@
+import { brandIsolationPolicy } from "@workspace/lib/db/brand-isolation";
 import { brands } from "@workspace/lib/db/schema";
 import {
 	type AnyPgColumn,
@@ -12,84 +13,100 @@ import {
 	uuid,
 } from "drizzle-orm/pg-core";
 
-export const agentBrandEntities = pgTable("agent_brand_entities", {
-	id: uuid("id").defaultRandom().primaryKey().notNull(),
-	brandId: text("brand_id")
-		.references(() => brands.id, { onDelete: "cascade" })
-		.notNull(),
-	parentEntityId: uuid("parent_entity_id").references((): AnyPgColumn => agentBrandEntities.id, {
-		onDelete: "cascade",
-	}),
-	entityType: text("entity_type").$type<"umbrella" | "product">().notNull(),
-	name: text("name").notNull(),
-	websiteUrl: text("website_url"),
-	maasyProjectId: text("maasy_project_id"),
-	isPrimary: boolean("is_primary").default(false).notNull(),
-	/**
-	 * Publication gate. Nothing is served or handed to a delivery agent until an operator
-	 * publishes the entity explicitly: closed by default, so a half-configured profile (or one
-	 * signed with a wrong key) never reaches an agent.
-	 */
-	isPublished: boolean("is_published").default(false).notNull(),
-	publishedAt: timestamp("published_at", { withTimezone: true }),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { withTimezone: true })
-		.defaultNow()
-		.$onUpdate(() => new Date())
-		.notNull(),
-}).enableRLS();
+export const agentBrandEntities = pgTable(
+	"agent_brand_entities",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id, { onDelete: "cascade" })
+			.notNull(),
+		parentEntityId: uuid("parent_entity_id").references((): AnyPgColumn => agentBrandEntities.id, {
+			onDelete: "cascade",
+		}),
+		entityType: text("entity_type").$type<"umbrella" | "product">().notNull(),
+		name: text("name").notNull(),
+		websiteUrl: text("website_url"),
+		maasyProjectId: text("maasy_project_id"),
+		isPrimary: boolean("is_primary").default(false).notNull(),
+		/**
+		 * Publication gate. Nothing is served or handed to a delivery agent until an operator
+		 * publishes the entity explicitly: closed by default, so a half-configured profile (or one
+		 * signed with a wrong key) never reaches an agent.
+		 */
+		isPublished: boolean("is_published").default(false).notNull(),
+		publishedAt: timestamp("published_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true })
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(table) => [brandIsolationPolicy(table.brandId)],
+).enableRLS();
 
-export const agentAosAudits = pgTable("agent_aos_audits", {
-	id: uuid("id").defaultRandom().primaryKey().notNull(),
-	brandId: text("brand_id")
-		.references(() => brands.id, { onDelete: "cascade" })
-		.notNull(),
-	entityId: uuid("entity_id").references(() => agentBrandEntities.id, { onDelete: "cascade" }),
-	url: text("url").notNull(),
-	score: integer("score"),
-	band: text("band"),
-	businessType: text("business_type"),
-	standards: json("standards"),
-	probes: json("probes"),
-	requirements: json("requirements"),
-	/** Spec APS from the served Claims & Proofs layer. Null when no usable brand.json was served. */
-	apsScore: integer("aps_score"),
-	apsBreakdown: json("aps_breakdown"),
-	/** Scoring algorithm version, so a formula change never mixes incomparable history. */
-	scoringVersion: text("scoring_version"),
-	error: text("error"),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}).enableRLS();
+export const agentAosAudits = pgTable(
+	"agent_aos_audits",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id, { onDelete: "cascade" })
+			.notNull(),
+		entityId: uuid("entity_id").references(() => agentBrandEntities.id, { onDelete: "cascade" }),
+		url: text("url").notNull(),
+		score: integer("score"),
+		band: text("band"),
+		businessType: text("business_type"),
+		standards: json("standards"),
+		probes: json("probes"),
+		requirements: json("requirements"),
+		/** Spec APS from the served Claims & Proofs layer. Null when no usable brand.json was served. */
+		apsScore: integer("aps_score"),
+		apsBreakdown: json("aps_breakdown"),
+		/** Scoring algorithm version, so a formula change never mixes incomparable history. */
+		scoringVersion: text("scoring_version"),
+		error: text("error"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [brandIsolationPolicy(table.brandId)],
+).enableRLS();
 
-export const agentBrandDnaSnapshots = pgTable("agent_brand_dna_snapshots", {
-	id: uuid("id").defaultRandom().primaryKey().notNull(),
-	brandId: text("brand_id")
-		.references(() => brands.id, { onDelete: "cascade" })
-		.notNull(),
-	entityId: uuid("entity_id")
-		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
-		.notNull(),
-	maasyProjectId: text("maasy_project_id").notNull(),
-	source: text("source").default("maasy-mcp").notNull(),
-	payload: json("payload").notNull(),
-	hash: text("hash").notNull(),
-	syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
-}).enableRLS();
+export const agentBrandDnaSnapshots = pgTable(
+	"agent_brand_dna_snapshots",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id, { onDelete: "cascade" })
+			.notNull(),
+		entityId: uuid("entity_id")
+			.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+			.notNull(),
+		maasyProjectId: text("maasy_project_id").notNull(),
+		source: text("source").default("maasy-mcp").notNull(),
+		payload: json("payload").notNull(),
+		hash: text("hash").notNull(),
+		syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [brandIsolationPolicy(table.brandId)],
+).enableRLS();
 
-export const agentAssets = pgTable("agent_assets", {
-	id: uuid("id").defaultRandom().primaryKey().notNull(),
-	brandId: text("brand_id")
-		.references(() => brands.id, { onDelete: "cascade" })
-		.notNull(),
-	entityId: uuid("entity_id")
-		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
-		.notNull(),
-	path: text("path").notNull(),
-	type: text("type").notNull(),
-	content: text("content").notNull(),
-	hash: text("hash").notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}).enableRLS();
+export const agentAssets = pgTable(
+	"agent_assets",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id, { onDelete: "cascade" })
+			.notNull(),
+		entityId: uuid("entity_id")
+			.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+			.notNull(),
+		path: text("path").notNull(),
+		type: text("type").notNull(),
+		content: text("content").notNull(),
+		hash: text("hash").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [brandIsolationPolicy(table.brandId)],
+).enableRLS();
 
 /**
  * Los claims que BeAOS **confirmó con un humano**, con la prueba que los sostiene.
@@ -171,27 +188,34 @@ export const agentBrandClaims = pgTable(
 			.$onUpdate(() => new Date())
 			.notNull(),
 	},
-	(table) => [uniqueIndex("agent_brand_claims_entity_claim_uidx").on(table.entityId, table.claimId)],
+	(table) => [
+		uniqueIndex("agent_brand_claims_entity_claim_uidx").on(table.entityId, table.claimId),
+		brandIsolationPolicy(table.brandId),
+	],
 ).enableRLS();
 
 /**
  * APS Fase 4 — the measuring instrument. Locked for 90 days: while a library is locked its prompts
  * must not change, because the time series is only comparable over the same prompt.
  */
-export const agentApsPromptLibraries = pgTable("agent_aps_prompt_libraries", {
-	id: uuid("id").defaultRandom().primaryKey().notNull(),
-	brandId: text("brand_id")
-		.references(() => brands.id, { onDelete: "cascade" })
-		.notNull(),
-	entityId: uuid("entity_id")
-		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
-		.notNull(),
-	version: integer("version").notNull(),
-	status: text("status").$type<"active" | "superseded">().default("active").notNull(),
-	lockedAt: timestamp("locked_at", { withTimezone: true }).defaultNow().notNull(),
-	unlocksAt: timestamp("unlocks_at", { withTimezone: true }).notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}).enableRLS();
+export const agentApsPromptLibraries = pgTable(
+	"agent_aps_prompt_libraries",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id, { onDelete: "cascade" })
+			.notNull(),
+		entityId: uuid("entity_id")
+			.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+			.notNull(),
+		version: integer("version").notNull(),
+		status: text("status").$type<"active" | "superseded">().default("active").notNull(),
+		lockedAt: timestamp("locked_at", { withTimezone: true }).defaultNow().notNull(),
+		unlocksAt: timestamp("unlocks_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [brandIsolationPolicy(table.brandId)],
+).enableRLS();
 
 export const agentApsPrompts = pgTable("agent_aps_prompts", {
 	id: uuid("id").defaultRandom().primaryKey().notNull(),
@@ -210,74 +234,78 @@ export const agentApsPrompts = pgTable("agent_aps_prompts", {
  * One measurement run. Versions are fixed per run, never per observation: a judge or formula change
  * starts a new comparable series instead of silently mixing history.
  */
-export const agentApsRuns = pgTable("agent_aps_runs", {
-	id: uuid("id").defaultRandom().primaryKey().notNull(),
-	brandId: text("brand_id")
-		.references(() => brands.id, { onDelete: "cascade" })
-		.notNull(),
-	entityId: uuid("entity_id")
-		.references(() => agentBrandEntities.id, { onDelete: "cascade" })
-		.notNull(),
-	libraryId: uuid("library_id")
-		.references(() => agentApsPromptLibraries.id, { onDelete: "cascade" })
-		.notNull(),
-	status: text("status")
-		.$type<"planned" | "capturing" | "parsing" | "scoring" | "done" | "failed" | "budget_exceeded">()
-		.default("planned")
-		.notNull(),
-	models: text("models").array().notNull(),
-	requestedRepetitions: integer("requested_repetitions").notNull(),
-	effectiveRepetitions: integer("effective_repetitions").notNull(),
-	/** A reduced run is a partial measurement and must be presented as such. */
-	repetitionsReduced: boolean("repetitions_reduced").default(false).notNull(),
-	/**
-	 * The run scored fewer answers than it planned. The score is still useful — the calls were paid
-	 * for — but it is never presented as a complete measurement.
-	 */
-	partial: boolean("partial").default(false).notNull(),
-	partialReason: text("partial_reason"),
-	plannedCalls: integer("planned_calls").notNull(),
-	completedCalls: integer("completed_calls").default(0).notNull(),
-	/** AOS score feeding the capacidad_accion dimension. */
-	capacidadAccion: integer("capacidad_accion"),
-	/**
-	 * Lo que la corrida **estimó** antes de gastar, en USD. Sale de `estimateApsRun` y de los
-	 * precios de `APS_PRICES`; es el número que el operador aprobó al confirmar.
-	 */
-	estimatedCostUsd: numeric("estimated_cost_usd", { precision: 18, scale: 10 }),
-	/**
-	 * Lo que la corrida **costó de verdad**, en USD: la suma de `provider_calls.cost_usd` de sus
-	 * llamadas de medición. Es el número que hoy no existía en ningún lado, y por eso el precio de
-	 * `APS_PRICES` sobrevivía sin que nadie lo notara.
-	 *
-	 * **Null cuando el costo está incompleto**, y ahí es donde está el cuidado: si alguna llamada
-	 * quedó sin costo, un total parcial no se guarda como si fuera el total. El dato incompleto se
-	 * declara incompleto en `unpricedCalls` en vez de mentir con un número que parece terminado.
-	 */
-	actualMeasurementUsd: numeric("actual_measurement_usd", { precision: 18, scale: 10 }),
-	/** Costo real de las llamadas del juez (el gateway las factura y las informa). */
-	actualJudgeUsd: numeric("actual_judge_usd", { precision: 18, scale: 10 }),
-	/**
-	 * Cuántas llamadas de la corrida quedaron **sin costo conocido**. Junto a los tres números de
-	 * arriba es lo que hace legible el dato: un total sin esta cuenta no se puede distinguir de un
-	 * total completo.
-	 */
-	unpricedCalls: integer("unpriced_calls"),
-	/** Total de llamadas que la corrida efectivamente registró (medición + juez). */
-	costedCalls: integer("costed_calls"),
-	estimation: json("estimation"),
-	budgetReasons: json("budget_reasons"),
-	scoringVersion: text("scoring_version").notNull(),
-	measurementVersion: text("measurement_version").notNull(),
-	judgeModelAlias: text("judge_model_alias").notNull(),
-	judgeModelVersion: text("judge_model_version").notNull(),
-	judgePipelineVersion: text("judge_pipeline_version").notNull(),
-	promptLibraryVersion: integer("prompt_library_version").notNull(),
-	error: text("error"),
-	startedAt: timestamp("started_at", { withTimezone: true }),
-	finishedAt: timestamp("finished_at", { withTimezone: true }),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}).enableRLS();
+export const agentApsRuns = pgTable(
+	"agent_aps_runs",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id, { onDelete: "cascade" })
+			.notNull(),
+		entityId: uuid("entity_id")
+			.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+			.notNull(),
+		libraryId: uuid("library_id")
+			.references(() => agentApsPromptLibraries.id, { onDelete: "cascade" })
+			.notNull(),
+		status: text("status")
+			.$type<"planned" | "capturing" | "parsing" | "scoring" | "done" | "failed" | "budget_exceeded">()
+			.default("planned")
+			.notNull(),
+		models: text("models").array().notNull(),
+		requestedRepetitions: integer("requested_repetitions").notNull(),
+		effectiveRepetitions: integer("effective_repetitions").notNull(),
+		/** A reduced run is a partial measurement and must be presented as such. */
+		repetitionsReduced: boolean("repetitions_reduced").default(false).notNull(),
+		/**
+		 * The run scored fewer answers than it planned. The score is still useful — the calls were paid
+		 * for — but it is never presented as a complete measurement.
+		 */
+		partial: boolean("partial").default(false).notNull(),
+		partialReason: text("partial_reason"),
+		plannedCalls: integer("planned_calls").notNull(),
+		completedCalls: integer("completed_calls").default(0).notNull(),
+		/** AOS score feeding the capacidad_accion dimension. */
+		capacidadAccion: integer("capacidad_accion"),
+		/**
+		 * Lo que la corrida **estimó** antes de gastar, en USD. Sale de `estimateApsRun` y de los
+		 * precios de `APS_PRICES`; es el número que el operador aprobó al confirmar.
+		 */
+		estimatedCostUsd: numeric("estimated_cost_usd", { precision: 18, scale: 10 }),
+		/**
+		 * Lo que la corrida **costó de verdad**, en USD: la suma de `provider_calls.cost_usd` de sus
+		 * llamadas de medición. Es el número que hoy no existía en ningún lado, y por eso el precio de
+		 * `APS_PRICES` sobrevivía sin que nadie lo notara.
+		 *
+		 * **Null cuando el costo está incompleto**, y ahí es donde está el cuidado: si alguna llamada
+		 * quedó sin costo, un total parcial no se guarda como si fuera el total. El dato incompleto se
+		 * declara incompleto en `unpricedCalls` en vez de mentir con un número que parece terminado.
+		 */
+		actualMeasurementUsd: numeric("actual_measurement_usd", { precision: 18, scale: 10 }),
+		/** Costo real de las llamadas del juez (el gateway las factura y las informa). */
+		actualJudgeUsd: numeric("actual_judge_usd", { precision: 18, scale: 10 }),
+		/**
+		 * Cuántas llamadas de la corrida quedaron **sin costo conocido**. Junto a los tres números de
+		 * arriba es lo que hace legible el dato: un total sin esta cuenta no se puede distinguir de un
+		 * total completo.
+		 */
+		unpricedCalls: integer("unpriced_calls"),
+		/** Total de llamadas que la corrida efectivamente registró (medición + juez). */
+		costedCalls: integer("costed_calls"),
+		estimation: json("estimation"),
+		budgetReasons: json("budget_reasons"),
+		scoringVersion: text("scoring_version").notNull(),
+		measurementVersion: text("measurement_version").notNull(),
+		judgeModelAlias: text("judge_model_alias").notNull(),
+		judgeModelVersion: text("judge_model_version").notNull(),
+		judgePipelineVersion: text("judge_pipeline_version").notNull(),
+		promptLibraryVersion: integer("prompt_library_version").notNull(),
+		error: text("error"),
+		startedAt: timestamp("started_at", { withTimezone: true }),
+		finishedAt: timestamp("finished_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [brandIsolationPolicy(table.brandId)],
+).enableRLS();
 
 /**
  * Fase 0 capture then Fase 1 analysis, kept in one row on purpose: the raw answer is stored once and
