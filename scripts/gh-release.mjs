@@ -20,18 +20,42 @@
  *
  * Requires `gh` and a GITHUB_TOKEN with `contents: write` (both provided by the
  * GitHub Actions runner). `gh release create` also creates the git tag.
+ *
+ * `--wp-plugin` corta el release del **plugin de WordPress de BeAOS**, que es otro tren: su versión vive
+ * en la cabecera del plugin, su changelog es el del plugin y el release lleva el ZIP adjunto. Reusa esta
+ * misma maquinaria —el chequeo de idempotencia, el tag, las notas del changelog— en vez de tener otra
+ * parecida que se desincronice. La sección del changelog es obligatoria en este modo: las notas de un
+ * plugin no se pueden generar de los PRs del producto, que son otra cosa.
+ *
+ *   node scripts/gh-release.mjs --wp-plugin              # tag beaos-aos-v<version> + el ZIP adjunto
+ *   node scripts/gh-release.mjs --wp-plugin --dry-run    # imprime lo que haría y no toca GitHub
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readWpPluginVersion, wpPluginZipName } from "./beaos-wp-plugin.mjs";
+
+const argv = process.argv.slice(2);
+const wpPlugin = argv.includes("--wp-plugin");
+const dryRun = argv.includes("--dry-run");
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const version = JSON.parse(
-  readFileSync(join(rootDir, "packages/lib/package.json"), "utf8"),
-).version;
-const tag = `v${version}`;
+
+// El tren del plugin de WordPress no comparte versión con los paquetes del monorepo: la suya sale de la
+// cabecera del plugin (`apps/beaos-wordpress/beaos-aos.php`) y el tag lleva el prefijo `beaos-aos-` para
+// no confundirse con los `v9.x` del producto en la lista de releases.
+const version = wpPlugin
+  ? readWpPluginVersion()
+  : JSON.parse(readFileSync(join(rootDir, "packages/lib/package.json"), "utf8")).version;
+const tag = wpPlugin ? `beaos-aos-v${version}` : `v${version}`;
+const changelogPath = wpPlugin
+  ? join(rootDir, "apps/beaos-wordpress/CHANGELOG.md")
+  : join(rootDir, "packages/lib/CHANGELOG.md");
+
+// Lo que viaja adjunto al release. Hoy sólo el plugin tiene un archivo instalable.
+const assets = wpPlugin ? [join(rootDir, "dist", wpPluginZipName(version))] : [];
 
 function releaseExists(t) {
   try {
@@ -45,10 +69,10 @@ function releaseExists(t) {
 // Pull the `## <version>` block out of the CHANGELOG (everything up to the next
 // `## ` heading). Returns null when the section is missing or has no real entry
 // (a bullet that isn't just an internal `@workspace/*` dependency bump).
-function changelogSection(v) {
+function changelogSection(v, path) {
   let text;
   try {
-    text = readFileSync(join(rootDir, "packages/lib/CHANGELOG.md"), "utf8");
+    text = readFileSync(path, "utf8");
   } catch {
     return null;
   }
@@ -69,21 +93,43 @@ function changelogSection(v) {
   return hasRealEntry ? body : null;
 }
 
-if (releaseExists(tag)) {
+if (!dryRun && releaseExists(tag)) {
   console.log(`Release ${tag} already exists; nothing to publish.`);
   process.exit(0);
 }
 
-const args = ["release", "create", tag, "--title", tag];
+if (!dryRun) {
+  for (const asset of assets) {
+    if (!existsSync(asset)) {
+      console.error(
+        `ERROR: falta ${asset}. Armá el paquete antes de cortar el release: node scripts/release-wordpress-plugin.mjs`,
+      );
+      process.exit(1);
+    }
+  }
+}
+
+const args = ["release", "create", tag, "--title", tag, ...assets];
 if (process.env.GITHUB_SHA) args.push("--target", process.env.GITHUB_SHA);
 
-const notes = changelogSection(version);
+const notes = changelogSection(version, changelogPath);
 if (notes) {
   const notesFile = join(rootDir, ".release-notes.md");
   writeFileSync(notesFile, notes);
   args.push("--notes-file", notesFile);
+} else if (wpPlugin) {
+  // Sin sección no hay notas honestas: generar las del producto mezclaría PRs que no son de este release.
+  console.error(
+    `ERROR: apps/beaos-wordpress/CHANGELOG.md no tiene una sección "## ${version}" con entradas. Escribila antes de publicar.`,
+  );
+  process.exit(1);
 } else {
   args.push("--generate-notes");
+}
+
+if (dryRun) {
+  console.log(`[dry-run] gh ${args.join(" ")}`);
+  process.exit(0);
 }
 
 execFileSync("gh", args, { stdio: "inherit" });
