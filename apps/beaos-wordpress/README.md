@@ -1,0 +1,152 @@
+# BeAOS by Believe (plugin de WordPress)
+
+Conecta un sitio de WordPress con **BeAOS**: publica la marca como assets agénticos y sirve el kit
+(`/llms.txt`, `/AGENTS.md`, `/.well-known/*`) **byte a byte** en su ruta, con el `Content-Type` que
+declaró BeAOS.
+
+Reusa el criterio del plugin de Autex (`autex-aos`, v0.5.0), que ya sirve un kit así en producción:
+
+- La copia local vive en la opción `beaos_aos_bundle`, **sin autoload** y con los cuerpos en **base64**:
+  la tabla de opciones de WordPress es texto y no puede tocar un solo byte.
+- Un archivo cuyo `sha256` no cambió **no se vuelve a bajar**.
+- Un archivo que no da su `sha256` o su largo **no se guarda**: mejor un 404 que servir algo que rompió
+  la firma.
+- Al servir, el `sha256` **se vuelve a verificar** en cada request.
+- Lo que no está en el manifiesto queda para WordPress: `robots.txt` y los sitemaps del core siguen
+  siendo del core.
+
+Sin dependencias: PHP 7.4+, WordPress 6.0+, ningún paquete de Composer ni de npm.
+
+## Estado: lo que está y lo que falta
+
+| | |
+|---|---|
+| Sincronización y servido del kit | **Listo** |
+| Cron y candado de corrida | **Listo** |
+| Página de ajustes (con categoría y token) | **Lista** |
+| Cliente del MCP (`class-beaos-mcp.php`) | **Listo** |
+| Desinstalación limpia | **Lista** |
+| Asistente de 3 pasos (conectar → la marca → generar y publicar) | **Falta**: depende de qué flujo de conexión elija Jorge |
+| Canje del código de conexión | **Falta**: depende del mismo flujo |
+
+Mientras tanto el **flujo manual funciona**: se crea un token por producto en BeAOS, se saca el
+`entityId` y se pegan los dos en los ajustes.
+
+## Instalar
+
+1. Copiar la carpeta `beaos-wordpress` a `wp-content/plugins/` (o comprimirla y subirla desde
+   Plugins → Añadir nuevo → Subir plugin).
+2. Activarla en Plugins.
+
+## Configurar
+
+**Ajustes → BeAOS by Believe.**
+
+### Conexión
+
+- **Token del producto**: tiene que ser un token **por producto** de BeAOS
+  (`scripts/beaos-token.sh create wordpress-tu-sitio`), **no** una llave maestra. Una llave maestra
+  (`ADMIN_API_KEYS`) abre todas las marcas y no se puede revocar por sitio. El campo se pinta vacío y
+  dejarlo vacío al guardar **conserva** el token guardado, para que la credencial no viaje al navegador.
+- **Id de la marca** (`brandId`): lo devuelve `ensure_brand`; por ejemplo `perez-com`.
+- **Entity id**: el UUID de la entidad, que sale de `get_brand`. Sin esto no hay a quién pedirle el kit.
+
+### La marca
+
+Nombre, web y **categoría**. Los completa el asistente cuando esté; hoy se guardan acá para que el alta
+no dependa de recordar qué se escribió.
+
+**La categoría no es decorativa**: es lo que calibra la biblioteca de preguntas de compra del APS. Sin
+categoría declarada, BeAOS corta la generación **antes de gastar la llamada**; si se fuerza, se calibra
+con el marcador genérico `marketing/software` y los prompts salen generales. La categoría **no cambia
+los archivos del kit**: cambia el instrumento con el que se mide.
+
+### El kit
+
+- **Activo**: sincroniza y sirve el kit en este sitio.
+- **Endpoint del MCP**: por defecto `https://beaos.believe-global.com/mcp`. Sólo https.
+- **Base de BeAOS**: para los enlaces al panel.
+- **Sincronizar ahora**: el cron de WordPress sólo corre cuando alguien visita el sitio; este botón no
+  espera.
+
+## Cómo funciona
+
+1. Al guardar los ajustes y después cada hora (wp-cron), el plugin llama por el MCP a
+   `get_agent_bundle` y recibe el manifiesto: cada ruta con su `type`, su `sha256` y su `bytes`.
+2. Por cada archivo nuevo o cambiado llama a `get_agent_asset` y lo guarda **sólo si** el `sha256` y el
+   largo coinciden con el manifiesto.
+3. En cada request, en `init` con prioridad **0**, si la ruta es una del manifiesto se responde con los
+   bytes exactos, el `Content-Type` del manifiesto, `Content-Length`, `X-BeAOS-Sha256`,
+   `Cache-Control: public, max-age=300, no-transform` y `X-Content-Type-Options: nosniff`, y se corta
+   ahí. Así gana a `do_robots()`, a los sitemaps del core y al 404 de `/.well-known/*`.
+4. Si el manifiesto no llega, **se sigue sirviendo la copia anterior** y sólo se anota el error.
+5. Si la entidad **no está publicada** en BeAOS, el MCP responde `{ published: false }`: no es un error,
+   es un estado, y el panel lo dice así.
+
+**¿Por qué por el MCP y no por la API de entrega de BeAOS?** Porque `/api/v1/*` de BeAOS valida **sólo**
+contra `ADMIN_API_KEYS`, la llave maestra compartida: usarla obligaría a mandar una llave maestra a un
+WordPress ajeno. El MCP es la única puerta que acepta un token por producto, revocable de a uno.
+
+## Verificar
+
+Por el camino real, contra el sitio publicado:
+
+1. `curl -sI https://SITIO/llms.txt` muestra el `Content-Type` y el `X-BeAOS-Sha256`.
+2. El mismo hash contra el `sha256` de la ruta en el manifiesto que devuelve `get_agent_bundle` por el
+   MCP.
+3. `curl -s https://SITIO/AGENTS.md` y `curl -s https://SITIO/.well-known/brand.json` deben dar el
+   contenido, no el 404 de WordPress.
+4. `curl -sI https://SITIO/robots.txt` debe seguir siendo el de WordPress, si el manifiesto no lo trae.
+5. El estado al pie de Ajustes → BeAOS by Believe: cuántos archivos, cuándo y el último error.
+
+**Si el hash no coincide y el sitio está en Cloudflare**, revisar Auto Minify, Rocket Loader y Email
+Obfuscation: reescriben los bytes y la firma deja de validar. El plugin manda `no-transform`, pero no
+controla la zona: hay que excluir `/.well-known/*`, `/llms.txt`, `/llms-full.txt` y `/AGENTS.md` con una
+Configuration Rule. Lo mismo con un plugin de WordPress que minifique la salida. Y si el sitio tiene
+caché de página (WP Rocket, LiteSpeed, Cloudflare APO), **vaciarla después de sincronizar**.
+
+## Test
+
+Sin WordPress, sin base y sin red:
+
+```bash
+php apps/beaos-wordpress/tests/pure.php
+```
+
+Sale `0` si pasa y `1` si falla. Prueba la parte pura —el sobre y la lectura del JSON-RPC, el motivo de
+un status HTTP, el `Retry-After`, la ruta de una request, la verificación de un asset, el vencimiento y
+el saneo de los ajustes— y dos guardas de contrato:
+
+- que `beaos-aos-pure.php` **no llame a ninguna función de WordPress** (si no, deja de ser probable);
+- que **todo tool que el plugin llame esté documentado** en `MCP-BEAOS.md`, leído del repositorio y no
+  de memoria.
+
+Se corre con un `php` pelado. Lo único que hace falta es que exista la constante `ABSPATH`, que el test
+define: la guarda de acceso directo está en todos los archivos del plugin, y una constante no es
+WordPress.
+
+## Desinstalar
+
+`uninstall.php` borra la opción `beaos_aos` (que guarda el token), la copia del kit, el transient del
+candado y el evento de cron. En multisitio, una vez por sitio.
+
+**No** toca nada del lado de BeAOS: la marca, la entidad, las pruebas y el bundle publicado se quedan.
+Desinstalar un plugin de WordPress no puede borrar la evidencia de una marca. Lo único que queda a mano
+es **revocar el token** en BeAOS (`scripts/beaos-token.sh revoke <prefijo>`).
+
+## Límites conocidos
+
+- **No sirve binarios.** El MCP entrega el contenido como texto; hoy todo el bundle es texto
+  (`text/plain`, `text/markdown`, `application/json`, `application/xml`).
+- **No inventa un MCP para el sitio.** El `/.well-known/mcp/server-card.json` sólo existe en el kit si
+  el sitio declara su propio MCP: BeAOS no inventa endpoints.
+- **No saltea el gate de publicación de BeAOS.** Si la entidad no está publicada, no hay nada que servir.
+- **No revierte el candado de claims.** Si BeAOS rechaza una publicación, el plugin muestra el motivo.
+- **No firma.** La firma y `keys.json` dependen de una clave provisionada en BeAOS para ese host.
+- **No mide APS ni escribe el DNA.** Eso es del panel de BeAOS.
+- **Un plugin de caché de página puede servir bytes viejos.** Hay que vaciarla.
+- **Si el plugin Autex AOS está activo, este plugin no sirve el kit**: los dos quieren las mismas rutas y
+  dos kits mezclados serían un kit que no firmó nadie. El panel lo avisa.
+
+El diseño completo, con el porqué de cada decisión y los tres flujos de conexión, está en
+[`PLUGIN-WORDPRESS-BEAOS.md`](../../PLUGIN-WORDPRESS-BEAOS.md).
