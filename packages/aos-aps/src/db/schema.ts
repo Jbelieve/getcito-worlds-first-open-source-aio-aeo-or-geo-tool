@@ -5,6 +5,7 @@ import {
 	type AnyPgColumn,
 	boolean,
 	check,
+	index,
 	integer,
 	json,
 	numeric,
@@ -480,6 +481,65 @@ export const agentApiTokens = pgTable(
 
 export type AgentApiToken = typeof agentApiTokens.$inferSelect;
 export type NewAgentApiToken = typeof agentApiTokens.$inferInsert;
+
+/**
+ * Código de canje de un solo uso: la credencial corta que viaja al WordPress del cliente.
+ *
+ * Existe porque lo que **no** puede viajar es `ADMIN_API_KEYS`: esa llave maestra abre todas las
+ * marcas, no se revoca por sitio y no tiene identidad. Lo que viaja es esto —un código de vida corta,
+ * de un solo uso y **atado a una marca y una entidad**— que el plugin canjea por un token de producto
+ * (`POST /api/v1/enroll`). Si el código se filtra, el daño está acotado y se revoca solo al vencer o al
+ * usarse.
+ *
+ * Se guarda **solo el sha256**, igual que `agent_api_tokens`: el código en claro existe una sola vez,
+ * cuando se genera, y no se puede recuperar. `prefix` (los primeros 8 caracteres) alcanza para
+ * identificarlo en un listado sin revelarlo.
+ *
+ * `usedAt` es la pieza que hace que el canje sea de un solo uso, y **no es decorativa**: el endpoint
+ * marca la fila con un `UPDATE ... WHERE used_at IS NULL RETURNING` dentro de la misma transacción que
+ * emite el token. Si el `UPDATE` no devuelve fila, no se emite nada. Dos canjes simultáneos no pueden
+ * ganar los dos.
+ *
+ * `createdBy` y `label` son trazabilidad: quién generó el código y para qué sitio, para poder revocar
+ * el correcto sin adivinar.
+ */
+export const agentEnrollmentCodes = pgTable(
+	"agent_enrollment_codes",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		/** sha256 en hex del código. El código en claro nunca se guarda. */
+		codeHash: text("code_hash").notNull(),
+		/** Los primeros 8 caracteres, para reconocerlo en un listado. */
+		prefix: text("prefix").notNull(),
+		/** La marca a la que pertenece el código: quien lo canjee obtiene un token para esta marca. */
+		brandId: text("brand_id")
+			.references(() => brands.id, { onDelete: "cascade" })
+			.notNull(),
+		/** La entidad exacta del kit. El token emitido sirve para esta entidad y ninguna otra. */
+		entityId: uuid("entity_id")
+			.references(() => agentBrandEntities.id, { onDelete: "cascade" })
+			.notNull(),
+		/** Para qué sitio es, en palabras del operador ("wordpress-perez-com"). Trazabilidad. */
+		label: text("label"),
+		/** Quién lo generó (id de usuario), para poder preguntarle. */
+		createdBy: text("created_by"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		/** Vencimiento. Un código vencido no canjea, y el `UPDATE` del canje lo exige. */
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+		/** Cuándo se canjeó. `null` = todavía no. Ver el comentario de arriba: es la garantía. */
+		usedAt: timestamp("used_at", { withTimezone: true }),
+		/** El token que emitió, para poder revocar los dos juntos si hiciera falta. */
+		usedTokenId: uuid("used_token_id").references(() => agentApiTokens.id, { onDelete: "set null" }),
+	},
+	(table) => [
+		uniqueIndex("agent_enrollment_codes_code_hash_uidx").on(table.codeHash),
+		index("agent_enrollment_codes_brand_id_idx").on(table.brandId),
+		brandIsolationPolicy(table.brandId),
+	],
+).enableRLS();
+
+export type AgentEnrollmentCode = typeof agentEnrollmentCodes.$inferSelect;
+export type NewAgentEnrollmentCode = typeof agentEnrollmentCodes.$inferInsert;
 
 export type AgentApsPromptLibrary = typeof agentApsPromptLibraries.$inferSelect;
 export type NewAgentApsPromptLibrary = typeof agentApsPromptLibraries.$inferInsert;
