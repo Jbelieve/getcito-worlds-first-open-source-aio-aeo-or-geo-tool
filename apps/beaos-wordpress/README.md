@@ -87,6 +87,38 @@ los archivos del kit**: cambia el instrumento con el que se mide.
 contra `ADMIN_API_KEYS`, la llave maestra compartida: usarla obligaría a mandar una llave maestra a un
 WordPress ajeno. El MCP es la única puerta que acepta un token por producto, revocable de a uno.
 
+## La lista blanca de rutas (por qué el kit no puede tapar el login)
+
+El manifiesto es la **única** fuente de verdad de qué sirve el plugin. Sin lista blanca, **cualquier**
+ruta del manifiesto se sirve, y como el enganche es `init` con prioridad 0, una entrada para
+`/wp-login.php` le gana al core y **tapa la pantalla de login** (y `/wp-admin/` tapa el panel). No hace
+falta un atacante: un bug en el generador que emita una ruta de más deja al cliente sin poder entrar a su
+WordPress.
+
+El plugin sólo reclama rutas **con forma de kit**:
+
+1. los archivos fijos que el kit publica **en la raíz** —`/llms.txt`, `/llms-full.txt`, `/AGENTS.md`,
+   `/robots.txt`, `/sitemap.xml`—: lista exacta, porque en la raíz viven `wp-login.php`,
+   `wp-config.php` e `index.php` y ninguna forma distingue un asset del kit de un archivo del core
+   salvo el nombre;
+2. **todo lo que cuelga de `/.well-known/`** (RFC 8615): es donde el kit pone sus diez archivos de
+   descubrimiento, y el prefijo hace que un asset nuevo se sirva **sin tocar el plugin**.
+
+Nada más: ni `/wp-admin`, ni `/wp-login.php`, ni `/wp-config.php`, ni `/wp-json`, ni `/index.php`, ni
+ningún `.php`. La segunda capa es un rechazo **explícito** de esas rutas y de todo `.php`, antes de
+mirar la forma: si algún día alguien afloja la forma, esa capa sigue en pie.
+
+Qué pasa con una ruta del manifiesto que no pasa la lista blanca: **se ignora** (no se descarga, no se
+guarda y, si ya estaba guardada de una versión anterior, no se sirve), **el resto del kit sigue
+sirviéndose** —tirar el bundle entero cambiaría un bug de una ruta por una caída del kit completo— y
+**queda registrada**: el motivo viaja al pie de la página de ajustes y a `error_log` (con
+`WP_DEBUG_LOG`, a `wp-content/debug.log`), una vez por ruta cada 12 horas.
+
+La lista **no se puede desincronizar del generador**: `tests/pure.php` lee
+`packages/aos-aps/src/assets/generate.ts` y falla si el kit emite una ruta que la lista blanca
+rechazaría, o si una ruta dejó de ser un literal verificable. El día que el generador agregue un asset,
+el test lo dice en vez de que el asset no se sirva en silencio.
+
 ## Verificar
 
 Por el camino real, contra el sitio publicado:
@@ -114,12 +146,15 @@ php apps/beaos-wordpress/tests/pure.php
 ```
 
 Sale `0` si pasa y `1` si falla. Prueba la parte pura —el sobre y la lectura del JSON-RPC, el motivo de
-un status HTTP, el `Retry-After`, la ruta de una request, la verificación de un asset, el vencimiento y
-el saneo de los ajustes— y dos guardas de contrato:
+un status HTTP, el `Retry-After`, la ruta de una request, la lista blanca de rutas del kit, la
+verificación de un asset, el vencimiento y el saneo de los ajustes— y tres guardas de contrato:
 
 - que `beaos-aos-pure.php` **no llame a ninguna función de WordPress** (si no, deja de ser probable);
 - que **todo tool que el plugin llame esté documentado** en `MCP-BEAOS.md`, leído del repositorio y no
-  de memoria.
+  de memoria;
+- que **el generador del kit no emita una ruta que la lista blanca rechace**: lee
+  `packages/aos-aps/src/assets/generate.ts` y también falla si una ruta dejó de ser un literal
+  verificable.
 
 Se corre con un `php` pelado. Lo único que hace falta es que exista la constante `ABSPATH`, que el test
 define: la guarda de acceso directo está en todos los archivos del plugin, y una constante no es
