@@ -1,0 +1,60 @@
+apps/web/src/components/provider-coverage-note.test.ts
+  h_c5ca005a78c880 1-44
+apps/web/src/components/provider-coverage-note.tsx
+  h_c5ca005a78c880 1-61
+apps/web/src/lib/__tests__/visibility-stats.test.ts
+  h_c5ca005a78c880 1,4,6-9,58,210-285
+apps/web/src/lib/postgres-read.ts
+  h_c5ca005a78c880 15,159-217
+apps/web/src/lib/visibility-stats.ts
+  h_c5ca005a78c880 294-389
+apps/web/src/routes/_authed/app/$brand/share-of-voice.tsx
+  h_c5ca005a78c880 23,135-136
+apps/web/src/routes/_authed/reports/render/$reportId.tsx
+  h_c5ca005a78c880 17,27,55-59,324-341,393-400
+apps/web/src/server/analysis.ts
+  h_c5ca005a78c880 18,25,28-34,72-80,108-116,120,124-126,167-177
+apps/worker/src/jobs/aps-query.ts
+  h_c5ca005a78c880 27
+apps/worker/src/jobs/process-prompt.ts
+  h_c5ca005a78c880 9,19,173-199,233,242-243,296-309,311-312,363,367-375,381,391,413-447
+apps/worker/src/report-worker.ts
+  h_c5ca005a78c880 17,292-293,449-451,481-483,518-520,558
+packages/aos-aps/src/aps/capture.test.ts
+  h_c5ca005a78c880 177-198
+packages/aos-aps/src/aps/capture.ts
+  h_c5ca005a78c880 18-26,42-46,93-94,98-113,125-126
+packages/aos-aps/src/aps/targets.test.ts
+  h_c5ca005a78c880 21-22,24,28-39
+packages/aos-aps/src/aps/targets.ts
+  h_c5ca005a78c880 28-39,61-66
+packages/lib/src/db/migrations/0028_common_expediter.sql
+  h_c5ca005a78c880 1-36
+packages/lib/src/db/migrations/meta/0028_snapshot.json
+  h_c5ca005a78c880 1-3723
+packages/lib/src/db/migrations/meta/_journal.json
+  h_c5ca005a78c880 200-206
+packages/lib/src/db/schema.ts
+  h_c5ca005a78c880 136-201
+packages/lib/src/providers/registry/dataforseo.test.ts
+  h_c5ca005a78c880 151-214
+packages/lib/src/report-metrics.test.ts
+  h_c5ca005a78c880 1,4-8,10-11,15-16,18,42,86,125,151,164-195,214-237,247-286,296-335,345-376,391-406,450,513,520,525,568,577,622,629,791-949
+packages/lib/src/report-metrics.ts
+  h_c5ca005a78c880 7-8,30-99,122-125,131,135,137-149,171-182,212-263,567-573,581-623,652-653,660-664,672-680,720,734-772
+packages/lib/src/run-coverage.test.ts
+  h_c5ca005a78c880 1-129
+packages/lib/src/run-coverage.ts
+  h_c5ca005a78c880 1-215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fb13c33fbd799d38ed0fe3c263f870927584d63a",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
