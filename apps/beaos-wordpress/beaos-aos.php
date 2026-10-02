@@ -112,6 +112,44 @@ function beaos_aos_fetch_asset( BeAOS_MCP $mcp, $entity_id, $path ) {
 }
 
 /**
+ * Deja constancia, en el log de PHP, de una ruta que la lista blanca rechazó. Con `WP_DEBUG_LOG`
+ * (lo normal en un sitio de pruebas) la línea cae en `wp-content/debug.log`.
+ *
+ * Se registra **una vez por ruta cada 12 horas** (un transient): el evento es raro y hay que verlo,
+ * pero un pedido a `/wp-admin/` en un sitio con la opción envenenada no puede llenar el log.
+ *
+ * @param string $path           La ruta rechazada.
+ * @param string $reason         El motivo, tal como lo da la parte pura.
+ * @param bool   $only_if_stored Registrar sólo si la copia local tiene esa ruta. Lo usa el servido:
+ *                               así un `/wp-admin/` normal (que no es noticia) no toca la base, y
+ *                               una ruta que el plugin se niega a servir **sí** queda anotada.
+ */
+function beaos_aos_log_rejected_route( $path, $reason, $only_if_stored = false ) {
+	$path = (string) $path;
+
+	if ( $only_if_stored ) {
+		$bundle = get_option( BEAOS_AOS_BUNDLE );
+		if ( ! is_array( $bundle ) || ! isset( $bundle['assets'][ $path ] ) ) {
+			return;
+		}
+	}
+
+	$key = 'beaos_aos_rejected_' . md5( $path );
+	if ( get_transient( $key ) ) {
+		return;
+	}
+	set_transient( $key, 1, 12 * HOUR_IN_SECONDS );
+
+	error_log(
+		sprintf(
+			'[beaos-aos] ruta del kit rechazada por la lista blanca: %s (%s). No se sirve.',
+			$path,
+			'' !== $reason ? $reason : 'sin motivo'
+		)
+	);
+}
+
+/**
  * Baja el manifiesto y cada archivo nuevo o cambiado, y guarda la copia local.
  *
  * Mismo criterio que `autex_aos_sync()`:
@@ -189,6 +227,13 @@ function beaos_aos_sync( $force = false ) {
 			// Primera pasada, sin cuerpo: decide si hay que bajarlo.
 			$decision = beaos_aos_asset_decision( $entry, null, $old );
 			if ( 'skip' === $decision['action'] ) {
+				// Una ruta que la lista blanca rechaza se ignora, se anota y **el resto del kit se
+				// sigue sirviendo**: tirar el bundle entero por una entrada mala cambiaría un bug de
+				// una ruta por una caída del kit completo.
+				if ( ! beaos_aos_claimable_path( $path ) ) {
+					$bad[] = $path . ' (' . $decision['reason'] . ')';
+					beaos_aos_log_rejected_route( $path, $decision['reason'] );
+				}
 				continue;
 			}
 			if ( 'keep' === $decision['action'] ) {
@@ -224,7 +269,7 @@ function beaos_aos_sync( $force = false ) {
 				(string) $man['bundle_sha256'],
 				time(),
 				'ok',
-				$bad ? 'descartados: ' . implode( ', ', $bad ) : ''
+				beaos_aos_discarded_message( $bad )
 			),
 			false
 		);
@@ -262,7 +307,15 @@ add_action(
 
 		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/';
 		$path = beaos_aos_route_path( $uri, (string) wp_parse_url( home_url(), PHP_URL_PATH ) );
+
+		// La lista blanca manda también acá, y no sólo al sincronizar: una copia local que ya tenía una
+		// ruta peligrosa (una versión vieja del plugin, la opción escrita a mano) **no se sirve**.
+		// Si esa ruta está guardada, además se anota: es el caso en el que alguien está golpeando una
+		// puerta que el plugin se niega a abrir, y el log tiene que poder contarlo.
 		if ( ! beaos_aos_claimable_path( $path ) ) {
+			if ( beaos_aos_denied_path( $path ) ) {
+				beaos_aos_log_rejected_route( $path, beaos_aos_rejection_reason( $path ), true );
+			}
 			return;
 		}
 
@@ -382,15 +435,27 @@ function beaos_aos_state_line() {
 	if ( ! is_array( $b ) || ! isset( $b['state'] ) || 'empty' === $b['state'] ) {
 		return 'Kit: sin sincronizar todavía.';
 	}
+	// Las rutas que la lista blanca ya no acepta pero que siguen guardadas. El plugin no las sirve, y
+	// esto es lo que hace que se vean sin tener que leer el log.
+	$rechazadas = beaos_aos_rejected_assets( isset( $b['assets'] ) ? $b['assets'] : array() );
+	$aviso      = $rechazadas
+		? ' ' . sprintf(
+			'%d ruta(s) rechazadas por la lista blanca, que NO se sirven: %s.',
+			count( $rechazadas ),
+			implode( ', ', array_slice( $rechazadas, 0, 5 ) ) . ( count( $rechazadas ) > 5 ? ', …' : '' )
+		)
+		: '';
+
 	switch ( $b['state'] ) {
 		case 'unpublished':
-			return 'Kit: la entidad no está publicada en BeAOS, así que no hay nada para servir. Se publica con el asistente o desde el panel de BeAOS.';
+			return 'Kit: la entidad no está publicada en BeAOS, así que no hay nada para servir. Se publica con el asistente o desde el panel de BeAOS.' . $aviso;
 		case 'error':
-			return 'Kit: no se pudo sincronizar. Se sigue sirviendo la copia anterior. Último error: ' . $b['error'];
+			return 'Kit: no se pudo sincronizar. Se sigue sirviendo la copia anterior. Último error: ' . $b['error'] . $aviso;
 		default:
 			$n = is_array( $b['assets'] ) ? count( $b['assets'] ) : 0;
 			return sprintf( 'Kit: %d archivos, sincronizado %s.', $n, $b['synced_at'] )
-				. ( '' !== $b['error'] ? ' ' . ucfirst( $b['error'] ) : '' );
+				. ( '' !== $b['error'] ? ' ' . ucfirst( $b['error'] ) : '' )
+				. $aviso;
 	}
 }
 

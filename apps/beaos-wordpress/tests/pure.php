@@ -184,6 +184,75 @@ check_same( false, beaos_aos_claimable_path( 'llms.txt' ), 'una ruta relativa ta
 check_same( false, beaos_aos_claimable_path( '/../wp-config.php' ), 'una ruta con .. tampoco' );
 check_same( false, beaos_aos_claimable_path( '/' . str_repeat( 'a', 300 ) ), 'una ruta absurda tampoco' );
 
+// ── 5b · LA LISTA BLANCA: sólo las rutas con forma de kit ───────────────────────────────────────
+echo "5b · la lista blanca\n";
+
+// Lo que el kit publica hoy. Los cinco fijos de la raíz y los diez de .well-known. No se inventan:
+// salen del generador, y la sección 13 verifica que no se despeguen.
+$del_kit = array(
+	'/llms.txt',
+	'/llms-full.txt',
+	'/AGENTS.md',
+	'/robots.txt',
+	'/sitemap.xml',
+	'/.well-known/brand.json',
+	'/.well-known/brand.json.sig',
+	'/.well-known/keys.json',
+	'/.well-known/agent-card.json',
+	'/.well-known/agent-permissions.json',
+	'/.well-known/mcp/server-card.json',
+	'/.well-known/security.txt',
+	'/.well-known/api-catalog',
+	'/.well-known/ai-catalog.json',
+	'/.well-known/http-message-signatures-directory',
+);
+foreach ( $del_kit as $ruta ) {
+	check_same( true, beaos_aos_claimable_path( $ruta ), "el kit puede reclamar $ruta" );
+}
+
+// La forma cubre lo que todavía no existe: un asset nuevo bajo .well-known/ se sirve sin tocar el
+// plugin. Es la razón de elegir forma y no una lista cerrada.
+check_same( true, beaos_aos_claimable_path( '/.well-known/lo-que-venga.json' ), 'un asset nuevo de .well-known/ pasa sin tocar el plugin' );
+check_same( true, beaos_aos_claimable_path( '/.well-known/mcp/otro.json' ), 'y uno anidado también' );
+
+// Y esto es el agujero que se cierra: las rutas del core que el manifiesto podía reclamar.
+$prohibidas = array(
+	'/wp-login.php'            => 'la pantalla de login',
+	'/wp-admin/'               => 'el panel',
+	'/wp-admin'                => 'el panel sin barra',
+	'/wp-admin/options-general.php' => 'una pantalla del panel',
+	'/wp-config.php'           => 'la configuración',
+	'/wp-json/wp/v2/posts'     => 'la API REST',
+	'/index.php'               => 'el índice',
+	'/xmlrpc.php'              => 'xmlrpc',
+	'/wp-content/uploads/x.txt' => 'los archivos subidos',
+	'/readme.html'             => 'el readme del core',
+	'/.htaccess'               => 'el .htaccess',
+	'/.well-known/algo.php'    => 'un .php escondido en .well-known',
+	'/.well-known/../../../wp-config.php' => 'un .. con forma de .well-known',
+	'/WP-LOGIN.PHP'            => 'el login en mayúsculas',
+	'/.well-known/'            => 'el prefijo pelado, que no es un archivo',
+	'/.well-known'             => 'el prefijo sin barra',
+	'/license.txt'             => 'un archivo de la raíz que el kit no publica',
+	'/wp-login'                => 'una ruta que el kit no publica',
+);
+foreach ( $prohibidas as $ruta => $que ) {
+	check_same( false, beaos_aos_claimable_path( $ruta ), "NO se puede reclamar $ruta ($que)" );
+}
+
+// El motivo se dice, y distingue "prohibida" de "no tiene forma de kit": el panel y el log lo muestran.
+check_same( 'está en la lista de rutas prohibidas', beaos_aos_rejection_reason( '/wp-login.php' ), 'el motivo de una ruta prohibida' );
+check_same( 'no tiene forma de kit', beaos_aos_rejection_reason( '/una-pagina/' ), 'el motivo de una que no es del kit' );
+check_same( '', beaos_aos_rejection_reason( '/llms.txt' ), 'una del kit no tiene motivo de rechazo' );
+check_same( true, beaos_aos_denied_path( '/wp-config.php' ), 'el .php se rechaza aunque esté en .well-known' );
+check_same( true, beaos_aos_denied_path( '/.well-known/x.PHP' ), 'y sin importar mayúsculas' );
+check_same( false, beaos_aos_denied_path( '/llms.txt' ), 'una del kit no está prohibida' );
+
+// Las rutas guardadas que ya no se aceptan: debería ser vacío, y esto es lo que lo dice en el panel.
+check_same( array(), beaos_aos_rejected_assets( array( '/llms.txt' => array(), '/.well-known/brand.json' => array() ) ), 'un kit sano no tiene rutas rechazadas' );
+check_same( array( '/wp-login.php' ), beaos_aos_rejected_assets( array( '/llms.txt' => array(), '/wp-login.php' => array() ) ), 'y una opción envenenada se ve' );
+check_same( array(), beaos_aos_rejected_assets( null ), 'sin copia, ninguna rechazada' );
+
 // ── 6 · La decisión sobre un asset ──────────────────────────────────────────────────────────────
 echo "6 · la decisión sobre un asset\n";
 
@@ -207,6 +276,23 @@ check_same( 'reject', beaos_aos_asset_decision( $bueno, null, null )['action'], 
 check_same( 'reject', beaos_aos_asset_decision( $bueno, $cuerpo . 'x' )['action'], 'un sha256 que no coincide se descarta' );
 check_same( 'reject', beaos_aos_asset_decision( array_merge( $bueno, array( 'bytes' => 999 ) ), $cuerpo )['action'], 'un largo que no coincide se descarta' );
 check_same( 'el sha256 no coincide', beaos_aos_asset_decision( $bueno, 'otra cosa' )['reason'], 'y el motivo se dice' );
+
+// Una ruta que la lista blanca rechaza se ignora, con su motivo, y el resto del kit sigue.
+$mala = array_merge( $bueno, array( 'path' => '/wp-login.php' ) );
+check_same( 'skip', beaos_aos_asset_decision( $mala, $cuerpo )['action'], 'una ruta del core se ignora' );
+check_same( 'está en la lista de rutas prohibidas', beaos_aos_asset_decision( $mala, $cuerpo )['reason'], 'y se dice por qué' );
+check_same( 'skip', beaos_aos_asset_decision( array_merge( $bueno, array( 'path' => '/cualquier-cosa' ) ), $cuerpo )['action'], 'y una que no tiene forma de kit también' );
+check_same( 'store', beaos_aos_asset_decision( $bueno, $cuerpo )['action'], 'la buena de al lado se sigue guardando' );
+
+// El mensaje de los descartados: acotado, para que un manifiesto con cientos de rutas malas no infle
+// la opción del kit.
+check_same( '', beaos_aos_discarded_message( array() ), 'sin descartados no hay mensaje' );
+check_same( 'descartados: /a (x)', beaos_aos_discarded_message( array( '/a (x)' ) ), 'un descartado se nombra' );
+check_same(
+	'descartados: /1, /2, y 3 más',
+	beaos_aos_discarded_message( array( '/1', '/2', '/3', '/4', '/5' ), 2 ),
+	'y muchos se cuentan en vez de listarse todos'
+);
 
 // ── 7 · El asset guardado, al servir ────────────────────────────────────────────────────────────
 echo "7 · el asset guardado\n";
@@ -391,6 +477,83 @@ foreach ( $tools as $tool ) {
 // Y la decisión de seguridad, como invariante: el plugin NO usa la API de entrega de BeAOS, porque
 // `/api/v1/*` valida sólo contra ADMIN_API_KEYS y eso obligaría a mandar una llave maestra al sitio.
 check_same( false, false !== strpos( $fuente, '/api/v1/' ), 'el plugin no usa /api/v1/* (exigiría la llave maestra)' );
+
+// ── 13 · La lista blanca no se puede desincronizar del generador ─────────────────────────────────
+echo "13 · el contrato con el generador del kit\n";
+
+/**
+ * Las rutas que un archivo declara en un `path:`, leídas línea por línea del código fuente. Un valor
+ * literal se devuelve para poder verificarlo contra la lista blanca; uno que no se puede verificar
+ * (una plantilla, una expresión) se denuncia en vez de ignorarse: **un test que no puede leer una
+ * ruta no puede garantizar nada sobre ella**, y una ruta nueva que se cuele sin verificar es
+ * exactamente el silencio que este test existe para romper.
+ *
+ * Las líneas de comentario se saltean (en estos archivos se habla de rutas en la prosa todo el
+ * tiempo). `path: string` es la declaración del tipo de un asset, no una ruta.
+ */
+function beaos_aos_generator_paths( $source ) {
+	$paths = array();
+	$no    = array();
+	foreach ( preg_split( '/\R/', (string) $source ) as $linea ) {
+		if ( preg_match( '#^\s*(\*|//|/\*)#', $linea ) ) {
+			continue;
+		}
+		if ( ! preg_match( '/\bpath:\s*(.+)$/', $linea, $m ) ) {
+			continue;
+		}
+		$resto = trim( $m[1] );
+		$c     = substr( $resto, 0, 1 );
+		if ( '"' === $c || "'" === $c ) {
+			$fin = strpos( $resto, $c, 1 );
+			$val = false === $fin ? substr( $resto, 1 ) : substr( $resto, 1, $fin - 1 );
+			if ( false !== strpos( $val, '$' ) ) {
+				$no[] = trim( $linea );
+				continue;
+			}
+			$paths[] = $val;
+			continue;
+		}
+		if ( preg_match( '/^(string|int|number)\b/', $resto ) ) {
+			continue;
+		}
+		$no[] = trim( $linea );
+	}
+	return array(
+		'paths'           => array_values( array_unique( $paths ) ),
+		'no_verificables' => $no,
+	);
+}
+
+// El test **lee el generador**, no una copia de la lista: si mañana emite una ruta de más, esto falla
+// y dice cuál. Es la misma regla que la sección 12 con MCP-BEAOS.md.
+$generador = dirname( __DIR__, 3 ) . '/packages/aos-aps/src/assets/generate.ts';
+$gen_src   = @file_get_contents( $generador );
+if ( ! check( false !== $gen_src, 'encuentro el generador del kit (packages/aos-aps/src/assets/generate.ts)' ) ) {
+	echo "pure: FALLA\n";
+	exit( 1 );
+}
+
+$gen = beaos_aos_generator_paths( $gen_src );
+check_same( array(), $gen['no_verificables'], 'todas las rutas del generador son literales que este test puede verificar' );
+check(
+	count( $gen['paths'] ) >= 15,
+	'el generador declara las rutas del kit como literales (encontré ' . count( $gen['paths'] ) . ', esperaba 15 o más)'
+);
+check_same( true, in_array( '/llms.txt', $gen['paths'], true ), 'y está el ancla /llms.txt' );
+check_same( true, in_array( '/.well-known/brand.json', $gen['paths'], true ), 'y el ancla /.well-known/brand.json' );
+
+foreach ( $gen['paths'] as $ruta ) {
+	check_same( true, beaos_aos_claimable_path( $ruta ), "el kit emite $ruta y la lista blanca del plugin lo acepta" );
+}
+
+// El otro archivo que arma el bundle. No declara rutas (las reenvía: `path: asset.path`), pero si
+// alguien escribiera una a mano, tiene que pasar la lista blanca igual.
+$core_src = @file_get_contents( dirname( __DIR__, 3 ) . '/apps/web/src/server/agent-assets-core.ts' );
+if ( check( false !== $core_src, 'encuentro agent-assets-core.ts' ) ) {
+	foreach ( beaos_aos_generator_paths( $core_src )['paths'] as $ruta ) {
+		check_same( true, beaos_aos_claimable_path( $ruta ), "agent-assets-core.ts declara $ruta y la lista blanca lo acepta" );
+	}
+}
 
 echo $fail ? "\npure: FALLA ($fail)\n" : "\npure: OK\n";
 exit( $fail ? 1 : 0 );
