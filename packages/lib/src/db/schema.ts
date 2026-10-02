@@ -12,6 +12,7 @@ import {
 	timestamp,
 	uuid,
 } from "drizzle-orm/pg-core";
+import { brandIsolationPolicy } from "./brand-isolation";
 
 // Better-auth tables & relations — re-exported so `import * as schema` sees everything.
 // Source file is auto-generated; run `pnpm run generate:auth-schema` to refresh.
@@ -78,23 +79,28 @@ export const prompts = pgTable(
 	(table) => ({
 		brandIdIdx: index("prompts_brand_id_idx").on(table.brandId),
 		brandIdEnabledIdx: index("prompts_brand_id_enabled_idx").on(table.brandId, table.enabled),
+		beaosBrandIsolation: brandIsolationPolicy(table.brandId),
 	}),
 ).enableRLS();
 
-export const competitors = pgTable("competitors", {
-	id: uuid("id").defaultRandom().primaryKey().notNull(),
-	brandId: text("brand_id")
-		.references(() => brands.id)
-		.notNull(),
-	name: text("name").notNull(),
-	domains: text("domains").array().notNull().default([]),
-	aliases: text("aliases").array().notNull().default([]),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { withTimezone: true })
-		.defaultNow()
-		.$onUpdate(() => new Date())
-		.notNull(),
-}).enableRLS();
+export const competitors = pgTable(
+	"competitors",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id)
+			.notNull(),
+		name: text("name").notNull(),
+		domains: text("domains").array().notNull().default([]),
+		aliases: text("aliases").array().notNull().default([]),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true })
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(table) => [brandIsolationPolicy(table.brandId)],
+).enableRLS();
 
 export const promptRuns = pgTable(
 	"prompt_runs",
@@ -149,6 +155,7 @@ export const promptRuns = pgTable(
 		// Deleting a brand deletes its runs by brand_id; without this the delete
 		// sequentially scans the largest table in the schema.
 		brandIdIdx: index("prompt_runs_brand_id_idx").on(table.brandId),
+		beaosBrandIsolation: brandIsolationPolicy(table.brandId),
 	}),
 ).enableRLS();
 
@@ -212,6 +219,7 @@ export const promptRunAttempts = pgTable(
 		brandIdIdx: index("prompt_run_attempts_brand_id_idx").on(table.brandId),
 		// Un intento exitoso apunta a su corrida; el delete de una corrida lo alcanza.
 		promptRunIdIdx: index("prompt_run_attempts_prompt_run_id_idx").on(table.promptRunId),
+		beaosBrandIsolation: brandIsolationPolicy(table.brandId),
 	}),
 ).enableRLS();
 
@@ -254,6 +262,7 @@ export const citations = pgTable(
 		// delete has to prove no citation still references the row, so without this
 		// index a brand delete scans all of `citations` once per deleted run.
 		promptRunIdIdx: index("citations_prompt_run_id_idx").on(table.promptRunId),
+		beaosBrandIsolation: brandIsolationPolicy(table.brandId),
 	}),
 ).enableRLS();
 
@@ -296,6 +305,7 @@ export const brandOpportunities = pgTable(
 	},
 	(table) => ({
 		brandCreatedIdx: index("brand_opportunities_brand_id_created_at_idx").on(table.brandId, table.createdAt),
+		beaosBrandIsolation: brandIsolationPolicy(table.brandId),
 	}),
 ).enableRLS();
 
@@ -396,6 +406,7 @@ export const providerCalls = pgTable(
 			table.model,
 			table.createdAt,
 		),
+		beaosBrandIsolation: brandIsolationPolicy(table.brandId),
 	}),
 ).enableRLS();
 
