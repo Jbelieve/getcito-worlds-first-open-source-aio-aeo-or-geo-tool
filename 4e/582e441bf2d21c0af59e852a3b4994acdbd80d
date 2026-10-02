@@ -1,0 +1,22 @@
+apps/beaos-wordpress/README.md
+  h_c5ca005a78c880 1-152
+apps/beaos-wordpress/beaos-aos-pure.php
+  h_c5ca005a78c880 1-498
+apps/beaos-wordpress/beaos-aos.php
+  h_c5ca005a78c880 1-516
+apps/beaos-wordpress/class-beaos-mcp.php
+  h_c5ca005a78c880 1-151
+apps/beaos-wordpress/uninstall.php
+  h_c5ca005a78c880 1-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4e582e441bf2d21c0af59e852a3b4994acdbd80d",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
