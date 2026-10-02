@@ -17,6 +17,17 @@ import { z } from "zod";
 /** Nombre de la política en las cabeceras `RateLimit-Policy` / `RateLimit`. */
 export const PUBLIC_AUDIT_POLICY = "aos-audit";
 
+/**
+ * Nombre de la política del canje de códigos de conexión (`POST /api/v1/enroll`).
+ *
+ * Vive acá, al lado de la del audit, porque **el contador es el mismo**: el canje no tiene un segundo
+ * contador, tiene otro bucket del mismo `aos_public_usage` (ver `ENROLL_QUOTA_BUCKET`). Eso es lo que
+ * hace que las cabeceras `RateLimit-*` salgan de la misma función (`rateLimitHeaders`) y que el
+ * consumo siga siendo un solo `insert ... on conflict ... where count < limite`: una sentencia, sin
+ * carrera entre instancias.
+ */
+export const ENROLL_POLICY = "enroll";
+
 /** Ventana del límite: un día UTC. */
 export const QUOTA_WINDOW_SECONDS = 86_400;
 
@@ -38,6 +49,29 @@ export const DEFAULT_AUDITS_PER_DAY_GLOBAL = 2000;
  * del servicio (ver `consumePublicQuota`), así que la cota agregada del servicio no cambia.
  */
 export const DEFAULT_VERIFY_AUDITS_PER_DAY = 1000;
+
+/**
+ * Cupo diario por IP del **canje de códigos de conexión** (`POST /api/v1/enroll`).
+ *
+ * Este endpoint es público y el código es la única credencial, así que sin límite sería una puerta a
+ * fuerza bruta. El cupo es **chico** —10, frente a los 20 del audit y los 1000 del verificador—
+ * porque la operación legítima es *una* por sitio: un WordPress se conecta una vez. Diez alcanzan para
+ * reintentar después de un error de tipeo y no alcanzan para probar.
+ *
+ * El código tiene 192 bits de entropía, así que 10 intentos por IP y por día no están "cerca" de nada:
+ * este límite no es la defensa principal, es el freno que hace que un ataque sea visible y ruidoso.
+ */
+export const DEFAULT_ENROLL_PER_DAY = 10;
+
+/**
+ * Tope diario del servicio para el canje (`AOS_PUBLIC_ENROLL_PER_DAY_GLOBAL`).
+ *
+ * Usa el mismo tope global de la tabla del contador, pero **con su propio pozo**: un intento de canje
+ * no gasta el cupo de auditorías del servicio ni al revés. Es la cota que sostiene cuando una sola IP
+ * no alcanza a explicar el volumen —una botnet, o una clave de cliente que colapsó y el cupo "por IP"
+ * dejó de ser por IP—.
+ */
+export const DEFAULT_ENROLL_PER_DAY_GLOBAL = 200;
 
 /**
  * Cabecera de la credencial de verificación: `x-beaos-verify`.
@@ -104,6 +138,16 @@ export interface PublicAuditLimits {
 	verifySecret: string;
 	/** Cupo diario por IP dentro del bucket `verify` (`AOS_PUBLIC_VERIFY_PER_DAY`). */
 	verifyPerIp: number;
+	/**
+	 * Cupo diario por IP del canje de códigos de conexión (`AOS_PUBLIC_ENROLL_PER_DAY`).
+	 *
+	 * Va aparte de `perIp` porque frena otra cosa: no son pedidos de medición, son intentos de canje
+	 * de una credencial. Mezclarlos dejaría que un intento fallido de canje le gaste el cupo de
+	 * auditorías a la misma IP, o al revés.
+	 */
+	enrollPerIp: number;
+	/** Tope diario del servicio para el canje (`AOS_PUBLIC_ENROLL_PER_DAY_GLOBAL`), en su propio pozo. */
+	enrollGlobal: number;
 }
 
 /** `"true"` o `"1"` encienden; cualquier otra cosa (incluido vacío y ausente) apaga. */
@@ -133,6 +177,8 @@ export function publicAuditLimits(env: Record<string, string | undefined> = proc
 		// HTTP los quita, así que los dos lados se comparan con la misma regla.
 		verifySecret: env.AOS_PUBLIC_VERIFY_SECRET?.trim() ?? "",
 		verifyPerIp: positiveInt(env.AOS_PUBLIC_VERIFY_PER_DAY, DEFAULT_VERIFY_AUDITS_PER_DAY),
+		enrollPerIp: positiveInt(env.AOS_PUBLIC_ENROLL_PER_DAY, DEFAULT_ENROLL_PER_DAY),
+		enrollGlobal: positiveInt(env.AOS_PUBLIC_ENROLL_PER_DAY_GLOBAL, DEFAULT_ENROLL_PER_DAY_GLOBAL),
 	};
 }
 
@@ -171,7 +217,7 @@ export function verifySecretMatches(presented: string | null, secret: string): b
  * La IP se sigue hasheando igual en los dos carriles (`hashClientKey`, en `consumePublicQuota`): lo
  * que cambia entre uno y otro es la cuenta, no la identidad ni las reglas.
  */
-export type QuotaLane = "ip" | "verify";
+export type QuotaLane = "ip" | "verify" | "enroll";
 
 /** El carril de cupo que le corresponde a este pedido, según la cabecera y el secreto configurado. */
 export function quotaLaneForRequest(headers: Headers, limits: PublicAuditLimits): QuotaLane {
@@ -187,14 +233,39 @@ export const PUBLIC_QUOTA_BUCKET = "ip";
  */
 export const VERIFY_QUOTA_BUCKET = "verify";
 
+/**
+ * Bucket del canje de códigos de conexión. Un bucket **más** de la misma tabla, no un contador nuevo.
+ *
+ * Es el mismo arreglo que `verify` y por la misma razón: el canje tiene su propio cupo por IP y su
+ * propio tope global, pero la maquinaria —clave de IP hasheada, día UTC, `insert ... on conflict ...
+ * where count < limite`, cabeceras `RateLimit-*`— es exactamente la del audit público. Un segundo
+ * contador sería un segundo lugar donde el día UTC y el hash de la IP se pueden desincronizar.
+ */
+export const ENROLL_QUOTA_BUCKET = "enroll";
+
 /** Bucket del contador al que va un carril. Función pura para poder probarlo sin base. */
 export function quotaBucketForLane(lane: QuotaLane): string {
-	return lane === "verify" ? VERIFY_QUOTA_BUCKET : PUBLIC_QUOTA_BUCKET;
+	if (lane === "verify") return VERIFY_QUOTA_BUCKET;
+	if (lane === "enroll") return ENROLL_QUOTA_BUCKET;
+	return PUBLIC_QUOTA_BUCKET;
 }
 
 /** Tope por IP del carril. Pura, por la misma razón que `quotaBucketForLane`. */
 export function quotaLimitForLane(lane: QuotaLane, limits: PublicAuditLimits): number {
-	return lane === "verify" ? limits.verifyPerIp : limits.perIp;
+	if (lane === "verify") return limits.verifyPerIp;
+	if (lane === "enroll") return limits.enrollPerIp;
+	return limits.perIp;
+}
+
+/**
+ * El tope global del pozo que le corresponde al carril.
+ *
+ * El audit y el verificador comparten el pozo del servicio (verificar el despliegue gastando del mismo
+ * tope es a propósito: la cota agregada no cambia). El canje **no**: gasta de su propio tope, porque
+ * un intento de canje no es una medición y no tiene por qué apagar el medidor público.
+ */
+export function quotaGlobalLimitForLane(lane: QuotaLane, limits: PublicAuditLimits): number {
+	return lane === "enroll" ? limits.enrollGlobal : limits.global;
 }
 
 /** Opciones de la extracción de la IP. Hoy una sola: si Cloudflare es el único ingreso. */
@@ -428,9 +499,23 @@ export function rateLimitHeaders(
 	return headers;
 }
 
-/** Cabeceras del 429: las mismas cinco más el `Retry-After`. */
-export function rateLimitedResponse(decision: QuotaDecision, message: string): Response {
-	return Response.json({ error: "Too Many Requests", message }, { status: 429, headers: rateLimitHeaders(decision) });
+/**
+ * Cabeceras del 429: las mismas cinco más el `Retry-After`.
+ *
+ * `policy` es el nombre de la política que decide, y **no siempre es `aos-audit`**: el canje de códigos
+ * de conexión usa el mismo contador y las mismas cabeceras, con su propia etiqueta (`ENROLL_POLICY`),
+ * porque quien lee un log o un `curl` tiene que poder decir de qué límite le están hablando. El default
+ * queda en la del audit para no cambiarle el contrato a los llamadores que ya existían.
+ */
+export function rateLimitedResponse(
+	decision: QuotaDecision,
+	message: string,
+	policy: string = PUBLIC_AUDIT_POLICY,
+): Response {
+	return Response.json(
+		{ error: "Too Many Requests", message },
+		{ status: 429, headers: rateLimitHeaders(decision, policy) },
+	);
 }
 
 /** Mezcla las cabeceras de límite en una respuesta que ya existe. */

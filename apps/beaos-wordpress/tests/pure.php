@@ -399,6 +399,119 @@ check_same( 2, count( beaos_aos_missing( array( 'token' => '', 'entity_id' => ''
 check_same( array( 'el entityId' ), beaos_aos_missing( array( 'token' => 'beaos_x', 'entity_id' => '' ) ), 'con token, sólo falta el entityId' );
 check_same( array(), beaos_aos_missing( array( 'token' => 'beaos_x', 'entity_id' => '8f1c' ) ), 'con los dos, no falta nada' );
 
+/**
+ * El contenido del `= [ … ];` de un `export const NOMBRE` de un archivo TypeScript.
+ *
+ * El `new Set([ … ])` de `PUBLIC_AOS_PATHS` también entra: lo que interesa son los literales, no el
+ * envoltorio. Si el envoltorio cambia otra vez y esto no lo puede leer, devuelve `null` y el llamador
+ * lo denuncia — un test que no puede leer el contrato no puede garantizar nada sobre él.
+ */
+function beaos_aos_ts_block( $source, $name ) {
+	$i = strpos( (string) $source, 'export const ' . $name );
+	$i = false === $i ? strpos( (string) $source, 'const ' . $name ) : $i;
+	if ( false === $i ) {
+		return null;
+	}
+	$start = strpos( (string) $source, '[', $i );
+	$end   = false === $start ? false : strpos( (string) $source, "\n];", (int) $start );
+	if ( false === $start || false === $end ) {
+		// Los `new Set([ … ]);` cierran con `]);` en la misma línea.
+		$end = false === $start ? false : strpos( (string) $source, "]);", (int) $start );
+		if ( false === $end ) {
+			return null;
+		}
+	}
+	return substr( (string) $source, $start + 1, $end - $start - 1 );
+}
+
+// ── 10b · El canje del código de conexión ────────────────────────────────────────────────────────
+echo "10b · el canje del código de conexión\n";
+
+check_same( '/api/v1/enroll', BEAOS_AOS_ENROLL_PATH, 'la ruta del canje es la que documenta PLUGIN-WORDPRESS-BEAOS.md' );
+check_same(
+	'https://beaos.believe-global.com/api/v1/enroll',
+	beaos_aos_enroll_url( 'https://beaos.believe-global.com' ),
+	'la URL del canje sale de la base de BeAOS'
+);
+check_same(
+	'https://beaos.test/api/v1/enroll',
+	beaos_aos_enroll_url( 'http://beaos.test/' ),
+	'y se normaliza a https, sin barra doble'
+);
+check_same( '', beaos_aos_enroll_url( '' ), 'sin base configurada no hay URL: mejor no mandar el pedido a cualquier lado' );
+
+check_same( '{"code":"beaos_abc"}', beaos_aos_enroll_body( ' beaos_abc ' ), 'el cuerpo recorta el código copiado con espacios' );
+check_same( '', beaos_aos_enroll_body( '' ), 'sin código no hay cuerpo' );
+
+// El 200, con los tres valores.
+$ok = beaos_aos_enroll_read( 200, '{"token":"beaos_t","brandId":"acme-com","entityId":"8f1c-0000"}' );
+check_same( true, $ok['ok'], 'un 200 con token, marca y entidad es un canje exitoso' );
+check_same( 'beaos_t', $ok['token'], 'y trae el token' );
+check_same( 'acme-com', $ok['brandId'], 'la marca' );
+check_same( '8f1c-0000', $ok['entityId'], 'y la entidad' );
+check_same( '', $ok['error'], 'sin error' );
+
+// Los rechazos. El 400 es UNO solo para los tres motivos —inexistente, vencido, ya usado—, así que el
+// plugin no puede inventar el motivo: muestra el texto del servidor tal cual.
+$rechazo = beaos_aos_enroll_read( 400, '{"error":"Bad Request","message":"El código no sirve: no existe, ya venció o ya se usó."}' );
+check_same( false, $rechazo['ok'], 'un 400 no canjea' );
+check_same( true, false !== strpos( $rechazo['error'], 'no existe, ya venció o ya se usó' ), 'y el mensaje del servidor llega entero' );
+check_same( '', $rechazo['token'], 'sin token' );
+
+$sin_mensaje = beaos_aos_enroll_read( 400, '' );
+check_same( false, $sin_mensaje['ok'], 'un 400 pelado tampoco canjea' );
+check( false !== strpos( $sin_mensaje['error'], 'no existe, ya venció o ya se usó' ), 'y se explica con el texto del contrato, no con un "error 400"' );
+
+$limitado = beaos_aos_enroll_read( 429, '{}', 3600 );
+check_same( false, $limitado['ok'], 'un 429 no canjea' );
+check( false !== strpos( $limitado['error'], 'límite de intentos' ), 'y habla del límite, que es lo único accionable' );
+check( false !== strpos( $limitado['error'], '3600' ), 'con el Retry-After del servidor' );
+
+$roto = beaos_aos_enroll_read( 200, '<html>un WAF</html>' );
+check_same( false, $roto['ok'], 'un 200 que no es JSON no canjea' );
+check( false !== strpos( $roto['error'], 'no es JSON' ), 'y lo dice, en vez de guardar basura como token' );
+
+// Un status 0 no es un status: es que **no hubo respuesta** (DNS, TLS, timeout). Es el caso que más va a
+// pasar en un WordPress real y el que encontró la prueba del camino real: devolvía el mensaje **vacío**,
+// así que la pantalla decía "No se pudo conectar." sin decir por qué. Un stub siempre devuelve un código
+// HTTP, así que esto sólo se ve corriendo el camino de verdad contra un servidor que no contesta.
+$sin_respuesta = beaos_aos_enroll_read( false, false );
+check_same( false, $sin_respuesta['ok'], 'un fallo de transporte (status 0) no canjea' );
+check( '' !== $sin_respuesta['error'], 'y el mensaje NO queda vacío (era el bug: ok=false con error="")' );
+check( false !== strpos( $sin_respuesta['error'], 'No hubo respuesta' ), 'dice que no hubo respuesta' );
+check( false !== strpos( $sin_respuesta['error'], 'DNS' ), 'y por dónde buscar (DNS, TLS, timeout), en vez de mandar al proxy' );
+check_same( '', beaos_aos_enroll_http_error( 200, '{"token":"x"}' ), 'un 200 sigue sin ser un error' );
+
+// Dos respuestas que se pueden usar mal: un 200 sin token, y uno sin entityId. La segunda además avisa
+// que el código ya se consumió, que es lo que el operador necesita saber para generar otro.
+$sin_token = beaos_aos_enroll_read( 200, '{"brandId":"acme-com","entityId":"e1"}' );
+check_same( false, $sin_token['ok'], 'un 200 sin token no es una conexión' );
+check( false !== strpos( $sin_token['error'], 'ya se consumió' ), 'y avisa que el código ya se gastó' );
+
+$sin_entidad = beaos_aos_enroll_read( 200, '{"token":"beaos_t","brandId":"acme-com"}' );
+check_same( false, $sin_entidad['ok'], 'un 200 sin entityId tampoco: sin eso no hay a quién pedirle el kit' );
+check_same( 'beaos_t', $sin_entidad['token'], 'aunque el token sí haya llegado' );
+
+// El contrato con la guarda de BeAOS: la ruta tiene que estar en el allowlist EXACTO de rutas públicas.
+// Si alguien la saca de `PUBLIC_AOS_PATHS`, el middleware le exige `ADMIN_API_KEYS` y el canje deja de
+// funcionar en silencio (401 en el WordPress del cliente). Esto lo hace fallar acá.
+$fuente_auth = @file_get_contents( dirname( __DIR__, 3 ) . '/apps/web/src/lib/auth/policies.ts' );
+if ( check( false !== $fuente_auth, 'encuentro la guarda de rutas de BeAOS (apps/web/src/lib/auth/policies.ts)' ) ) {
+	$publicas = beaos_aos_ts_strings( beaos_aos_ts_block( $fuente_auth, 'PUBLIC_AOS_PATHS' ) );
+	check(
+		in_array( BEAOS_AOS_ENROLL_PATH, $publicas, true ),
+		'la ruta del canje está en el allowlist público de BeAOS (si no, el middleware le pide la llave maestra)'
+	);
+	// Y la guarda es exacta: el allowlist no puede haberse vuelto un prefijo.
+	check_same( array( '/api/v1/aos/audit', '/api/v1/aos/lead', '/api/v1/enroll' ), $publicas, 'y el allowlist sigue siendo de rutas exactas, con las tres y nada más' );
+}
+
+check_same(
+	array(),
+	array_values( array_filter( beaos_aos_called_functions( $pure ), function ( $n ) { return 0 === strpos( $n, 'wp_' ); } ) ),
+	'las funciones del canje viven en el archivo puro y no llaman a WordPress'
+);
+
 // ── 11 · La guarda que sostiene todo esto: el archivo puro es puro ──────────────────────────────
 echo "11 · la separación de WordPress\n";
 
@@ -515,9 +628,47 @@ foreach ( $tools as $tool ) {
 	check( false !== strpos( $doc, '`' . $tool . '`' ), "el tool \"$tool\" que usa el plugin está documentado en MCP-BEAOS.md" );
 }
 
-// Y la decisión de seguridad, como invariante: el plugin NO usa la API de entrega de BeAOS, porque
-// `/api/v1/*` valida sólo contra ADMIN_API_KEYS y eso obligaría a mandar una llave maestra al sitio.
-check_same( false, false !== strpos( $fuente, '/api/v1/' ), 'el plugin no usa /api/v1/* (exigiría la llave maestra)' );
+// Y la decisión de seguridad, como invariante: el plugin usa **exactamente un** `/api/v1/*`, el del
+// canje del código de conexión, y puede usarlo porque es **público**.
+//
+// Antes esta guarda prohibía cualquier `/api/v1/*` y estaba bien: todos validan contra `ADMIN_API_KEYS`
+// —la llave maestra compartida que abre todas las marcas y no se revoca por sitio—, así que usarlos
+// exigiría mandar esa llave a un WordPress ajeno. `POST /api/v1/enroll` es la excepción y la única:
+// está en el allowlist exacto de `apps/web/src/lib/auth/policies.ts` (`PUBLIC_AOS_PATHS`) justamente
+// porque **no pide credencial previa** —el código *es* la credencial— y su cota es un cupo por IP.
+//
+// La lista blanca es de rutas completas, no de prefijos: `aos/audit` es público por otro motivo (la
+// herramienta es anónima) y el plugin no tiene por qué usarlo. Sigue mordiendo para cualquier otro
+// `/api/v1/*`, que es lo que esta guarda existe para atrapar.
+//
+// Se leen los literales del **código tokenizado**, no el texto: en la prosa se nombran `/api/v1/*` todo
+// el tiempo y eso no es una llamada. Y se leen los dos archivos, porque el path y la URL viven en el
+// puro y el `wp_remote_post` en el principal.
+$api_v1_permitidos = array( 'https://beaos.believe-global.com/api/v1/enroll', '/api/v1/enroll' );
+$api_v1_usados     = array();
+foreach ( array( $pure, $main ) as $archivo ) {
+	$fuente_archivo = beaos_aos_code( $archivo );
+	if ( ! check( null !== $fuente_archivo, 'se puede leer ' . basename( $archivo ) . ' sin comentarios' ) ) {
+		continue;
+	}
+	foreach ( token_get_all( (string) file_get_contents( $archivo ) ) as $token ) {
+		if ( ! is_array( $token ) || T_CONSTANT_ENCAPSED_STRING !== $token[0] ) {
+			continue;
+		}
+		$literal = trim( $token[1], "'\"" );
+		if ( false !== strpos( $literal, '/api/v1/' ) ) {
+			$api_v1_usados[] = $literal;
+		}
+	}
+}
+$api_v1_usados = array_values( array_unique( $api_v1_usados ) );
+check( count( $api_v1_usados ) > 0, 'el plugin nombra la ruta del canje (si no, esta guarda no prueba nada)' );
+foreach ( $api_v1_usados as $literal ) {
+	check(
+		in_array( $literal, $api_v1_permitidos, true ),
+		"el único /api/v1/* que el plugin usa es el canje público: \"$literal\" (los demás exigirían la llave maestra)"
+	);
+}
 
 // ── 13 · La lista blanca no se puede desincronizar del generador ─────────────────────────────────
 echo "13 · el contrato con el generador del kit\n";
@@ -610,20 +761,6 @@ if ( check( false !== $core_src, 'encuentro agent-assets-core.ts' ) ) {
 //   - y el corpus compartido (`KIT_ROUTE_VECTORS`): cada caso tiene que dar el mismo veredicto acá que
 //     allá. Un caso nuevo se agrega una sola vez, en `kit-routes.ts`, y los dos tests lo exigen.
 echo "14 · el contrato con la guarda de rutas de BeAOS\n";
-
-/** El contenido del `= [ … ];` de un `export const NOMBRE` de un archivo TypeScript. */
-function beaos_aos_ts_block( $source, $name ) {
-	$i = strpos( (string) $source, 'export const ' . $name );
-	if ( false === $i ) {
-		return null;
-	}
-	$start = strpos( (string) $source, '= [', $i );
-	$end   = strpos( (string) $source, "\n];", (int) $start );
-	if ( false === $start || false === $end ) {
-		return null;
-	}
-	return substr( (string) $source, $start + 3, $end - $start - 3 );
-}
 
 /** Los literales de texto de un bloque, en orden de aparición. */
 function beaos_aos_ts_strings( $block ) {

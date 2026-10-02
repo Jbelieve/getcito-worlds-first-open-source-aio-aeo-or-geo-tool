@@ -414,6 +414,26 @@ describe("evaluateDeploymentPolicy", () => {
 			});
 		});
 
+		it("allows POST /api/v1/enroll with no key: el que llama todavía no tiene credencial", () => {
+			// El código de conexión *es* la credencial: exigir la llave de `/api/v1/*` sería mandar
+			// ADMIN_API_KEYS al WordPress del cliente, que es lo que este flujo existe para evitar. Su cota
+			// es el cupo por IP del carril `enroll`, no un token.
+			expect(evaluateDeploymentPolicy(LOCAL_FEATURES, req("POST", "/api/v1/enroll")).action).toBe("allow");
+			expect(evaluateDeploymentPolicy(WHITELABEL_FEATURES, req("POST", "/api/v1/enroll")).action).toBe("allow");
+			// Con barra final, igual que el resto del allowlist.
+			expect(evaluateDeploymentPolicy(LOCAL_FEATURES, req("POST", "/api/v1/enroll/")).action).toBe("allow");
+		});
+
+		it("el canje sí se bloquea en modo demo: escribe un token, no es una medición al paso", () => {
+			// La exención de lectura es sólo del audit. Un demo que emite credenciales de producto no es un
+			// demo: es un emisor de tokens sin autenticación.
+			expect(evaluateDeploymentPolicy(DEMO_FEATURES, req("POST", "/api/v1/enroll"))).toMatchObject({
+				action: "block",
+				status: 403,
+				error: "Demo Mode",
+			});
+		});
+
 		it("does not open the key requirement for its neighbours", () => {
 			// El allowlist es exacto: un path hermano sigue pidiendo credencial.
 			expect(evaluateDeploymentPolicy(LOCAL_FEATURES, req("POST", "/api/v1/aos/unknown"))).toMatchObject({
@@ -421,6 +441,15 @@ describe("evaluateDeploymentPolicy", () => {
 				status: 401,
 			});
 			expect(evaluateDeploymentPolicy(LOCAL_FEATURES, req("POST", "/api/v1/aos/audit/extra"))).toMatchObject({
+				action: "block",
+				status: 401,
+			});
+			// Y el canje tampoco abre a sus vecinos: es una ruta exacta, no un prefijo.
+			expect(evaluateDeploymentPolicy(LOCAL_FEATURES, req("POST", "/api/v1/enroll/extra"))).toMatchObject({
+				action: "block",
+				status: 401,
+			});
+			expect(evaluateDeploymentPolicy(LOCAL_FEATURES, req("POST", "/api/v1/enrollment"))).toMatchObject({
 				action: "block",
 				status: 401,
 			});

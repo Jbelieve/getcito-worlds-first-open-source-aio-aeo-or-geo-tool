@@ -25,6 +25,7 @@ import { Route as ApiManifestIndexRouteImport } from './routes/api/manifest/inde
 import { Route as AuthedReportsIndexRouteImport } from './routes/_authed/reports/index'
 import { Route as AuthedAppIndexRouteImport } from './routes/_authed/app/index'
 import { Route as AuthedAdminIndexRouteImport } from './routes/_authed/admin/index'
+import { Route as ApiV1EnrollRouteImport } from './routes/api/v1/enroll'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as AgentEntityIdSplatRouteImport } from './routes/agent/$entityId/$'
 import { Route as AuthedAppNewRouteImport } from './routes/_authed/app/new'
@@ -153,6 +154,11 @@ const AuthedAdminIndexRoute = AuthedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthedAdminRoute,
+} as any)
+const ApiV1EnrollRoute = ApiV1EnrollRouteImport.update({
+  id: '/api/v1/enroll',
+  path: '/api/v1/enroll',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
@@ -436,6 +442,7 @@ export interface FileRoutesByFullPath {
   '/app/new': typeof AuthedAppNewRoute
   '/agent/$entityId/$': typeof AgentEntityIdSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/v1/enroll': typeof ApiV1EnrollRoute
   '/admin/': typeof AuthedAdminIndexRoute
   '/app/': typeof AuthedAppIndexRoute
   '/reports/': typeof AuthedReportsIndexRoute
@@ -497,6 +504,7 @@ export interface FileRoutesByTo {
   '/app/new': typeof AuthedAppNewRoute
   '/agent/$entityId/$': typeof AgentEntityIdSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/v1/enroll': typeof ApiV1EnrollRoute
   '/admin': typeof AuthedAdminIndexRoute
   '/app': typeof AuthedAppIndexRoute
   '/reports': typeof AuthedReportsIndexRoute
@@ -564,6 +572,7 @@ export interface FileRoutesById {
   '/_authed/app/new': typeof AuthedAppNewRoute
   '/agent/$entityId/$': typeof AgentEntityIdSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/v1/enroll': typeof ApiV1EnrollRoute
   '/_authed/admin/': typeof AuthedAdminIndexRoute
   '/_authed/app/': typeof AuthedAppIndexRoute
   '/_authed/reports/': typeof AuthedReportsIndexRoute
@@ -631,6 +640,7 @@ export interface FileRouteTypes {
     | '/app/new'
     | '/agent/$entityId/$'
     | '/api/auth/$'
+    | '/api/v1/enroll'
     | '/admin/'
     | '/app/'
     | '/reports/'
@@ -692,6 +702,7 @@ export interface FileRouteTypes {
     | '/app/new'
     | '/agent/$entityId/$'
     | '/api/auth/$'
+    | '/api/v1/enroll'
     | '/admin'
     | '/app'
     | '/reports'
@@ -758,6 +769,7 @@ export interface FileRouteTypes {
     | '/_authed/app/new'
     | '/agent/$entityId/$'
     | '/api/auth/$'
+    | '/api/v1/enroll'
     | '/_authed/admin/'
     | '/_authed/app/'
     | '/_authed/reports/'
@@ -816,6 +828,7 @@ export interface RootRouteChildren {
   DotwellKnownMcpServerCardDotjsonRoute: typeof DotwellKnownMcpServerCardDotjsonRoute
   AgentEntityIdSplatRoute: typeof AgentEntityIdSplatRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiV1EnrollRoute: typeof ApiV1EnrollRoute
   ApiManifestIndexRoute: typeof ApiManifestIndexRoute
   ApiOgIndexRoute: typeof ApiOgIndexRoute
   ApiSetupStatusIndexRoute: typeof ApiSetupStatusIndexRoute
@@ -949,6 +962,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof AuthedAdminIndexRouteImport
       parentRoute: typeof AuthedAdminRoute
+    }
+    '/api/v1/enroll': {
+      id: '/api/v1/enroll'
+      path: '/api/v1/enroll'
+      fullPath: '/api/v1/enroll'
+      preLoaderRoute: typeof ApiV1EnrollRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -1443,6 +1463,7 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownMcpServerCardDotjsonRoute: DotwellKnownMcpServerCardDotjsonRoute,
   AgentEntityIdSplatRoute: AgentEntityIdSplatRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiV1EnrollRoute: ApiV1EnrollRoute,
   ApiManifestIndexRoute: ApiManifestIndexRoute,
   ApiOgIndexRoute: ApiOgIndexRoute,
   ApiSetupStatusIndexRoute: ApiSetupStatusIndexRoute,

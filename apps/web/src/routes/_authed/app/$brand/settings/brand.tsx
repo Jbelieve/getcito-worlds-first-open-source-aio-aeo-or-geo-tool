@@ -34,6 +34,12 @@ import { cleanAndValidateDomain } from "@/lib/domain-categories";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
 import { getBrandCategorySuggestionFn } from "@/server/agent-aps";
 import { deleteBrandFn, updateBrandFn } from "@/server/brands";
+import {
+	createSiteEnrollmentCodeFn,
+	listSiteEnrollmentCodesFn,
+	revokeSiteEnrollmentCodeFn,
+	type SiteEnrollmentCode,
+} from "@/server/enrollment";
 
 export const Route = createFileRoute("/_authed/app/$brand/settings/brand")({
 	head: ({ matches, match }) => {
@@ -419,6 +425,8 @@ function BrandSettingsPage() {
 				</div>
 			</form>
 
+			<SiteConnectionSection brandId={brand.id} disabled={isSubmitting || isDeleting} />
+
 			{!isReadOnly && (
 				<div className="mt-12 pt-6 border-t border-border">
 					<h3 className="text-lg font-medium text-destructive mb-2">Danger Zone</h3>
@@ -429,6 +437,143 @@ function BrandSettingsPage() {
 					<Button variant="destructive" onClick={handleDelete} disabled={isSubmitting || isDeleting}>
 						{isDeleting ? "Deleting..." : "Delete Brand"}
 					</Button>
+				</div>
+			)}
+		</div>
+	);
+}
+
+/**
+ * Conectar un sitio (WordPress) a BeAOS con un código de un solo uso.
+ *
+ * Es la puerta de la UI del flujo A, hermana de `scripts/beaos-enroll.sh`. Genera un código atado a
+ * esta marca y su entidad; el plugin del WordPress lo canjea en `POST /api/v1/enroll` y recibe **su**
+ * token de producto. Lo que viaja al sitio es un secreto corto, de un solo uso y revocable por sitio:
+ * `ADMIN_API_KEYS` —que abre todas las marcas y no se revoca por sitio— no sale de BeAOS.
+ *
+ * El código se muestra **una sola vez**, y la pantalla lo dice sin adornos: en la base queda su sha256
+ * y no hay forma de recuperarlo. Si se cierra el navegador, se genera otro.
+ */
+function SiteConnectionSection({ brandId, disabled }: { brandId: string; disabled: boolean }) {
+	const queryClient = useQueryClient();
+	const [generated, setGenerated] = useState<SiteEnrollmentCode | null>(null);
+	const [isGenerating, setIsGenerating] = useState(false);
+	const [error, setError] = useState("");
+	const [copied, setCopied] = useState(false);
+
+	const codesQuery = useQuery({
+		queryKey: ["site-enrollment-codes", brandId],
+		queryFn: () => listSiteEnrollmentCodesFn({ data: { brandId } }),
+		staleTime: 15_000,
+	});
+
+	const handleGenerate = async () => {
+		setIsGenerating(true);
+		setError("");
+		setCopied(false);
+		try {
+			// El código anterior deja de verse: no es que se borre, es que nunca volvió a existir acá.
+			setGenerated(null);
+			const result = await createSiteEnrollmentCodeFn({ data: { brandId } });
+			setGenerated(result);
+			await queryClient.invalidateQueries({ queryKey: ["site-enrollment-codes", brandId] });
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "No se pudo generar el código.");
+		} finally {
+			setIsGenerating(false);
+		}
+	};
+
+	const handleRevoke = async (prefix: string) => {
+		setError("");
+		try {
+			await revokeSiteEnrollmentCodeFn({ data: { brandId, prefix } });
+			if (generated !== null && generated.prefix === prefix) setGenerated(null);
+			await queryClient.invalidateQueries({ queryKey: ["site-enrollment-codes", brandId] });
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "No se pudo revocar el código.");
+		}
+	};
+
+	const handleCopy = async (code: string) => {
+		try {
+			await navigator.clipboard.writeText(code);
+			setCopied(true);
+		} catch {
+			// Sin permiso de portapapeles el código igual está en pantalla: se copia a mano.
+			setCopied(false);
+		}
+	};
+
+	const pendientes = (codesQuery.data ?? []).filter((row) => row.usedAt === null && !row.expired);
+
+	return (
+		<div className="mt-12 pt-6 border-t border-border">
+			<h3 className="text-lg font-medium mb-2">Conectar un sitio (WordPress)</h3>
+			<p className="text-sm text-muted-foreground mb-4">
+				Generá un código de conexión y pegalo en el plugin de BeAOS del WordPress. El código sirve{" "}
+				<strong>una sola vez</strong>, vence en 24 horas y sólo emite un token para <strong>esta marca</strong>: si se
+				filtra, el daño está acotado y se revoca solo.
+			</p>
+
+			<Button type="button" onClick={handleGenerate} disabled={disabled || isGenerating} className="cursor-pointer">
+				{isGenerating ? "Generando…" : "Generar código de conexión"}
+			</Button>
+
+			{generated !== null && (
+				<div className="mt-4 space-y-3 rounded-md border border-border bg-muted/40 p-4">
+					<p className="text-sm font-medium">
+						Este es el código. Pegalo en el plugin del WordPress (Ajustes → BeAOS AOS) y tocá “Conectar”.
+					</p>
+					<div className="flex items-center gap-2">
+						<code className="flex-1 overflow-x-auto rounded bg-background px-3 py-2 font-mono text-sm">
+							{generated.code}
+						</code>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={() => handleCopy(generated.code)}
+							className="cursor-pointer"
+						>
+							{copied ? "Copiado" : "Copiar"}
+						</Button>
+					</div>
+					<p className="text-xs text-destructive">
+						Se muestra una sola vez y no se puede volver a ver: en BeAOS queda sólo su hash. Si cerrás esta pantalla sin
+						copiarlo, el código se perdió — generá otro y revocá este.
+					</p>
+					<p className="text-xs text-muted-foreground">
+						Vence el {new Date(generated.expiresAt).toLocaleString()} · marca {generated.brandId} · entidad{" "}
+						{generated.entityId}
+						{generated.entityCreated ? " (se creó la entidad de esta marca en este paso)" : ""}
+					</p>
+				</div>
+			)}
+
+			{error && <div className="mt-3 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+
+			{pendientes.length > 0 && (
+				<div className="mt-4">
+					<p className="mb-2 text-xs font-medium text-muted-foreground">Códigos sin canjear</p>
+					<ul className="space-y-1">
+						{pendientes.map((row) => (
+							<li key={row.prefix} className="flex items-center justify-between gap-2 text-xs">
+								<span className="font-mono">{row.prefix}…</span>
+								<span className="text-muted-foreground">vence {new Date(row.expiresAt).toLocaleString()}</span>
+								<Button
+									type="button"
+									variant="link"
+									size="sm"
+									className="h-auto p-0 text-xs"
+									onClick={() => handleRevoke(row.prefix)}
+									disabled={disabled}
+								>
+									Revocar
+								</Button>
+							</li>
+						))}
+					</ul>
 				</div>
 			)}
 		</div>

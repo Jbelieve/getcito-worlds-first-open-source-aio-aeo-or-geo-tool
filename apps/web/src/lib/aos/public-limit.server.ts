@@ -24,6 +24,7 @@ import { db } from "@workspace/lib/db/db";
 import { aosPublicUsage } from "@workspace/lib/db/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
+	ENROLL_QUOTA_BUCKET,
 	GLOBAL_QUOTA_KEY,
 	hashClientKey,
 	PUBLIC_QUOTA_BUCKET,
@@ -32,6 +33,7 @@ import {
 	type QuotaSnapshot,
 	quotaBucketForLane,
 	quotaConcentrationWarning,
+	quotaGlobalLimitForLane,
 	quotaLimitForLane,
 	utcDay,
 	VERIFY_QUOTA_BUCKET,
@@ -41,10 +43,20 @@ import {
 const GLOBAL_BUCKET = "global";
 
 /**
+ * El bucket del tope global del canje. **Un pozo aparte, en la misma tabla.**
+ *
+ * El audit y el verificador comparten `global`; el canje tiene el suyo porque un intento de canje no
+ * es una medición. Con un solo pozo, un ataque de canje apagaría el medidor público —y al revés: una
+ * campaña de auditorías dejaría a los clientes sin poder conectar su WordPress—, que es justo el tipo
+ * de acoplamiento que hace que un límite se vuelva un incidente.
+ */
+const ENROLL_GLOBAL_BUCKET = "enroll_global";
+
+/**
  * Buckets que cuentan como "un cliente" para la alarma de concentración. El global queda afuera a
  * propósito: no es un cliente, es el total del servicio, y siempre sería el que más consumió.
  */
-const CLIENT_BUCKETS = [PUBLIC_QUOTA_BUCKET, VERIFY_QUOTA_BUCKET];
+const CLIENT_BUCKETS = [PUBLIC_QUOTA_BUCKET, VERIFY_QUOTA_BUCKET, ENROLL_QUOTA_BUCKET];
 
 /**
  * Buckets ya avisados, para que la alarma no inunde el log: un bucket concentrado se avisa una vez
@@ -163,22 +175,24 @@ export async function consumePublicQuota(
 	const keyHash = hashClientKey(clientKey, limits.ipSalt);
 	const bucket = quotaBucketForLane(lane);
 	const perKeyLimit = quotaLimitForLane(lane, limits);
-	const base = { ipLimit: perKeyLimit, globalLimit: limits.global, now };
+	const globalLimit = quotaGlobalLimitForLane(lane, limits);
+	const globalBucket = lane === "enroll" ? ENROLL_GLOBAL_BUCKET : GLOBAL_BUCKET;
+	const base = { ipLimit: perKeyLimit, globalLimit, now };
 
 	const perKeyCount = await tryConsume(bucket, keyHash, day, perKeyLimit);
 	// La alarma mira el día entero, no este pedido: por eso va después del consumo y sin importar el
 	// resultado (el colapso de la clave se ve mejor justo cuando empiezan los rechazos).
-	await warnIfOneKeyConcentratesQuota(day, limits.global);
+	await warnIfOneKeyConcentratesQuota(day, globalLimit);
 	if (perKeyCount === null) {
 		return { ...base, ipCount: perKeyLimit, globalCount: 0 };
 	}
 
-	const globalCount = await tryConsume(GLOBAL_BUCKET, GLOBAL_QUOTA_KEY, day, limits.global);
+	const globalCount = await tryConsume(globalBucket, GLOBAL_QUOTA_KEY, day, globalLimit);
 	if (globalCount === null) {
 		// Se devuelve el cupo del carril que se gastó, no siempre el de IP: si no, una verificación
 		// rechazada por el tope global le descontaría un pedido al cupo público de esa misma IP.
 		await refund(bucket, keyHash, day);
-		return { ...base, ipCount: 0, globalCount: limits.global };
+		return { ...base, ipCount: 0, globalCount: globalLimit };
 	}
 
 	return { ...base, ipCount: perKeyCount - 1, globalCount: globalCount - 1 };

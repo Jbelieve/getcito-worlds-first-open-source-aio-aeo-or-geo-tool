@@ -67,6 +67,11 @@ que hoy lee todo. Está en la lista de motivos por los que el rol no se activa.
 Una política sobre una tabla **sin** `brand_id` no protege: **vacía la tabla**. Por eso estas quedan
 afuera, con el motivo escrito, en vez de con una política "por las dudas".
 
+La última fila es la excepción que confirma la regla y va acá a propósito, porque el problema que tiene
+es el mismo que el de estas: una tabla que **sí tiene `brand_id` y sí lleva política**, pero a la que una
+de sus rutas (el canje público, que corre sin marca) no le puede dar contexto. Con el rol dedicado no se
+vacía para el panel: se vacía para el canje.
+
 | tabla | qué es | qué necesitaría |
 | --- | --- | --- |
 | `brands` | la identidad: su clave primaria **es** el `brand_id` | una política `id = current_setting(...)`. **No se puede**: se lee antes de que exista un contexto de marca (onboarding, selector de organizaciones, listado del admin). Ver abajo el efecto medido. |
@@ -74,6 +79,7 @@ afuera, con el motivo escrito, en vez de con una política "por las dudas".
 | `aos_public_usage` | contador diario del audit público (cupo por IP / credencial / global) | no es dato de una marca: es un contador de servicio. |
 | `aos_public_leads` | leads del formulario de la extensión pública | no tiene marca: el lead llega antes de que exista una. |
 | `agent_api_tokens` | credencial **por producto** para el MCP (`autex`, `maasy`) | no es dato de una marca; necesitaría un alcance por producto, que es otra cosa. |
+| `agent_enrollment_codes` | el código de conexión de un sitio: **sí tiene `brand_id` y `entity_id`**, y **sí lleva política** (`beaos_brand_isolation`, en `0032_agent_enrollment_codes.sql`) | nada de esquema: le falta **contexto**. El canje de `POST /api/v1/enroll` corre **sin sesión y sin marca a propósito** —el que llama todavía no tiene credencial—, así que con el rol dedicado el `UPDATE ... WHERE used_at IS NULL RETURNING` no vería la fila y **el canje daría 400 para todo código válido**. La marca sale de la fila del código, o sea que hay que leerla para poder fijar la variable: es un huevo y la gallina que hay que decidir, no un `set_config` más. |
 | `agent_aps_prompts` | **sí es de producto** | no tiene `brand_id`: cuelga de `library_id` → `agent_aps_prompt_libraries.brand_id`. Necesita una **política por join**. |
 | `agent_aps_observations` | **sí es de producto** | no tiene `brand_id`: cuelga de `run_id` → `agent_aps_runs.brand_id`. Necesita una **política por join**. |
 | `agent_aps_scores` | **sí es de producto** | no tiene `brand_id`: cuelga de `run_id` / `entity_id`. Necesita una **política por join**. |

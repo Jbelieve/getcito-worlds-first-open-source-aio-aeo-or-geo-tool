@@ -225,6 +225,13 @@
       "when": 1790959289711,
       "tag": "0031_agent_assets_path_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790964603250,
+      "tag": "0032_agent_enrollment_codes",
+      "breakpoints": true
     }
   ]
 }
