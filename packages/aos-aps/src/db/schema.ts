@@ -292,6 +292,24 @@ export const agentApsObservations = pgTable("agent_aps_observations", {
 		.references(() => agentApsPrompts.id, { onDelete: "cascade" })
 		.notNull(),
 	model: text("model").notNull(),
+	/**
+	 * El modelo que **contestó**, cuando el proveedor lo informa. `null` es "el
+	 * proveedor no lo dijo" — y nunca se rellena con `model`, que es el **pedido**:
+	 * el pedido y la respuesta son dos hechos distintos.
+	 *
+	 * Existe porque el invocador descartaba `result.modelVersion`
+	 * (`apps/worker/src/jobs/aps-query.ts`), así que un APS por scraper afirmaba
+	 * implícitamente que había contestado el modelo que pedimos, sin haberlo
+	 * comprobado. Si un dataset cambia de motor por detrás, la serie histórica lo
+	 * mostraba como estable.
+	 *
+	 * El matiz honesto: los scrapers muchas veces no lo informan (BrightData devuelve
+	 * `record?.model ?? undefined`; DataForSEO solía caer al nombre pedido y afirmaba
+	 * un modelo que no sabía). Donde no está, `null`.
+	 */
+	modelVersionReported: text("model_version_reported"),
+	/** La versión del alias que se pidió, separada de la que contestó. */
+	requestedModelVersion: text("requested_model_version"),
 	runIndex: integer("run_index").notNull(),
 	promptText: text("prompt_text").notNull(),
 	fullResponse: text("full_response"),

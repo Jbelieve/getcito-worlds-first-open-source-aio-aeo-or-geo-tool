@@ -14,6 +14,12 @@ export { parseScrapeTargets, validateScrapeTargets } from "./config";
 // The prompt-text half of the locale hint is part of the public API: callers
 // that build their own prompt (onboarding, opportunities) append it themselves.
 export { localePromptInstruction } from "./locale";
+export {
+	describeReportedModelVersion,
+	MODEL_VERSION_UNKNOWN,
+	reportedModelVersion,
+	resolveReportedModelVersion,
+} from "./model-version";
 export type { ModelMeta } from "./models";
 export { getModelMeta, KNOWN_MODELS } from "./models";
 export { selectTargetsForBrand } from "./runner";

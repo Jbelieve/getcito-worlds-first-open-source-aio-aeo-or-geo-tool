@@ -176,17 +176,23 @@ export async function captureRun(
 	await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, () => worker()));
 
 	const responses: string[] = new Array(jobs.length).fill("");
+	const reportedVersions: Array<string | undefined> = new Array(jobs.length).fill(undefined);
 	const failures: CaptureFailure[] = [];
 	for (const [position, slot] of slots.entries()) {
 		if (slot === undefined) continue;
 		responses[position] = slot.response;
+		reportedVersions[position] = slot.modelVersion;
 		if (slot.failure !== null) failures.push(slot.failure);
 	}
 
 	const answers: CapturedAnswer[] = [];
 	for (const [position, job] of jobs.entries()) {
 		const response = responses[position] ?? "";
-		if (response.length > 0) answers.push({ job, response });
+		if (response.length === 0) continue;
+		const reported = reportedVersions[position];
+		// La versión viaja solo cuando el proveedor la informó: sin dato, la clave no
+		// existe (y la columna queda `null`, que es "no lo sé").
+		answers.push(reported === undefined ? { job, response } : { job, response, modelVersion: reported });
 	}
 
 	return { answers, summary: captureSummary(responses), failures };

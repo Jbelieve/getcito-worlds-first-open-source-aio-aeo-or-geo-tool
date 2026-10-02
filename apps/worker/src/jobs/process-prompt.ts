@@ -144,7 +144,12 @@ async function savePromptRun(
 	brandId: string,
 	model: string,
 	provider: string | null,
-	version: string,
+	requestedVersion: string,
+	/**
+	 * La versión que reportó el proveedor, o `null` cuando no la informó. Nunca el
+	 * nombre pedido: pedido y respuesta son dos datos distintos.
+	 */
+	reportedModelVersion: string | null,
 	webSearchEnabled: boolean,
 	rawOutput: unknown,
 	webQueries: string[],
@@ -158,7 +163,11 @@ async function savePromptRun(
 			brandId,
 			model,
 			provider,
-			version,
+			// Legado: se sigue escribiendo para no romper a quien lee `version`, pero ahora
+			// el pedido y la respuesta también viven en sus propias columnas.
+			version: reportedModelVersion ?? requestedVersion,
+			requestedVersion,
+			reportedModelVersion,
 			webSearchEnabled,
 			rawOutput,
 			webQueries,
@@ -270,21 +279,25 @@ async function runModelIteration({
 	// fan-out page excludes verbatim repeats at read time as a display rule;
 	// providers whose query field is fabricated (DataForSEO) write the
 	// `unavailable` sentinel in their own extractor instead.
-	const { rawOutput, textContent, webQueries, citations: extractedCitations, modelVersion } = result;
+	const { rawOutput, textContent, webQueries, citations: extractedCitations, reportedModelVersion } = result;
 	console.log(`${logPrefix} AI call completed, textContent length: ${textContent?.length ?? "null"}`);
 
 	const safeTextContent = typeof textContent === "string" ? textContent : "";
 
 	const { brandMentioned, competitorsMentioned } = analyzeMentions(safeTextContent, brand, competitorsList);
 
-	const recordedVersion = modelVersion ?? config.version ?? config.provider;
+	// El modelo **pedido** y el que **contestó** son dos datos distintos. Acá no se
+	// coalescen: `reportedVersion` es la versión que el proveedor informó, o `null` si no
+	// la informó. El nombre pedido nunca se escribe como si fuera la respuesta.
+	const reportedVersion = resolveReportedModelVersion(reportedModelVersion);
 
 	const { id: promptRunId, createdAt } = await savePromptRun(
 		promptId,
 		brand.id,
 		config.model,
 		config.provider,
-		recordedVersion,
+		config.version ?? config.provider,
+		reportedVersion,
 		config.webSearch,
 		rawOutput,
 		webQueries,

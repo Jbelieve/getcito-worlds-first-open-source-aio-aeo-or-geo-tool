@@ -108,6 +108,25 @@ export const promptRuns = pgTable(
 			.notNull(),
 		model: text("model").notNull(),
 		provider: text("provider"),
+		/**
+		 * El modelo **pedido**: el alias de `SCRAPE_TARGETS`.
+		 *
+		 * Es el reemplazo honesto de la vieja semántica coalescida. Hasta este cambio,
+		 * `version` se escribía con `modelVersion ?? config.version ?? config.provider`,
+		 * así que "lo que pidió el proveedor" y "lo que dijo el proveedor" caían en la
+		 * misma columna y después no se podían separar.
+		 */
+		requestedVersion: text("requested_version"),
+		/**
+		 * El modelo que **contestó**, cuando el proveedor lo informa. `null` es "no lo
+		 * dijo" — nunca se rellena con el nombre pedido. Ver `resolveReportedModelVersion`.
+		 */
+		reportedModelVersion: text("reported_model_version"),
+		/**
+		 * Legado: lo que alguna vez se escribió coalescido. Se conserva para no reescribir
+		 * la historia (y para no romper a quien la lee). Todo escrito nuevo va a
+		 * `requested_version` / `reported_model_version`; esta columna queda como estaba.
+		 */
 		version: text("version").notNull(),
 		webSearchEnabled: boolean("web_search_enabled").notNull(),
 		rawOutput: json("raw_output").notNull(),
