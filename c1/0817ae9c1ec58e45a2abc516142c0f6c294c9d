@@ -1,0 +1,22 @@
+.gitignore
+  h_c5ca005a78c880 33-39
+apps/web/package.json
+  h_c5ca005a78c880 8-9
+scripts/beaos-wp-plugin.d.mts
+  h_c5ca005a78c880 1-28
+scripts/beaos-wp-plugin.mjs
+  h_c5ca005a78c880 1-104
+scripts/release-wordpress-plugin.mjs
+  h_c5ca005a78c880 1-251
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c10817ae9c1ec58e45a2abc516142c0f6c294c9d",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
