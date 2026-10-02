@@ -1,0 +1,24 @@
+apps/web/src/lib/__tests__/beaos-enroll-scripts.test.ts
+  h_c5ca005a78c880 1-73
+apps/web/src/lib/__tests__/enrollment.test.ts
+  h_c5ca005a78c880 1-112
+apps/web/src/lib/auth/__tests__/policies.test.ts
+  h_c5ca005a78c880 417-436,447-455
+apps/web/src/routes/_authed/app/$brand/settings/brand.tsx
+  h_c5ca005a78c880 37-42,428-429,445-581
+apps/web/src/server/enrollment.ts
+  h_c5ca005a78c880 1-130
+scripts/beaos-enroll.sh
+  h_c5ca005a78c880 1-373
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3326711f66e8e58f91bd6edae5810555443199d9",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
