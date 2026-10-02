@@ -1,0 +1,52 @@
+apps/web/src/components/prompt-chart-print.tsx
+  h_c5ca005a78c880 29-31
+apps/worker/src/jobs/aps-query.ts
+  h_c5ca005a78c880 118-123,146,148-151
+apps/worker/src/jobs/process-prompt.ts
+  h_c5ca005a78c880 147-152,166-170,282,289-292,299-300
+apps/worker/src/report-worker.ts
+  h_c5ca005a78c880 83-87,90,92-96,273,276-281,425,429-430,490-491
+packages/aos-aps/src/aps/capture.ts
+  h_c5ca005a78c880 179,184,191-195
+packages/aos-aps/src/db/schema.ts
+  h_c5ca005a78c880 295-312
+packages/lib/src/db/db-smoke.test.ts
+  h_c5ca005a78c880 1-216
+packages/lib/src/db/schema.ts
+  h_c5ca005a78c880 111-129
+packages/lib/src/providers/index.ts
+  h_c5ca005a78c880 17-22
+packages/lib/src/providers/model-version.test.ts
+  h_c5ca005a78c880 1-43
+packages/lib/src/providers/model-version.ts
+  h_c5ca005a78c880 1-63
+packages/lib/src/providers/registry/anthropic-api.ts
+  h_c5ca005a78c880 8,147
+packages/lib/src/providers/registry/azure-foundry-api.ts
+  h_c5ca005a78c880 7,159
+packages/lib/src/providers/registry/brightdata.ts
+  h_c5ca005a78c880 7,235-236
+packages/lib/src/providers/registry/cloro.ts
+  h_c5ca005a78c880 4,238-241
+packages/lib/src/providers/registry/dataforseo.ts
+  h_c5ca005a78c880 11,138-141,248-251
+packages/lib/src/providers/registry/mistral-api.ts
+  h_c5ca005a78c880 4,111
+packages/lib/src/providers/registry/openai-api.ts
+  h_c5ca005a78c880 6,66-68
+packages/lib/src/providers/registry/openrouter.ts
+  h_c5ca005a78c880 5,125-130,186-190
+packages/lib/src/providers/types.ts
+  h_c5ca005a78c880 33-47,89-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d7022ee36391e6c83d7c232ffb5ca289ba90aece",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
