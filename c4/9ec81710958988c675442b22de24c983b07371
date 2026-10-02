@@ -1,0 +1,14 @@
+PLUGIN-WORDPRESS-BEAOS.md
+  h_c5ca005a78c880 1-623
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c49ec81710958988c675442b22de24c983b07371",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
