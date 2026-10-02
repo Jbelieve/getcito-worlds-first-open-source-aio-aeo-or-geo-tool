@@ -4,7 +4,7 @@
  * Form to edit brand name, website, additional domains, and aliases.
  */
 
-import { IconInfoCircle } from "@tabler/icons-react";
+import { IconDownload, IconInfoCircle } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate, useRouteContext } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
@@ -30,6 +30,12 @@ import { WebLogo } from "@/components/web-logo";
 import { useBrand } from "@/hooks/use-brands";
 import { citationKeys } from "@/hooks/use-citations";
 import { dashboardKeys } from "@/hooks/use-dashboard-summary";
+import {
+	WP_PLUGIN_DOWNLOAD_PATH,
+	WP_PLUGIN_LABEL,
+	WP_PLUGIN_STEPS,
+	WP_PLUGIN_VERSION,
+} from "@/lib/aos/wordpress-plugin";
 import { cleanAndValidateDomain } from "@/lib/domain-categories";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
 import { getBrandCategorySuggestionFn } from "@/server/agent-aps";
@@ -511,9 +517,38 @@ function SiteConnectionSection({ brandId, disabled }: { brandId: string; disable
 		<div className="mt-12 pt-6 border-t border-border">
 			<h3 className="text-lg font-medium mb-2">Conectar un sitio (WordPress)</h3>
 			<p className="text-sm text-muted-foreground mb-4">
-				Generá un código de conexión y pegalo en el plugin de BeAOS del WordPress. El código sirve{" "}
-				<strong>una sola vez</strong>, vence en 24 horas y sólo emite un token para <strong>esta marca</strong>: si se
-				filtra, el daño está acotado y se revoca solo.
+				El plugin de BeAOS conecta tu WordPress y publica ahí el kit de tu marca. Son tres pasos: bajar el plugin,
+				instalarlo en el WordPress y pegar el código de conexión, que se genera acá abajo.
+			</p>
+
+			{/* Descargar e instalar es el mismo trabajo que conectar, así que va junto y con los pasos a la vista. */}
+			<div className="rounded-md border border-border bg-muted/40 p-4">
+				<div className="flex flex-wrap items-center justify-between gap-3">
+					<div>
+						<p className="text-sm font-medium">
+							{WP_PLUGIN_LABEL} · v{WP_PLUGIN_VERSION}
+						</p>
+						<p className="text-xs text-muted-foreground">
+							Se instala como cualquier plugin: no hay que escribir código.
+						</p>
+					</div>
+					<Button asChild variant="outline" className="cursor-pointer">
+						<a href={WP_PLUGIN_DOWNLOAD_PATH} download>
+							<IconDownload className="h-4 w-4" />
+							Descargar el plugin
+						</a>
+					</Button>
+				</div>
+				<ol className="mt-4 list-inside list-decimal space-y-1 text-xs text-muted-foreground">
+					{WP_PLUGIN_STEPS.map((paso) => (
+						<li key={paso}>{paso}</li>
+					))}
+				</ol>
+			</div>
+
+			<p className="mt-6 text-sm text-muted-foreground mb-4">
+				El código de conexión sirve <strong>una sola vez</strong>, vence en 24 horas y sólo emite un token para{" "}
+				<strong>esta marca</strong>: si se filtra, el daño está acotado y se revoca solo.
 			</p>
 
 			<Button type="button" onClick={handleGenerate} disabled={disabled || isGenerating} className="cursor-pointer">

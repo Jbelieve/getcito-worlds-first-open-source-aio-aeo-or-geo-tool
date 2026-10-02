@@ -41,6 +41,9 @@ interface ImportMeta {
 declare global {
 	// App version injected by Vite define
 	const __APP_VERSION__: string;
+	// Versión del plugin de WordPress, inyectada por Vite define desde la cabecera del plugin
+	// (apps/beaos-wordpress/beaos-aos.php), que es su única fuente de verdad.
+	const __BEAOS_PLUGIN_VERSION__: string;
 	namespace NodeJS {
 		interface ProcessEnv {
 			readonly DEPLOYMENT_MODE: string;

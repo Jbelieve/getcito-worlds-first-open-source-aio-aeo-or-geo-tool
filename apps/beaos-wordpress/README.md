@@ -31,9 +31,15 @@ Sin dependencias: PHP 7.4+, WordPress 6.0+, ningún paquete de Composer ni de np
 
 ## Instalar
 
-1. Copiar la carpeta `beaos-wordpress` a `wp-content/plugins/` (o comprimirla y subirla desde
-   Plugins → Añadir nuevo → Subir plugin).
-2. Activarla en Plugins.
+1. **Desde BeAOS**: en Configuración → Brand, al lado de la versión, está **Descargar el plugin**. Es el
+   ZIP de la última release, con la versión en el nombre (`beaos-aos-<version>.zip`), y se sube desde
+   Plugins → Añadir nuevo → Subir plugin → Activar.
+2. **Desde el repositorio**, para desarrollar: copiar la carpeta `beaos-wordpress` a
+   `wp-content/plugins/`.
+
+El ZIP de la release lo arma `scripts/release-wordpress-plugin.mjs` con lo que se instala (los cuatro
+`.php` y este README, adentro de `beaos-aos/`): los tests y `.wp-local/` no entran. La versión vive en la
+cabecera de este plugin y el detalle de cada una está en [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## Configurar
 

@@ -5,8 +5,8 @@
 	"license": "MIT",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev --port 3000",
-		"build": "vite build",
+		"dev": "node ../../scripts/release-wordpress-plugin.mjs --public --quiet && vite dev --port 3000",
+		"build": "node ../../scripts/release-wordpress-plugin.mjs --public --quiet && vite build",
 		"start": "node .output/server/index.mjs",
 		"preview": "vite preview",
 		"test": "vitest run --project=unit",
