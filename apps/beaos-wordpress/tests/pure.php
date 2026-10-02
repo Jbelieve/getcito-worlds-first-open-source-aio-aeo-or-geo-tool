@@ -330,6 +330,31 @@ check_same( 1700000000, $forma['synced_ts'], 'la copia guarda el timestamp' );
 check_same( gmdate( 'c', 1700000000 ), $forma['synced_at'], 'y su forma legible' );
 check_same( '', $forma['error'], 'sin error por defecto' );
 
+// ── 8b · El candado del sync ────────────────────────────────────────────────────────────────────
+echo "8b · el candado del sync\n";
+
+// El valor guardado es el vencimiento, no un `1`. Un candado que no dice cuándo vence deja el cron
+// muerto para siempre si el proceso que lo tomó se murió.
+check_same( '1300', beaos_aos_lock_value( 1000, 300 ), 'el valor del candado es su vencimiento' );
+check_same( '1001', beaos_aos_lock_value( 1000, 0 ), 'un TTL de 0 no da un candado que vence al nacer' );
+check_same( '1001', beaos_aos_lock_value( 1000, -50 ), 'ni uno negativo' );
+check_same( '1001', beaos_aos_lock_value( 1000, 1 ), 'un TTL de 1 segundo se respeta' );
+
+check_same( false, beaos_aos_lock_is_expired( '1300', 1299 ), 'un candado que vence en el futuro está vigente' );
+check_same( true, beaos_aos_lock_is_expired( '1300', 1300 ), 'justo en el vencimiento ya venció' );
+check_same( true, beaos_aos_lock_is_expired( '1300', 1301 ), 'y después, también' );
+check_same( true, beaos_aos_lock_is_expired( '', 1300 ), 'un candado vacío cuenta como vencido' );
+check_same( true, beaos_aos_lock_is_expired( 'no es un número', 1300 ), 'uno ilegible también (si no, traba el cron para siempre)' );
+check_same( false, beaos_aos_lock_is_expired( '9999999999', 1300 ), 'uno lejano sigue vigente' );
+
+// El ciclo completo, con el TTL real del plugin: se toma en `$ahora`, y mientras no pase el TTL sigue
+// vigente. Es la propiedad que hace que un proceso muerto no deje el cron trabado más que el TTL.
+$toma = beaos_aos_lock_value( $ahora, BEAOS_AOS_LOCK_TTL );
+check_same( false, beaos_aos_lock_is_expired( $toma, $ahora ), 'recién tomado, el candado está vigente' );
+check_same( false, beaos_aos_lock_is_expired( $toma, $ahora + BEAOS_AOS_LOCK_TTL - 1 ), 'y sigue vigente un segundo antes del TTL' );
+check_same( true, beaos_aos_lock_is_expired( $toma, $ahora + BEAOS_AOS_LOCK_TTL ), 'y vence exactamente en el TTL' );
+check_same( true, BEAOS_AOS_LOCK_TTL <= 3600, 'el vencimiento no pasa de una hora: un candado huérfano no puede trabar el cron un día' );
+
 // ── 9 · Los ajustes ─────────────────────────────────────────────────────────────────────────────
 echo "9 · los ajustes\n";
 
@@ -448,6 +473,22 @@ foreach ( $llamadas as $nombre ) {
 }
 check_same( array(), $sospechosas, 'el archivo puro no llama a ninguna función de WordPress' );
 check_same( false, false !== strpos( file_get_contents( $pure ), '$wpdb' ), 'ni toca $wpdb' );
+
+// El candado no puede volver a la primitiva flaky. Estas tres líneas son la guarda contra la regresión
+// más probable de todo el archivo: `get_transient()` + `set_transient()` **no es un candado** (entre el
+// `get` y el `set` entran dos corridas), y `add_option()` tampoco —en el WordPress de este repo usa
+// `INSERT ... ON DUPLICATE KEY UPDATE`, así que el que llega segundo sobrescribe y contesta que sí—.
+// La única primitiva con la que se toma el candado es el `INSERT IGNORE` sobre el índice único de
+// `wp_options.option_name`.
+$codigo_main = beaos_aos_code( $main );
+if ( check( null !== $codigo_main, 'se puede leer el código del archivo principal' ) ) {
+	check_same( false, false !== strpos( $codigo_main, 'get_transient(BEAOS_AOS_LOCK' ), 'el candado no se lee con get_transient' );
+	check_same( false, false !== strpos( $codigo_main, 'set_transient(BEAOS_AOS_LOCK' ), 'ni se escribe con set_transient' );
+	check_same( false, false !== strpos( $codigo_main, 'add_option(BEAOS_AOS_LOCK' ), 'ni se toma con add_option (sobrescribe y contesta que sí)' );
+	check( false !== strpos( $codigo_main, 'INSERT IGNORE INTO' ), 'el candado se toma con INSERT IGNORE sobre option_name' );
+	check( false !== strpos( $codigo_main, 'DELETE FROM' ), 'y se suelta con un DELETE (condicional al vencimiento que escribió)' );
+	check( false !== strpos( $codigo_main, 'finally' ), 'el finally que suelta el candado sigue ahí' );
+}
 
 // ── 12 · El contrato con el repositorio ─────────────────────────────────────────────────────────
 echo "12 · el contrato con el repositorio\n";

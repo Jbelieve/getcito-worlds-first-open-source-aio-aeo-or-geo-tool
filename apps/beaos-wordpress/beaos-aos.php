@@ -44,6 +44,149 @@ function beaos_aos_mcp() {
 	return new BeAOS_MCP( $o['token'], $o['mcp'] );
 }
 
+// ── El candado del sync ─────────────────────────────────────────────────────────────────────────
+//
+// La primitiva y el porqué están explicados en `beaos-aos-pure.php` (sección "El candado del sync"):
+// una opción con `INSERT IGNORE` sobre el índice único de `wp_options.option_name`. Acá vive lo que
+// necesita `$wpdb`, y una sola regla que no se puede olvidar: **todo lo que escribe el candado pasa
+// por estas tres funciones**, porque escriben con SQL directo y WordPress no se entera.
+
+/**
+ * Vacía la caché de opciones para el candado.
+ *
+ * Hace falta y no es un detalle: WordPress cachea las opciones que **existen** (grupo `options`) y
+ * también las que **no existen** (la lista `notoptions`). Como el candado se escribe con SQL directo,
+ * las dos cachés quedan mintiendo: `get_option()` puede seguir contestando "no existe" con la fila ya
+ * insertada, o devolver un valor viejo después de borrarla. Con una caché de objetos persistente
+ * (Redis, Memcached) ese "no existe" sobrevive incluso entre procesos, que es la trampa de manual.
+ *
+ * Por eso `beaos_aos_lock_stored()` lee con SQL directo en vez de `get_option()`, y por eso acá se
+ * limpian las dos entradas después de cada escritura.
+ */
+function beaos_aos_lock_forget_cache() {
+	wp_cache_delete( BEAOS_AOS_LOCK, 'options' );
+	$notoptions = wp_cache_get( 'notoptions', 'options' );
+	if ( is_array( $notoptions ) && isset( $notoptions[ BEAOS_AOS_LOCK ] ) ) {
+		unset( $notoptions[ BEAOS_AOS_LOCK ] );
+		wp_cache_set( 'notoptions', $notoptions, 'options' );
+	}
+}
+
+/** El vencimiento guardado en el candado, leído de la base (no de la caché). `''` si no hay. */
+function beaos_aos_lock_stored() {
+	global $wpdb;
+	$value = $wpdb->get_var(
+		$wpdb->prepare(
+			"SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s",
+			BEAOS_AOS_LOCK
+		)
+	);
+	return null === $value ? '' : (string) $value;
+}
+
+/** ¿Hay una corrida en curso? El candado existe y todavía no venció. */
+function beaos_aos_lock_is_locked() {
+	$stored = beaos_aos_lock_stored();
+	return '' !== $stored && ! beaos_aos_lock_is_expired( $stored, time() );
+}
+
+/**
+ * Toma el candado. Devuelve el vencimiento que hay que devolverle a `beaos_aos_lock_release()`, o
+ * `false` si ya hay una corrida en curso (o si la base no dejó tomarlo: en la duda, no se sincroniza).
+ *
+ * El único caso en el que una corrida que **no** consiguió el candado sigue adelante es el vencido: si
+ * la fila está pero su vencimiento ya pasó, se borra con un `DELETE ... AND option_value = <el
+ * vencimiento que se leyó>` — que es un compare-and-swap: si otro se lo llevó en el medio, el borrado
+ * afecta 0 filas y este intento se rinde. Igual que la toma, lo decide la base.
+ */
+function beaos_aos_lock_acquire( $ttl = BEAOS_AOS_LOCK_TTL ) {
+	global $wpdb;
+
+	$now    = time();
+	$expiry = beaos_aos_lock_value( $now, $ttl );
+
+	// Dos intentos alcanzan: el primero toma el candado, el segundo lo reintenta después de limpiar uno
+	// vencido. Un tercero no agregaría nada, porque el estado ya se conoce.
+	for ( $intento = 0; $intento < 2; $intento++ ) {
+		$got = $wpdb->query(
+			$wpdb->prepare(
+				"INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'off')",
+				BEAOS_AOS_LOCK,
+				$expiry
+			)
+		);
+
+		if ( false === $got ) {
+			// La base no contestó (no es un duplicado: eso da 0 filas). No se sincroniza: perder una
+			// corrida es barato; pisar la que está corriendo, no.
+			return false;
+		}
+
+		if ( 1 === (int) $got ) {
+			beaos_aos_lock_forget_cache();
+			return $expiry;
+		}
+
+		// 0 filas: el índice único rechazó el INSERT, así que la fila ya estaba. Puede estar vigente —hay
+		// otra corrida— o vencida, que es el caso del proceso que se murió sin soltarla.
+		$stored = beaos_aos_lock_stored();
+		if ( '' === $stored || ! beaos_aos_lock_is_expired( $stored, $now ) ) {
+			return false; // hay una corrida en curso
+		}
+
+		// Venció: se lo lleva el que gane el borrado condicional.
+		$borrado = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM `{$wpdb->options}` WHERE `option_name` = %s AND `option_value` = %s",
+				BEAOS_AOS_LOCK,
+				$stored
+			)
+		);
+		beaos_aos_lock_forget_cache();
+		if ( 1 !== (int) $borrado ) {
+			return false; // otro llegó primero
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Suelta el candado **sólo si sigue siendo el nuestro**. Se llama desde el `finally` del sync, así que
+ * corre pase lo que pase; el `AND option_value` es lo que impide que una corrida lenta borre el candado
+ * de la corrida que la reemplazó.
+ */
+function beaos_aos_lock_release( $expiry ) {
+	global $wpdb;
+
+	$expiry = trim( (string) $expiry );
+	if ( '' === $expiry ) {
+		return;
+	}
+	$wpdb->query(
+		$wpdb->prepare(
+			"DELETE FROM `{$wpdb->options}` WHERE `option_name` = %s AND `option_value` = %s",
+			BEAOS_AOS_LOCK,
+			$expiry
+		)
+	);
+	beaos_aos_lock_forget_cache();
+}
+
+/**
+ * Suelta el candado sin importar de quién sea. Es lo que corre al desactivar el plugin: ahí no hay
+ * corrida que respetar, y dejar una fila atrás trabaría la próxima activación por 5 minutos.
+ *
+ * También borra el transient con el mismo nombre que usaban las versiones anteriores al candado
+ * atómico: un sitio que se actualiza no tiene por qué quedarse con basura de la primitiva vieja.
+ */
+function beaos_aos_lock_release_all() {
+	global $wpdb;
+	$wpdb->query( $wpdb->prepare( "DELETE FROM `{$wpdb->options}` WHERE `option_name` = %s", BEAOS_AOS_LOCK ) );
+	beaos_aos_lock_forget_cache();
+	delete_transient( BEAOS_AOS_LOCK );
+}
+
 // ── La sincronización del kit ───────────────────────────────────────────────────────────────────
 
 /**
@@ -159,8 +302,10 @@ function beaos_aos_log_rejected_route( $path, $reason, $only_if_stored = false )
  *   - Un archivo que no da su sha256 o su largo **no se guarda**: mejor un 404 que romper la firma.
  *
  * Lo que agrega sobre Autex:
- *   - Un **candado con transient** para que dos corridas no se pisen. Autex no lo tiene: guardar los
- *     ajustes mientras corre el cron dispara una segunda corrida en paralelo.
+ *   - Un **candado atómico** para que dos corridas no se pisen. Autex no lo tiene: guardar los ajustes
+ *     mientras corre el cron dispara una segunda corrida en paralelo. El candado es una opción tomada
+ *     con `INSERT IGNORE` sobre el índice único de `wp_options.option_name` — ver `beaos_aos_lock_acquire()`
+ *     y la sección "El candado del sync" de `beaos-aos-pure.php` para el porqué.
  *   - Un tope de archivos por corrida, para que un manifiesto raro no se lleve puesto el tiempo de PHP.
  *   - El estado `unpublished`, que no es un error.
  *
@@ -175,18 +320,21 @@ function beaos_aos_sync( $force = false ) {
 	if ( beaos_aos_missing( $o ) ) {
 		return false;
 	}
-	if ( get_transient( BEAOS_AOS_LOCK ) ) {
+
+	// El candado se toma **antes** de mirar si el kit está vencido: si se mirara primero, dos corridas
+	// podrían decidir las dos que hay que sincronizar y recién después pelearse por el candado.
+	$lock = beaos_aos_lock_acquire( BEAOS_AOS_LOCK_TTL );
+	if ( false === $lock ) {
 		return false; // ya hay una corrida en curso
 	}
 
-	$previous = get_option( BEAOS_AOS_BUNDLE );
-	$previous = is_array( $previous ) ? $previous : beaos_aos_bundle( array(), '', 0, 'empty' );
-	if ( ! $force && ! beaos_aos_bundle_is_stale( $previous, time(), BEAOS_AOS_TTL ) ) {
-		return false; // recién sincronizado: no se gasta el request
-	}
-
-	set_transient( BEAOS_AOS_LOCK, 1, BEAOS_AOS_LOCK_TTL );
 	try {
+		$previous = get_option( BEAOS_AOS_BUNDLE );
+		$previous = is_array( $previous ) ? $previous : beaos_aos_bundle( array(), '', 0, 'empty' );
+		if ( ! $force && ! beaos_aos_bundle_is_stale( $previous, time(), BEAOS_AOS_TTL ) ) {
+			return false; // recién sincronizado: no se gasta el request
+		}
+
 		$mcp   = beaos_aos_mcp();
 		$error = '';
 		$man   = beaos_aos_fetch_manifest( $mcp, $o['entity_id'], $error );
@@ -275,7 +423,9 @@ function beaos_aos_sync( $force = false ) {
 		);
 		return true;
 	} finally {
-		delete_transient( BEAOS_AOS_LOCK );
+		// El `finally` no se toca: es lo que garantiza que el candado se suelte también cuando la corrida
+		// falla, cuando el MCP tira una excepción o cuando un `return` temprano corta el camino.
+		beaos_aos_lock_release( $lock );
 	}
 }
 
@@ -379,12 +529,13 @@ register_activation_hook(
 	}
 );
 
-// Desactivar no puede dejar trabajo agendado dando vueltas.
+// Desactivar no puede dejar trabajo agendado dando vueltas, ni el candado tomado: un candado huérfano
+// trabaría la próxima activación hasta que venza.
 register_deactivation_hook(
 	__FILE__,
 	function () {
 		wp_clear_scheduled_hook( BEAOS_AOS_CRON );
-		delete_transient( BEAOS_AOS_LOCK );
+		beaos_aos_lock_release_all();
 	}
 );
 
