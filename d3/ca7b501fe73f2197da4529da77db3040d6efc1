@@ -1,0 +1,14 @@
+COMPARATIVA-NIUBIGEO.md
+  h_c5ca005a78c880 1-420
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d3ca7b501fe73f2197da4529da77db3040d6efc1",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
