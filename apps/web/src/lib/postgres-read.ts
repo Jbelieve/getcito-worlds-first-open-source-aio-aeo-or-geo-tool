@@ -9,10 +9,10 @@ import { type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { APP_TIMEZONE } from "@/lib/app-locale";
 import {
-	UNAVAILABLE_SENTINEL,
 	type FanoutBreakdownRow,
 	type FanoutModelTotalRow,
 	type FanoutPromptTotalRow,
+	UNAVAILABLE_SENTINEL,
 } from "@/lib/fanout-analysis";
 
 const db = drizzle(process.env.DATABASE_URL!);
@@ -154,6 +154,65 @@ function promptIdFilter(enabledPromptIds?: string[]): SQL {
 function modelFilter(model?: string): SQL {
 	if (!model) return sql``;
 	return sql`AND model = ${model}`;
+}
+
+/**
+ * Filtro por el día del **ciclo** (`cycle_date`, UTC, `YYYY-MM-DD`).
+ *
+ * No usa `created_at` como `dateFilter` a propósito: agrupar por ciclo y filtrar por
+ * instante de escritura deja afuera un ciclo que empezó antes del rango pero terminó
+ * dentro, y el denominador quedaría más chico que la suma de sus partes.
+ */
+function cycleDateFilter(fromDate: string | null, toDate: string | null): SQL {
+	if (!fromDate || !toDate) return sql``;
+	return sql`AND cycle_date >= ${fromDate} AND cycle_date <= ${toDate}`;
+}
+
+// ============================================================================
+// Provider response coverage
+// ============================================================================
+
+export interface ProviderAttemptCycleRow {
+	/** Día UTC del ciclo, `YYYY-MM-DD`. */
+	cycle_date: string;
+	planned: number;
+	succeeded: number;
+	failed: number;
+}
+
+/**
+ * Los intentos de medición de un rango, por ciclo.
+ *
+ * Es el denominador honesto: sin esto, un fallo de proveedor no aparece como fallo y el
+ * Share of Voice se calcula sobre las corridas que salieron bien, así que una caída
+ * **sube** el porcentaje.
+ *
+ * Un rango sin filas devuelve `[]`, y eso **no** significa "todo respondió": significa
+ * que no hay cobertura registrada. Quien la presenta tiene que declarar el histórico
+ * incompleto (`unverifiable`), no rellenarlo con un denominador inventado.
+ */
+export async function getProviderAttemptCycles(
+	brandId: string,
+	fromDate: string,
+	toDate: string,
+	enabledPromptIds?: string[],
+	model?: string,
+): Promise<ProviderAttemptCycleRow[]> {
+	const rows = await queryPg<ProviderAttemptCycleRow>(sql`
+		SELECT
+			cycle_date,
+			count(*)::int AS planned,
+			count(*) FILTER (WHERE success)::int AS succeeded,
+			count(*) FILTER (WHERE NOT success)::int AS failed
+		FROM prompt_run_attempts
+		WHERE brand_id = ${brandId}
+			${cycleDateFilter(fromDate, toDate)}
+			${promptIdFilter(enabledPromptIds)}
+			${modelFilter(model)}
+		GROUP BY cycle_date
+		ORDER BY cycle_date
+	`);
+	return rows;
 }
 
 function webSearchFilter(webSearchEnabled?: boolean): SQL {

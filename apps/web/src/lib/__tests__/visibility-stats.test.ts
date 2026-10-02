@@ -1,11 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-	computeVolatility,
-	stabilityScore,
 	computeShareOfVoice,
-	shareOfVoiceTimeSeriesLVCF,
-	shareOfVoiceLeaderboardLVCF,
+	computeVolatility,
 	type DailyDomainCount,
+	shareOfVoiceLeaderboardLVCF,
+	shareOfVoiceTimeSeriesLVCF,
+	stabilityScore,
+	summarizeProviderResponseCoverage,
 } from "@/lib/visibility-stats";
 
 /** Helper: build daily rows from a {date: {domain: count}} spec. */
@@ -54,9 +55,7 @@ describe("computeVolatility", () => {
 		// A dominant 'hub' every day (80% of volume) with a fully-rotating tail.
 		// Set churn is high (most distinct domains change) but volume churn is low
 		// (the source that carries the answer is stable).
-		const r = computeVolatility(
-			rows({ "2026-01-01": { hub: 8, x: 1, y: 1 }, "2026-01-02": { hub: 8, z: 1, w: 1 } }),
-		);
+		const r = computeVolatility(rows({ "2026-01-01": { hub: 8, x: 1, y: 1 }, "2026-01-02": { hub: 8, z: 1, w: 1 } }));
 		expect(r.setVolatility).toBe(0.8); // inter {hub}=1, union 5 -> 1 - 1/5
 		expect(r.weightedVolatility).toBeCloseTo(0.2, 5); // overlap = min(hub .8,.8) = .8
 	});
@@ -206,5 +205,81 @@ describe("share-of-voice percentage consistency across computation methods", () 
 		expect(Math.round((brandShare ?? 0) * 100)).toBe(23); // headline derived from the leaderboard
 		expect(Math.round((brandEntry?.share ?? 0) * 100)).toBe(23); // leaderboard table cell (formatPct)
 		expect(Math.round((brandEntry!.mentions / total) * 100)).toBe(23); // donut slice
+	});
+});
+
+describe("summarizeProviderResponseCoverage — el fallo baja el número", () => {
+	it("cuenta el fallo como intento: la proporción baja, no sube", () => {
+		const healthy = summarizeProviderResponseCoverage(
+			[{ date: "2026-10-02", planned: 6, succeeded: 6, failed: 0 }],
+			6,
+			4,
+		);
+		const degraded = summarizeProviderResponseCoverage(
+			[{ date: "2026-10-02", planned: 9, succeeded: 6, failed: 3 }],
+			6,
+			4,
+		);
+
+		expect(healthy.attemptShare).toBe(67); // 4/6
+		expect(degraded.attemptShare).toBe(44); // 4/9, no 4/6
+		expect(healthy.attemptShare!).toBeGreaterThan(degraded.attemptShare!);
+	});
+
+	it("declara la cobertura: 'N de M corridas no respondieron'", () => {
+		const coverage = summarizeProviderResponseCoverage(
+			[{ date: "2026-10-02", planned: 9, succeeded: 6, failed: 3 }],
+			6,
+			4,
+		);
+		expect(coverage.label).toBe("3 de 9 corridas no respondieron");
+		expect(coverage.state).toBe("partial");
+		expect(coverage.responseRate).toBe(67);
+		expect(coverage.isCoverageVerifiable).toBe(true);
+	});
+
+	it("agrega varios ciclos sin promediar promedios", () => {
+		const coverage = summarizeProviderResponseCoverage(
+			[
+				{ date: "2026-10-02", planned: 9, succeeded: 6, failed: 3 },
+				{ date: "2026-10-03", planned: 9, succeeded: 9, failed: 0 },
+			],
+			15,
+			10,
+		);
+		expect(coverage.plannedRuns).toBe(18);
+		expect(coverage.succeededRuns).toBe(15);
+		expect(coverage.failedRuns).toBe(3);
+		expect(coverage.label).toBe("3 de 18 corridas no respondieron");
+		expect(coverage.attemptShare).toBe(56); // 10/18
+	});
+
+	it("sin ciclos declara el histórico incompleto y no rellena el denominador", () => {
+		const coverage = summarizeProviderResponseCoverage([], 6, 4);
+		expect(coverage.state).toBe("unverifiable");
+		expect(coverage.isCoverageVerifiable).toBe(false);
+		expect(coverage.attemptShare).toBeNull();
+		expect(coverage.responseRate).toBeNull();
+		expect(coverage.label).toMatch(/denominador histórico está incompleto/);
+	});
+
+	it("sin fallos el estado es `complete`", () => {
+		const coverage = summarizeProviderResponseCoverage(
+			[{ date: "2026-10-02", planned: 2, succeeded: 2, failed: 0 }],
+			2,
+			1,
+		);
+		expect(coverage.state).toBe("complete");
+		expect(coverage.failedRuns).toBe(0);
+	});
+
+	it("un planned corto no encoge el denominador", () => {
+		const coverage = summarizeProviderResponseCoverage(
+			[{ date: "2026-10-02", planned: 6, succeeded: 6, failed: 3 }],
+			9,
+			4,
+		);
+		expect(coverage.plannedRuns).toBe(9);
+		expect(coverage.label).toBe("3 de 9 corridas no respondieron");
 	});
 });

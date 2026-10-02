@@ -174,3 +174,25 @@ describe("captureRun con un proveedor lento", () => {
 		expect(report.answers.map((entry) => entry.job.promptIndex)).toEqual([0, 1, 2, 3]);
 	});
 });
+
+describe("captureRun — el modelo que contestó", () => {
+	it("arrastra la versión que reportó el proveedor", async () => {
+		const targets: QueryTarget[] = [
+			{
+				target: "claude",
+				query: async () => ({ text: "respuesta", modelVersion: "claude-sonnet-4-5-20250929" }),
+			},
+		];
+		const report = await captureRun(fanOut(["p1"], ["claude"], 1), targets);
+		expect(report.answers[0]?.modelVersion).toBe("claude-sonnet-4-5-20250929");
+	});
+
+	it("sin versión reportada la clave no existe: no se rellena con el modelo pedido", async () => {
+		const targets: QueryTarget[] = [{ target: "chatgpt", query: async () => ({ text: "respuesta" }) }];
+		const report = await captureRun(fanOut(["p1"], ["chatgpt"], 1), targets);
+		const answer = report.answers[0];
+		expect(answer?.modelVersion).toBeUndefined();
+		expect(answer?.modelVersion).not.toBe("chatgpt");
+		expect(Object.hasOwn(answer ?? {}, "modelVersion")).toBe(false);
+	});
+});

@@ -291,3 +291,99 @@ export function shareOfVoiceLeaderboardLVCF(
 
 	return { brandMentions, brandPrompts, competitors };
 }
+
+/** Un ciclo de medición con sus intentos, tal como sale del read layer. */
+export interface ProviderAttemptCycle {
+	/** Día del ciclo, `YYYY-MM-DD`. */
+	date: string;
+	planned: number;
+	succeeded: number;
+	failed: number;
+}
+
+/**
+ * La cobertura de proveedores de la ventana que se está mirando.
+ *
+ * Existe porque un Share of Voice sin su cobertura es una opinión: un ciclo con 6 de 9
+ * corridas se veía idéntico a uno con 9 de 9, y el porcentaje se calculaba sobre las 6.
+ * Un fallo de proveedor tiene que **bajar** el número, no subirlo.
+ */
+export interface ProviderResponseCoverage {
+	/** Intentos planificados en la ventana. */
+	plannedRuns: number;
+	/** Intentos de los que salió una respuesta. */
+	succeededRuns: number;
+	/** Intentos que fallaron y no dejaron fila de resultado. */
+	failedRuns: number;
+	/** `complete` | `partial` | `no_data` | `unverifiable`. */
+	state: "complete" | "partial" | "no_data" | "unverifiable";
+	/** "N de M corridas no respondieron", listo para mostrar. */
+	label: string;
+	/** Porcentaje de intentos que respondieron, 0-100. `null` sin intentos. */
+	responseRate: number | null;
+	/**
+	 * Menciones de marca sobre **intentos planeados**, 0-100, o `null` cuando el
+	 * histórico no permite reconstruir el denominador.
+	 *
+	 * Es la proporción que **baja** cuando un proveedor falla: el fallo suma al
+	 * denominador y nada al numerador. Tratarlo como "la marca no apareció" sería otro
+	 * dato falso, así que no toca el porcentaje por menciones: se publica aparte, con su
+	 * cobertura al lado.
+	 */
+	attemptShare: number | null;
+	/** `false` cuando la ventana es anterior a que se registraran los intentos. */
+	isCoverageVerifiable: boolean;
+}
+
+/**
+ * Agrega los ciclos y declara la cobertura.
+ *
+ * Sin ciclos el estado es `unverifiable`, **no** `complete`: antes de que existiera la
+ * tabla de intentos los fallos no dejaron rastro, así que el denominador histórico está
+ * incompleto y no se puede reconstruir. Se declara —igual que el total de costo que no
+ * se puede cerrar— en vez de inventar los intentos que faltan.
+ */
+export function summarizeProviderResponseCoverage(
+	cycles: ProviderAttemptCycle[],
+	observedRuns: number,
+	brandMentionedRuns = 0,
+): ProviderResponseCoverage {
+	if (cycles.length === 0) {
+		return {
+			plannedRuns: observedRuns,
+			succeededRuns: observedRuns,
+			failedRuns: 0,
+			state: "unverifiable",
+			label: "El denominador histórico está incompleto: los intentos anteriores no se registraron.",
+			responseRate: null,
+			attemptShare: null,
+			isCoverageVerifiable: false,
+		};
+	}
+
+	let planned = 0;
+	let succeeded = 0;
+	let failed = 0;
+	for (const cycle of cycles) {
+		// Un ciclo cuyo `planned` sea menor que sus propias partes no encoge el
+		// denominador: quedarse corto es exactamente el bug que esto arregla.
+		planned += Math.max(cycle.planned, cycle.succeeded + cycle.failed);
+		succeeded += cycle.succeeded;
+		failed += cycle.failed;
+	}
+	// Las filas observadas son un piso: si el registro de intentos quedó corto, el
+	// denominador no puede ser menor que lo que efectivamente se midió.
+	planned = Math.max(planned, observedRuns, succeeded + failed);
+	const effectiveFailed = Math.max(failed, Math.max(0, planned - succeeded));
+
+	return {
+		plannedRuns: planned,
+		succeededRuns: succeeded,
+		failedRuns: effectiveFailed,
+		state: planned === 0 ? "no_data" : effectiveFailed === 0 ? "complete" : "partial",
+		label: `${effectiveFailed} de ${planned} corridas no respondieron`,
+		responseRate: planned === 0 ? null : Math.round((succeeded / planned) * 100),
+		attemptShare: planned === 0 ? null : Math.round((brandMentionedRuns / planned) * 100),
+		isCoverageVerifiable: true,
+	};
+}

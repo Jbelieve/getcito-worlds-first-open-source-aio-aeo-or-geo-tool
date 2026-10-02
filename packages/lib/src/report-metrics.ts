@@ -4,6 +4,8 @@
  * for both the report renderer and the report API.
  */
 import { getModelMeta } from "./providers/models";
+import type { CoverageCycle, CoverageSummary, RunCoverage } from "./run-coverage";
+import { summarizeCoverage, summarizeCycleCoverage, unverifiableCoverage } from "./run-coverage";
 
 // ---------- Types ----------
 
@@ -25,6 +27,76 @@ export interface PromptSoV {
 	totalRuns: number;
 	totalCompetitorMentions: number;
 	competitorMentions: Record<string, number>;
+	/**
+	 * Intentos planificados para este prompt. Igual a `totalRuns` cuando todo
+	 * respondió; **mayor** cuando hubo fallos de proveedor.
+	 *
+	 * Opcional en el tipo por compatibilidad con quien arma el objeto a mano; **siempre
+	 * presente** en lo que devuelve `computePromptSoV`.
+	 */
+	plannedRuns?: number;
+	/** Intentos que fallaron y no dejaron fila de resultado. */
+	failedRuns?: number;
+	/**
+	 * Menciones de marca sobre **intentos planeados**, 0-100, o `null` cuando el
+	 * histórico no permite reconstruir el denominador.
+	 *
+	 * Es distinto de `sov` a propósito: `sov` responde "cuando el modelo contestó,
+	 * ¿cuánto de la conversación fue de la marca?" (menciones / (marca + competidores))
+	 * y `attemptShare` responde "de todo lo que intentamos medir, ¿en cuánto apareció
+	 * la marca?". Un proveedor caído mueve la segunda y **no** la primera — tratarlo
+	 * como "la marca no apareció" sería inventar un dato.
+	 */
+	attemptShare?: number | null;
+	/** Cuántas corridas respondieron de cuántas se planearon. Nunca sale solo. */
+	coverage?: CoverageSummary;
+}
+
+/**
+ * Lo que quien ejecutó la medición sabe del ciclo: intentos planeados, exitosos y
+ * fallidos. Ausente significa "no se registró", que es distinto de "no falló".
+ */
+export type PromptSoVCoverage = RunCoverage;
+
+/**
+ * Cruza el recuento de intentos con las filas observadas.
+ *
+ * La regla dura: sin cobertura registrada el denominador **no se inventa**, se declara
+ * `unverifiable`. Y una cobertura declarada nunca encoge el denominador por debajo de
+ * las filas que sí existen — un fallo que no se contó no puede abaratar el número.
+ */
+export function resolvePromptCoverage(
+	observedRuns: number,
+	coverage?: PromptSoVCoverage | null,
+): { summary: CoverageSummary; plannedRuns: number; failedRuns: number } {
+	if (coverage === undefined || coverage === null) {
+		return { summary: unverifiableCoverage(), plannedRuns: observedRuns, failedRuns: 0 };
+	}
+
+	const planned = Math.max(coverage.planned, coverage.succeeded + coverage.failed, observedRuns);
+	const summary = summarizeCoverage({ planned, succeeded: coverage.succeeded, failed: coverage.failed });
+
+	if (summary.state === "no_data") {
+		return { summary: unverifiableCoverage(), plannedRuns: observedRuns, failedRuns: 0 };
+	}
+
+	return { summary, plannedRuns: planned, failedRuns: coverage.failed };
+}
+
+/**
+ * La marca mencionada sobre los intentos planeados.
+ *
+ * `null` cuando no hay intentos (y también cuando el histórico no permite saber
+ * cuántos hubo): un `0` acá sería "la marca no apareció" sobre un denominador que no
+ * conocemos, que es exactamente la familia de datos falsos que este módulo evita.
+ */
+export function shareOfAttempts(
+	mentioned: number,
+	plan: { plannedRuns: number; summary: CoverageSummary },
+): number | null {
+	if (plan.summary.state === "unverifiable" || plan.summary.state === "no_data") return null;
+	if (plan.plannedRuns === 0) return null;
+	return Math.round((mentioned / plan.plannedRuns) * 100);
 }
 
 export interface CompetitorSoV {
@@ -47,17 +119,34 @@ export interface SelectedPrompt {
  * Compute Share of Voice for a single prompt.
  * SoV = brand_mentions / (brand_mentions + total_competitor_mentions)
  * Returns null when denominator is 0 (no one mentioned).
+ *
+ * `coverage` es lo que se planificó y lo que falló. Sin él, `attemptShare` queda
+ * `null` y `coverage.state` en `"unverifiable"`: el denominador histórico no se
+ * reconstruye, se declara incompleto. Con él, `attemptShare` divide por los intentos.
  */
 export function computePromptSoV(
 	promptId: string,
 	runs: ReportPromptRun[],
 	competitors: ReportCompetitor[],
+	coverage?: PromptSoVCoverage | null,
 ): PromptSoV {
 	const promptRuns = runs.filter((r) => r.promptId === promptId);
 	const totalRuns = promptRuns.length;
+	const plan = resolvePromptCoverage(totalRuns, coverage);
 
-	if (totalRuns === 0) {
-		return { promptId, sov: null, brandMentionCount: 0, totalRuns: 0, totalCompetitorMentions: 0, competitorMentions: {} };
+	if (totalRuns === 0 && plan.summary.state === "no_data") {
+		return {
+			promptId,
+			sov: null,
+			brandMentionCount: 0,
+			totalRuns: 0,
+			totalCompetitorMentions: 0,
+			competitorMentions: {},
+			plannedRuns: plan.plannedRuns,
+			failedRuns: plan.failedRuns,
+			attemptShare: null,
+			coverage: plan.summary,
+		};
 	}
 
 	const brandMentionCount = promptRuns.filter((r) => r.brandMentioned).length;
@@ -79,7 +168,18 @@ export function computePromptSoV(
 	const denominator = brandMentionCount + totalCompetitorMentions;
 	const sov = denominator === 0 ? null : Math.round((brandMentionCount / denominator) * 100);
 
-	return { promptId, sov, brandMentionCount, totalRuns, totalCompetitorMentions, competitorMentions };
+	return {
+		promptId,
+		sov,
+		brandMentionCount,
+		totalRuns,
+		totalCompetitorMentions,
+		competitorMentions,
+		plannedRuns: plan.plannedRuns,
+		failedRuns: plan.failedRuns,
+		attemptShare: shareOfAttempts(brandMentionCount, plan),
+		coverage: plan.summary,
+	};
 }
 
 /**
@@ -107,6 +207,58 @@ export function computeOverallSoV(
 	const denominator = totalBrandMentions + totalCompetitorMentions;
 	if (denominator === 0) return null;
 	return Math.round((totalBrandMentions / denominator) * 100);
+}
+
+export interface ReportCoverage {
+	/** Intentos planificados en toda la medición. */
+	plannedRuns: number;
+	/** Intentos de los que salió una respuesta. */
+	succeededRuns: number;
+	/** Intentos que fallaron y no dejaron fila. */
+	failedRuns: number;
+	/** Marca mencionada sobre intentos planeados, 0-100, o `null` sin denominador. */
+	attemptShare: number | null;
+	coverage: CoverageSummary;
+}
+
+/**
+ * La cobertura de la medición entera, para publicarla al lado del porcentaje.
+ *
+ * Sin `cycles` (el histórico anterior a que se registraran los intentos) devuelve el
+ * mismo `unverifiable` que un prompt suelto: el denominador no se puede reconstruir y
+ * se declara, no se rellena.
+ */
+export function computeReportCoverage(runs: ReportPromptRun[], cycles: CoverageCycle[] = []): ReportCoverage {
+	const mentioned = runs.filter((run) => run.brandMentioned).length;
+
+	if (cycles.length === 0) {
+		return {
+			plannedRuns: runs.length,
+			succeededRuns: runs.length,
+			failedRuns: 0,
+			attemptShare: null,
+			coverage: unverifiableCoverage(),
+		};
+	}
+
+	const summary = summarizeCycleCoverage(cycles);
+	let plannedRuns = 0;
+	let succeededRuns = 0;
+	let failedRuns = 0;
+	for (const cycle of cycles) {
+		if (cycle.coverage === null) continue;
+		plannedRuns += Math.max(cycle.coverage.planned, cycle.coverage.succeeded + cycle.coverage.failed);
+		succeededRuns += cycle.coverage.succeeded;
+		failedRuns += cycle.coverage.failed;
+	}
+
+	return {
+		plannedRuns,
+		succeededRuns,
+		failedRuns,
+		attemptShare: shareOfAttempts(mentioned, { plannedRuns, summary }),
+		coverage: summary,
+	};
 }
 
 /**
@@ -412,11 +564,61 @@ export interface ReportRawPromptRuns {
 	competitors: ReportCompetitor[];
 	promptRuns: Array<{
 		promptValue: string;
+		/**
+		 * Intentos planeados para este prompt.
+		 *
+		 * `undefined` en un reporte guardado antes de que se registrara: el denominador de
+		 * ese histórico no se puede reconstruir y se declara incompleto, no se rellena.
+		 */
+		attempted?: number;
 		runs: Array<{
 			brandMentioned: boolean;
 			competitorsMentioned: string[];
 		}>;
 	}>;
+}
+
+/**
+ * La cobertura de proveedores de un reporte: cuántos intentos se planearon, cuántos
+ * respondieron y el estado del punto.
+ *
+ * Un porcentaje sin esto es una opinión: un reporte con 6 de 9 corridas se veía igual
+ * que uno con 9 de 9, y el SoV se calculaba sobre las 6.
+ */
+export interface ReportProviderCoverage {
+	plannedRuns: number;
+	succeededRuns: number;
+	failedRuns: number;
+	state: CoverageSummary["state"];
+	/** "N de M corridas no respondieron", listo para mostrar. */
+	label: string;
+	/** Marca mencionada sobre intentos planeados, 0-1 float, o `null` sin denominador. */
+	attemptShare: number | null;
+	/** `false` cuando el reporte es anterior a que se registraran los intentos. */
+	isCoverageVerifiable: boolean;
+}
+
+export interface UnstableCompetitorStats {
+	name: string;
+	sov: number;
+	visibility: number;
+	promptsWithMentions: number;
+	promptRunsWithMentions: number;
+}
+
+export interface ReportUnstableStats {
+	sov: number | null;
+	visibility: number;
+	totalPrompts: number;
+	totalPromptRuns: number;
+	promptsWithBrandMentions: number;
+	promptRunsWithBrandMentions: number;
+	competitors: UnstableCompetitorStats[];
+	/**
+	 * Cobertura de proveedores de la medición. Viaja al lado de `sov` para que el número
+	 * nunca salga solo: un SoV sobre 6 de 9 corridas no es un SoV completo.
+	 */
+	providerResponse: ReportProviderCoverage;
 }
 
 export interface UnstableCompetitorStats {
@@ -447,12 +649,19 @@ export interface ReportUnstableStats {
  * - competitors[].promptsWithMentions: number of prompts where this competitor was mentioned
  * - competitors[].promptRunsWithMentions: number of prompt runs where this competitor was mentioned
  * - competitors[].visibility: prompt runs with this competitor / total prompt runs, 0-1 float
+ * - providerResponse: cuántos intentos se planearon y cuántos no respondieron. Un
+ *   `sov` sin esto es un número que parece completo.
  */
 export function computeReportUnstableStats(raw: ReportRawPromptRuns): ReportUnstableStats {
 	// Flatten all runs into ReportPromptRun[]
 	const runs: ReportPromptRun[] = [];
 	let totalPromptRuns = 0;
 	const promptsWithBrand = new Set<number>();
+	/**
+	 * Denominador honesto: la suma de intentos planeados. `null` en cuanto un prompt no
+	 * lo declare — un reporte viejo no se puede completar hacia atrás.
+	 */
+	let plannedPromptRuns: number | null = 0;
 
 	// Track per-competitor: which prompts and how many runs mention them
 	const competitorPrompts = new Map<string, Set<number>>();
@@ -460,6 +669,15 @@ export function computeReportUnstableStats(raw: ReportRawPromptRuns): ReportUnst
 
 	raw.promptRuns.forEach((pr, promptIndex) => {
 		let promptHasBrand = false;
+		const observedForPrompt = pr.runs.length;
+		if (plannedPromptRuns !== null) {
+			if (typeof pr.attempted !== "number" || Number.isFinite(pr.attempted) === false) {
+				plannedPromptRuns = null;
+			} else {
+				// Un `attempted` menor que lo observado no puede encoger el denominador.
+				plannedPromptRuns += Math.max(pr.attempted, observedForPrompt);
+			}
+		}
 		for (const run of pr.runs) {
 			runs.push({
 				promptId: `prompt-${promptIndex + 1}`,
@@ -499,6 +717,7 @@ export function computeReportUnstableStats(raw: ReportRawPromptRuns): ReportUnst
 		totalPromptRuns,
 		promptsWithBrandMentions: promptsWithBrand.size,
 		promptRunsWithBrandMentions: brandMentionCount,
+		providerResponse: buildReportProviderCoverage(plannedPromptRuns, totalPromptRuns, brandMentionCount),
 		competitors: totalAllMentions === 0 ? [] : raw.competitors.map((comp) => {
 			const promptRunsWithMentions = competitorRunCounts.get(comp.name) || 0;
 			return {
@@ -509,6 +728,45 @@ export function computeReportUnstableStats(raw: ReportRawPromptRuns): ReportUnst
 				promptRunsWithMentions,
 			};
 		}).sort((a, b) => b.sov - a.sov),
+	};
+}
+
+/**
+ * La cobertura de proveedores del reporte.
+ *
+ * Sin `planned` (reporte guardado antes de que se registraran los intentos) el estado es
+ * `unverifiable`: el denominador histórico no se reconstruye y se declara incompleto, igual
+ * que el total de costo que no se puede cerrar.
+ */
+function buildReportProviderCoverage(
+	planned: number | null,
+	observed: number,
+	mentioned: number,
+): ReportProviderCoverage {
+	if (planned === null) {
+		return {
+			plannedRuns: observed,
+			succeededRuns: observed,
+			failedRuns: 0,
+			state: "unverifiable",
+			label: unverifiableCoverage().label,
+			attemptShare: null,
+			isCoverageVerifiable: false,
+		};
+	}
+
+	const failed = Math.max(0, planned - observed);
+	const summary = summarizeCoverage({ planned, succeeded: observed, failed });
+	const denominator = Math.max(planned, observed);
+
+	return {
+		plannedRuns: denominator,
+		succeededRuns: observed,
+		failedRuns: failed,
+		state: summary.state,
+		label: summary.label,
+		attemptShare: denominator === 0 ? null : mentioned / denominator,
+		isCoverageVerifiable: summary.isCoverageVerifiable,
 	};
 }
 

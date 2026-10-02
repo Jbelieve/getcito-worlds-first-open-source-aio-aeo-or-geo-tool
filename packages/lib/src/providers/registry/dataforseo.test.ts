@@ -148,3 +148,67 @@ describe("dataforseo provider", () => {
 		expect(rawUrl).toBe(realUrl);
 	});
 });
+
+describe("dataforseo — el modelo que contestó, sin inventarlo", () => {
+	it("no cae al nombre pedido cuando el proveedor no informa la versión", async () => {
+		// El bug: `result.model_name ?? modelName` afirmaba que había contestado
+		// "chatgpt" (el nombre pedido) cuando la respuesta no traía `model_name`.
+		dataforseoClient.chatgptLlmResponsesLive.mockResolvedValueOnce({
+			tasks: [
+				{
+					status_code: 20000,
+					status_message: "Ok.",
+					result: [
+						{
+							// sin `model_name`: el proveedor no lo informó
+							items: [
+								{
+									type: "message",
+									sections: [
+										{
+											type: "text",
+											text: "Un portátil bien reseñado este mes es el Framework Laptop 13.",
+											annotations: [{ url: "https://example.com/r", title: "Ejemplo" }],
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+
+		const result = await dataforseo.run("chatgpt", "¿Qué portátil está bien reseñado?", { webSearch: true });
+
+		expect(result.modelVersion ?? null).toBeNull();
+		expect(result.modelVersion).not.toBe("chatgpt");
+	});
+
+	it("sí devuelve la versión cuando el proveedor la informa", async () => {
+		dataforseoClient.chatgptLlmResponsesLive.mockResolvedValueOnce({
+			tasks: [
+				{
+					status_code: 20000,
+					status_message: "Ok.",
+					result: [
+						{
+							model_name: "gpt-5.5-2026-01-01",
+							fan_out_queries: [],
+							items: [
+								{
+									type: "message",
+									sections: [{ type: "text", text: "Respuesta sobre portátiles.", annotations: [] }],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+
+		const result = await dataforseo.run("chatgpt", "¿Qué portátil está bien reseñado?", { webSearch: true });
+
+		expect(result.modelVersion).toBe("gpt-5.5-2026-01-01");
+	});
+});

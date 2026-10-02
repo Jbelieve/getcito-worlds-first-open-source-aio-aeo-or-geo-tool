@@ -25,7 +25,18 @@ export interface MeasurementTargetConfig {
 	timeoutMs?: number;
 }
 
-export type ProviderInvoker = (config: MeasurementTargetConfig, prompt: string) => Promise<string>;
+/**
+ * El invocador de una llamada de medición.
+ *
+ * Devuelve el texto **y** la versión del modelo que contestó, cuando el proveedor la
+ * informa. Antes devolvía solo el texto, así que `result.modelVersion` se descartaba en
+ * el camino y la corrida afirmaba implícitamente que había contestado el modelo pedido.
+ * El texto suelto sigue siendo válido para los fakes y para quien no reporte versión.
+ */
+export type ProviderInvoker = (
+	config: MeasurementTargetConfig,
+	prompt: string,
+) => Promise<{ text: string; modelVersion?: string } | string>;
 
 /**
  * One query client per model. Two configs sharing a model would collide in the fan-out (a job only
@@ -47,7 +58,12 @@ export function queryTargetsFrom(
 		seen.add(config.model);
 		targets.push({
 			target: config.model,
-			query: (prompt: string) => invoke(config, prompt),
+			// Normaliza el texto suelto a la forma con versión para que `captureRun` tenga
+			// un solo camino: el que no reporta versión simplemente no la trae.
+			query: async (prompt: string) => {
+				const result = await invoke(config, prompt);
+				return typeof result === "string" ? { text: result } : result;
+			},
 			// Only when set: undefined leaves captureRun's run-wide ceiling in charge.
 			...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }),
 		});

@@ -14,6 +14,7 @@ import {
 	getProvider,
 	type ModelConfig,
 	parseScrapeTargets,
+	resolveReportedModelVersion,
 	withProviderCallTracking,
 } from "@workspace/lib/providers";
 import { computeSystemTags, isPromptBranded } from "@workspace/lib/tag-utils";
@@ -288,6 +289,8 @@ async function runPrompt(
 
 	return {
 		promptValue,
+		// El denominador planeado, para que la cobertura del reporte se pueda declarar.
+		attempted: runPromises.length,
 		runs: runResults,
 	};
 }
@@ -443,6 +446,9 @@ export async function processReportJob(job: ReportJobContext) {
 					candidateResults.push({
 						promptValue: candidate.prompt,
 						brandedPrompt: candidate.brandedPrompt,
+						// No hay prompt guardado para este candidato, así que tampoco hay plan
+						// que declarar.
+						attempted: undefined,
 						runs: [],
 					});
 					continue;
@@ -472,6 +478,9 @@ export async function processReportJob(job: ReportJobContext) {
 				candidateResults.push({
 					promptValue: candidate.prompt,
 					brandedPrompt: candidate.brandedPrompt,
+					// `useExistingData` lee lo que ya está guardado: no sabe cuántos intentos
+					// se planearon ni cuántos fallaron. No se inventa; queda sin dato.
+					attempted: undefined,
 					runs: formattedRuns,
 				});
 			}
@@ -506,6 +515,9 @@ export async function processReportJob(job: ReportJobContext) {
 						return {
 							promptValue: candidate.prompt,
 							brandedPrompt: candidate.brandedPrompt,
+							// El fallo es del prompt entero y no quedó registrado el plan: no se
+							// inventa un denominador.
+							attempted: undefined,
 							runs: [],
 						};
 					}
@@ -543,6 +555,7 @@ export async function processReportJob(job: ReportJobContext) {
 		for (const result of selectedPromptResults) {
 			promptRuns.push({
 				promptValue: result.promptValue,
+				...(result.attempted === undefined ? {} : { attempted: result.attempted }),
 				runs: result.runs,
 			});
 			completedFinalRuns++;

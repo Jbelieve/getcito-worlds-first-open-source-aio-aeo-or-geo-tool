@@ -133,6 +133,72 @@ export const promptRuns = pgTable(
 	}),
 ).enableRLS();
 
+/**
+ * **Un intento de medir un prompt, haya respondido o no.** Es la tabla que le da un
+ * denominador honesto a la capa de visibilidad.
+ *
+ * Qué pasa sin ella, textual del esquema de al lado: «a run that fails stores no
+ * prompt_runs row, so this table is the only place that count exists». El resultado era
+ * que `computePromptSoV` dividía por las corridas que salieron bien y **una caída de
+ * proveedor no aparecía como fallo: hacía que el porcentaje se viera mejor**.
+ *
+ * Un fallo **no** es "la marca no apareció" —eso sería otro dato falso—: es un intento
+ * sin respuesta. Por eso estos renglones viven acá y no como filas de `prompt_runs`:
+ * una fila fallida con `brand_mentioned = false` se leería como un no-acierto real.
+ *
+ * El histórico no se puede reconstruir: antes de que existiera esta tabla los fallos no
+ * dejaron rastro (solo `provider_calls.success = false`). Por eso la cobertura se
+ * **declara** incompleta hacia atrás (`VERIFIABLE_COVERAGE_SINCE`, `run-coverage.ts`) en
+ * vez de inventar los intentos que faltan.
+ *
+ * No hay foreign key a `provider_calls` ni a `prompt_runs`: un intento fallido no tiene
+ * ninguna de las dos, y la fila tiene que sobrevivir al borrado de la marca igual que el
+ * log de llamadas.
+ */
+export const promptRunAttempts = pgTable(
+	"prompt_run_attempts",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		promptId: uuid("prompt_id")
+			.references(() => prompts.id)
+			.notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id)
+			.notNull(),
+		/** El modelo pedido, igual que el job que lo intentó. */
+		model: text("model").notNull(),
+		provider: text("provider"),
+		/** Índice de la repetición dentro del ciclo, 1-based (igual que `RUNS_PER_PROMPT`). */
+		runIndex: integer("run_index").notNull(),
+		/**
+		 * Día del ciclo en UTC, `YYYY-MM-DD`. Agrupa los intentos de una misma corrida
+		 * sin depender del orden de escritura y sin adivinar por rango de fecha.
+		 */
+		cycleDate: text("cycle_date").notNull(),
+		success: boolean("success").notNull(),
+		/**
+		 * Por qué falló, cuando falló. `null` en un intento exitoso: "no falló" no es lo
+		 * mismo que "falló sin motivo".
+		 */
+		errorMessage: text("error_message"),
+		/** La fila de `prompt_runs` que produjo, si produjo. `null` en un fallo. */
+		promptRunId: uuid("prompt_run_id"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => ({
+		// El ciclo de un prompt es la unidad que se agrupa para publicar la cobertura.
+		promptCycleIdx: index("prompt_run_attempts_prompt_cycle_idx").on(table.promptId, table.cycleDate),
+		cycleIdx: index("prompt_run_attempts_cycle_date_idx").on(table.cycleDate),
+		// Borrar una marca borra sus intentos; sin este índice ese delete escanea la tabla.
+		brandIdIdx: index("prompt_run_attempts_brand_id_idx").on(table.brandId),
+		// Un intento exitoso apunta a su corrida; el delete de una corrida lo alcanza.
+		promptRunIdIdx: index("prompt_run_attempts_prompt_run_id_idx").on(table.promptRunId),
+	}),
+).enableRLS();
+
+export type PromptRunAttempt = typeof promptRunAttempts.$inferSelect;
+export type NewPromptRunAttempt = typeof promptRunAttempts.$inferInsert;
+
 export const citations = pgTable(
 	"citations",
 	{

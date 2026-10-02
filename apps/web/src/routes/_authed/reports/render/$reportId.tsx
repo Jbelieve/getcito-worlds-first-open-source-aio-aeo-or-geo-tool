@@ -14,6 +14,7 @@ import {
 	computeCompetitorSoVs,
 	computeOverallSoV,
 	computePromptSoV,
+	computeReportUnstableStats,
 	type FullPromptRun,
 	findContentGaps,
 	type PromptCategory,
@@ -23,6 +24,7 @@ import {
 import { BarChart3, Rocket, Target } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { PromptChartPrint } from "@/components/prompt-chart-print";
+import { ProviderCoverageNote } from "@/components/provider-coverage-note";
 import { ReportAgentPage } from "@/components/report-agent-page";
 // La paleta del reporte sale de un solo módulo, como el resto de las superficies de BeAOS.
 import { type Level, levelFromScore, STATUS_TONE, toneOf } from "@/components/status-tone";
@@ -50,6 +52,11 @@ interface PromptData {
 
 interface PromptRunResult {
 	promptValue: string;
+	/**
+	 * Intentos planeados para este prompt. Ausente en un reporte anterior a que se
+	 * registraran: su cobertura se declara incompleta, no se rellena.
+	 */
+	attempted?: number;
 	runs: Array<{
 		model: string;
 		version: string;
@@ -314,6 +321,24 @@ function ReportRenderPage() {
 
 	const sovLevel = sovLevelEs(overallSoV);
 	const sov = sovTone(overallSoV);
+	// La cobertura de proveedores del reporte. Un SoV sin esto es un número que parece
+	// completo: un reporte con 6 de 9 corridas se veía igual que uno con 9 de 9. Se
+	// calcula acá porque `rawOutput` es la única fuente del reporte renderizado.
+	const providerCoverage = data
+		? computeReportUnstableStats({
+				competitors: filteredCompetitors,
+				promptRuns: (data.promptRuns || []).map((pr) => ({
+					promptValue: pr.promptValue,
+					...(typeof (pr as { attempted?: number }).attempted === "number"
+						? { attempted: (pr as { attempted?: number }).attempted }
+						: {}),
+					runs: (pr.runs || []).map((run) => ({
+						brandMentioned: run.brandMentioned,
+						competitorsMentioned: run.competitorsMentioned || [],
+					})),
+				})),
+			}).providerResponse
+		: undefined;
 	const totalPrompts = mockPrompts.length;
 	const promptsWithMentions = promptSoVs.filter((p) => p.brandMentionCount > 0).length;
 	const mentionRate = totalPrompts > 0 ? Math.round((promptsWithMentions / totalPrompts) * 100) : 0;
@@ -365,6 +390,14 @@ function ReportRenderPage() {
 								<div className="text-xs text-muted-foreground">
 									{sovLevel.label} &mdash; {sovLevel.description}
 								</div>
+								{/* El porcentaje no sale solo: al lado va cuántas corridas no respondieron.
+								    La nota vive en su componente para que la paleta no se repita acá. */}
+								{providerCoverage ? (
+									<ProviderCoverageNote
+										coverage={providerCoverage}
+										className="text-[11px] mt-1 text-muted-foreground"
+									/>
+								) : null}
 							</div>
 						</div>
 						<div className="mt-4 w-full bg-muted rounded-full h-2">
