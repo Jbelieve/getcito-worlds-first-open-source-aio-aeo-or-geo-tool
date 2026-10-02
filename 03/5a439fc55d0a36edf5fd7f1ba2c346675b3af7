@@ -1,0 +1,30 @@
+packages/aos-aps/src/db/schema.ts
+  h_c5ca005a78c880 1,16-45,47-71,73-90,92-109,191-194,201-218,237-308
+packages/lib/package.json
+  h_c5ca005a78c880 14-15
+packages/lib/src/db/brand-isolation.ts
+  h_c5ca005a78c880 1-81
+packages/lib/src/db/migrations/0029_beaos_rls_policies.sql
+  h_c5ca005a78c880 1-14
+packages/lib/src/db/migrations/0030_beaos_app_role.sql
+  h_c5ca005a78c880 1-63
+packages/lib/src/db/migrations/meta/0029_snapshot.json
+  h_c5ca005a78c880 1-3877
+packages/lib/src/db/migrations/meta/0030_snapshot.json
+  h_c5ca005a78c880 1-3877
+packages/lib/src/db/migrations/meta/_journal.json
+  h_c5ca005a78c880 207-220
+packages/lib/src/db/schema.ts
+  h_c5ca005a78c880 15,82,86-103,158,222,265,308,409
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "035a439fc55d0a36edf5fd7f1ba2c346675b3af7",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
