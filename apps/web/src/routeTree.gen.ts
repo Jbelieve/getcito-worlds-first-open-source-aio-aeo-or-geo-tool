@@ -48,6 +48,7 @@ import { Route as ApiV1CompetitorsCompetitorIdRouteImport } from './routes/api/v
 import { Route as ApiV1BrandsBrandIdRouteImport } from './routes/api/v1/brands/$brandId'
 import { Route as ApiV1AosLeadRouteImport } from './routes/api/v1/aos/lead'
 import { Route as ApiV1AosAuditRouteImport } from './routes/api/v1/aos/audit'
+import { Route as ApiV1EnrollRouteImport } from './routes/api/v1/enroll'
 import { Route as ApiV1AgentAssetsEntityIdRouteImport } from './routes/api/v1/agent-assets/$entityId'
 import { Route as AuthedReportsRenderReportIdRouteImport } from './routes/_authed/reports/render/$reportId'
 import { Route as AuthedAppBrandVisibilityRouteImport } from './routes/_authed/app/$brand/visibility'
@@ -271,6 +272,11 @@ const ApiV1AosAuditRoute = ApiV1AosAuditRouteImport.update({
   path: '/api/v1/aos/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1EnrollRoute = ApiV1EnrollRouteImport.update({
+  id: '/api/v1/enroll',
+  path: '/api/v1/enroll',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1AgentAssetsEntityIdRoute =
   ApiV1AgentAssetsEntityIdRouteImport.update({
     id: '/api/v1/agent-assets/$entityId',
@@ -457,6 +463,7 @@ export interface FileRoutesByFullPath {
   '/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
   '/api/v1/agent-assets/$entityId': typeof ApiV1AgentAssetsEntityIdRouteWithChildren
   '/api/v1/aos/audit': typeof ApiV1AosAuditRoute
+  '/api/v1/enroll': typeof ApiV1EnrollRoute
   '/api/v1/aos/lead': typeof ApiV1AosLeadRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
@@ -518,6 +525,7 @@ export interface FileRoutesByTo {
   '/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
   '/api/v1/agent-assets/$entityId': typeof ApiV1AgentAssetsEntityIdRouteWithChildren
   '/api/v1/aos/audit': typeof ApiV1AosAuditRoute
+  '/api/v1/enroll': typeof ApiV1EnrollRoute
   '/api/v1/aos/lead': typeof ApiV1AosLeadRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
@@ -585,6 +593,7 @@ export interface FileRoutesById {
   '/_authed/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
   '/api/v1/agent-assets/$entityId': typeof ApiV1AgentAssetsEntityIdRouteWithChildren
   '/api/v1/aos/audit': typeof ApiV1AosAuditRoute
+  '/api/v1/enroll': typeof ApiV1EnrollRoute
   '/api/v1/aos/lead': typeof ApiV1AosLeadRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
@@ -652,6 +661,7 @@ export interface FileRouteTypes {
     | '/reports/render/$reportId'
     | '/api/v1/agent-assets/$entityId'
     | '/api/v1/aos/audit'
+    | '/api/v1/enroll'
     | '/api/v1/aos/lead'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
@@ -713,6 +723,7 @@ export interface FileRouteTypes {
     | '/reports/render/$reportId'
     | '/api/v1/agent-assets/$entityId'
     | '/api/v1/aos/audit'
+    | '/api/v1/enroll'
     | '/api/v1/aos/lead'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
@@ -779,6 +790,7 @@ export interface FileRouteTypes {
     | '/_authed/reports/render/$reportId'
     | '/api/v1/agent-assets/$entityId'
     | '/api/v1/aos/audit'
+    | '/api/v1/enroll'
     | '/api/v1/aos/lead'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
@@ -821,6 +833,7 @@ export interface RootRouteChildren {
   ApiSetupStatusIndexRoute: typeof ApiSetupStatusIndexRoute
   ApiV1AgentAssetsEntityIdRoute: typeof ApiV1AgentAssetsEntityIdRouteWithChildren
   ApiV1AosAuditRoute: typeof ApiV1AosAuditRoute
+  ApiV1EnrollRoute: typeof ApiV1EnrollRoute
   ApiV1AosLeadRoute: typeof ApiV1AosLeadRoute
   ApiV1BrandsBrandIdRoute: typeof ApiV1BrandsBrandIdRoute
   ApiV1CompetitorsCompetitorIdRoute: typeof ApiV1CompetitorsCompetitorIdRoute
@@ -1109,6 +1122,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/aos/audit'
       fullPath: '/api/v1/aos/audit'
       preLoaderRoute: typeof ApiV1AosAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/enroll': {
+      id: '/api/v1/enroll'
+      path: '/api/v1/enroll'
+      fullPath: '/api/v1/enroll'
+      preLoaderRoute: typeof ApiV1EnrollRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/agent-assets/$entityId': {
@@ -1448,6 +1468,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSetupStatusIndexRoute: ApiSetupStatusIndexRoute,
   ApiV1AgentAssetsEntityIdRoute: ApiV1AgentAssetsEntityIdRouteWithChildren,
   ApiV1AosAuditRoute: ApiV1AosAuditRoute,
+  ApiV1EnrollRoute: ApiV1EnrollRoute,
   ApiV1AosLeadRoute: ApiV1AosLeadRoute,
   ApiV1BrandsBrandIdRoute: ApiV1BrandsBrandIdRoute,
   ApiV1CompetitorsCompetitorIdRoute: ApiV1CompetitorsCompetitorIdRoute,

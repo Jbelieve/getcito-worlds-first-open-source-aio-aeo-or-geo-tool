@@ -40,8 +40,17 @@ const DEMO_AUTH_WRITE_ALLOWLIST = new Set([
  * Superficies públicas de AOS: no llevan credencial porque las usa la extensión, que se instala sin
  * cuenta. Su cota no es un token sino un límite diario por IP más un tope global (ver
  * `lib/aos/public-audit`), así que la autorización no se decide acá.
+ *
+ * `"/api/v1/enroll"` está en la misma lista y por el mismo motivo, pero conviene decir la diferencia:
+ * el audit y el lead son anónimos porque la herramienta es pública; el canje es anónimo porque **el
+ * que llama todavía no tiene credencial** —el código de conexión *es* la credencial—. Exigirle la
+ * llave de `/api/v1/*` sería mandar `ADMIN_API_KEYS` al WordPress del cliente, que es exactamente lo
+ * que este endpoint existe para evitar. Su cota es el cupo por IP del carril `enroll`, más chico que
+ * el del audit.
+ *
+ * La lista es **exacta**: un path hermano sigue pidiendo credencial (ver los tests de `policies`).
  */
-const PUBLIC_AOS_PATHS = new Set(["/api/v1/aos/audit", "/api/v1/aos/lead"]);
+const PUBLIC_AOS_PATHS = new Set(["/api/v1/aos/audit", "/api/v1/aos/lead", "/api/v1/enroll"]);
 
 /**
  * De las públicas, la única que tampoco escribe nada: el audit es una medición al paso.
