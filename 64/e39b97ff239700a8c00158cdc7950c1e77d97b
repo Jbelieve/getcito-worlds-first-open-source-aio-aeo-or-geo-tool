@@ -1,0 +1,28 @@
+apps/web/src/lib/aos/__tests__/public-enroll.test.ts
+  h_c5ca005a78c880 1-134
+apps/web/src/lib/aos/public-audit.ts
+  h_c5ca005a78c880 20-30,53-75,141-150,180-181,220,236-245,248-250,255-268
+apps/web/src/lib/aos/public-limit.server.ts
+  h_c5ca005a78c880 27,36,45-54,59,178-180,185,190,195
+apps/web/src/lib/auth/policies.ts
+  h_c5ca005a78c880 43-51,53
+apps/web/src/lib/enrollment.server.ts
+  h_c5ca005a78c880 1-192
+apps/web/src/lib/enrollment.ts
+  h_c5ca005a78c880 1-101
+apps/web/src/routeTree.gen.ts
+  h_c5ca005a78c880 51,275-279,466,528,596,664,726,793,836,1127-1133,1471
+apps/web/src/routes/api/v1/enroll.ts
+  h_c5ca005a78c880 1-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "64e39b97ff239700a8c00158cdc7950c1e77d97b",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
