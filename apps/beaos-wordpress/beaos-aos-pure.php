@@ -253,22 +253,155 @@ function beaos_aos_route_path( $request_uri, $home_path = '/' ) {
 	return $path;
 }
 
+// ── La lista blanca de rutas ────────────────────────────────────────────────────────────────────
+//
+// El manifiesto es la **única** fuente de verdad de qué sirve el plugin, así que sin lista blanca
+// cualquier ruta del manifiesto se sirve. Y el enganche es `init` con prioridad 0: una entrada para
+// `/wp-login.php` le gana al core y **tapa la pantalla de login** (probado en el WordPress local:
+// 66 B del señuelo en lugar de los 10.098 B del login). No hace falta un atacante: un bug en el
+// generador que emita una ruta de más deja al cliente sin poder entrar a su WordPress.
+//
+// La regla es la **forma del kit**, no la lista de los archivos de hoy:
+//
+//   1. los archivos fijos que el kit publica **en la raíz** —lista exacta, y por qué exacta: en la
+//      raíz viven `wp-login.php`, `wp-config.php` e `index.php`, y ninguna forma (extensión,
+//      cantidad de segmentos) distingue un asset del kit de un archivo del core salvo el nombre—;
+//   2. **todo lo que cuelga de `/.well-known/`** (RFC 8615), que es donde el kit pone sus diez
+//      archivos de descubrimiento; el prefijo es lo que hace que un asset nuevo (una spec nueva, una
+//      firma nueva) se sirva **sin tocar el plugin**.
+//
+// Nada más. Ni `/wp-admin`, ni `/wp-login.php`, ni `/wp-config.php`, ni `/wp-json`, ni `/index.php`,
+// ni ningún `.php`, ni ningún HTML suelto de la raíz.
+//
+// Segunda capa, a propósito y no porque la primera falle: `beaos_aos_denied_path()` rechaza de forma
+// **explícita** lo peligroso conocido y todo `.php`, antes de mirar la forma. Si algún día alguien
+// afloja la forma (por ejemplo "cualquier archivo de la raíz"), esto sigue en pie.
+//
+// La lista no puede desincronizarse del generador: `tests/pure.php` lee
+// `packages/aos-aps/src/assets/generate.ts` y falla si el kit emite una ruta que esta lista blanca
+// rechazaría. El día que el generador agregue un asset en la raíz, el test lo dice.
+
+/** Los archivos fijos que el kit publica en la raíz. Es lo que el generador emite hoy, sin inventar. */
+const BEAOS_AOS_ROOT_PATHS = array(
+	'/llms.txt',
+	'/llms-full.txt',
+	'/AGENTS.md',
+	'/robots.txt',
+	'/sitemap.xml',
+);
+
+/** El prefijo del descubrimiento. Todo lo que cuelga de acá es del kit, por convención. */
+const BEAOS_AOS_WELL_KNOWN = '/.well-known/';
+
 /**
- * ¿Esta ruta es de las que el kit puede reclamar? La raíz no, una ruta relativa tampoco, y una con `..`
- * menos: el manifiesto sólo trae rutas absolutas y esa es la única fuente de verdad.
+ * Las rutas peligrosas conocidas. La regla del `.php` ya las cubre casi todas; están igual porque una
+ * lista explícita se lee y se audita, y porque es la capa que no depende de que la forma siga bien.
  */
-function beaos_aos_claimable_path( $path ) {
-	$path = (string) $path;
-	if ( '' === $path || '/' === $path ) {
+const BEAOS_AOS_DENIED_PATHS = array(
+	'/wp-admin',
+	'/wp-login.php',
+	'/wp-config.php',
+	'/wp-config-sample.php',
+	'/wp-json',
+	'/wp-content',
+	'/wp-includes',
+	'/index.php',
+	'/xmlrpc.php',
+	'/wp-cron.php',
+	'/wp-settings.php',
+	'/wp-load.php',
+	'/wp-blog-header.php',
+	'/wp-signup.php',
+	'/wp-activate.php',
+	'/wp-mail.php',
+	'/wp-trackback.php',
+	'/wp-comments-post.php',
+	'/wp-links-opml.php',
+	'/readme.html',
+	'/.htaccess',
+	'/.env',
+);
+
+/**
+ * ¿Esta ruta está en la lista explícita de lo prohibido? Sí para todo `.php` (sin importar dónde
+ * cuelgue, incluido `/.well-known/`) y para las rutas del core y del panel, con o sin barra final.
+ */
+function beaos_aos_denied_path( $path ) {
+	$path = strtolower( (string) $path );
+	if ( '' === $path ) {
 		return false;
+	}
+	if ( '.php' === substr( $path, -4 ) ) {
+		return true;
+	}
+	foreach ( BEAOS_AOS_DENIED_PATHS as $denied ) {
+		if ( $path === $denied || 0 === strpos( $path, $denied . '/' ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Por qué una ruta **no** se puede reclamar, o `''` si sí se puede. Un solo lugar decide, y el motivo
+ * es el que ven el panel y el log: el que rechaza una ruta tiene que poder decir cuál y por qué.
+ *
+ * El orden importa: primero las guardas de forma (absoluta, sin `..`, larga y con el juego de
+ * caracteres que usa el kit), después lo prohibido explícito, y recién al final la forma del kit. Así
+ * un `/.well-known/algo.php` no se salva por colgar de `.well-known/`.
+ */
+function beaos_aos_rejection_reason( $path ) {
+	$path = (string) $path;
+
+	if ( '' === $path || '/' === $path ) {
+		return 'no es la ruta de un archivo';
 	}
 	if ( '/' !== substr( $path, 0, 1 ) ) {
-		return false;
+		return 'no es una ruta absoluta';
 	}
 	if ( false !== strpos( $path, '..' ) ) {
-		return false;
+		return 'tiene ..';
 	}
-	return strlen( $path ) <= 256;
+	if ( strlen( $path ) > 256 ) {
+		return 'es más larga que 256 caracteres';
+	}
+	if ( ! preg_match( '#^/[A-Za-z0-9._/-]+$#', $path ) ) {
+		return 'tiene caracteres que ninguna ruta del kit usa';
+	}
+	if ( beaos_aos_denied_path( $path ) ) {
+		return 'está en la lista de rutas prohibidas';
+	}
+	if ( in_array( $path, BEAOS_AOS_ROOT_PATHS, true ) ) {
+		return '';
+	}
+	if ( 0 === strpos( $path, BEAOS_AOS_WELL_KNOWN ) && strlen( $path ) > strlen( BEAOS_AOS_WELL_KNOWN ) ) {
+		return '';
+	}
+	return 'no tiene forma de kit';
+}
+
+/** ¿Esta ruta es de las que el kit puede reclamar? Sí sólo si tiene forma de kit y no está prohibida. */
+function beaos_aos_claimable_path( $path ) {
+	return '' === beaos_aos_rejection_reason( $path );
+}
+
+/**
+ * Las rutas guardadas en la copia local que la lista blanca ya **no** acepta. Debería ser siempre
+ * vacío; no lo es cuando la opción quedó envenenada (una versión vieja del plugin, o alguien que la
+ * escribió a mano). Se calcula para poder decirlo en el panel: el plugin las ignora al servir, pero
+ * que se vean es la mitad del arreglo.
+ */
+function beaos_aos_rejected_assets( $assets ) {
+	$out = array();
+	if ( ! is_array( $assets ) ) {
+		return $out;
+	}
+	foreach ( array_keys( $assets ) as $path ) {
+		if ( ! beaos_aos_claimable_path( $path ) ) {
+			$out[] = (string) $path;
+		}
+	}
+	return $out;
 }
 
 // ── La copia local del kit ──────────────────────────────────────────────────────────────────────
@@ -304,7 +437,9 @@ function beaos_aos_asset_decision( array $entry, $body, $previous = null ) {
 	$type = isset( $entry['type'] ) ? trim( (string) $entry['type'] ) : '';
 
 	if ( ! beaos_aos_claimable_path( $path ) ) {
-		return beaos_aos_decision( 'skip', 'la ruta no es servible' );
+		// `skip` = se ignora esa entrada y el resto del kit sigue: una ruta mala no puede tumbar el kit
+		// entero. El motivo viaja al panel y al log (ver `beaos_aos_log_rejected_route()`).
+		return beaos_aos_decision( 'skip', beaos_aos_rejection_reason( $path ) );
 	}
 	if ( ! preg_match( '/^[a-f0-9]{64}$/', $sha ) ) {
 		return beaos_aos_decision( 'skip', 'el manifiesto no trae un sha256 legible' );
@@ -387,6 +522,21 @@ function beaos_aos_bundle( array $assets, $bundle_sha256, $synced_ts, $state, $e
 		'error'         => (string) $error,
 		'assets'        => $assets,
 	);
+}
+
+/**
+ * El mensaje de los archivos descartados en una corrida, acotado: un manifiesto con cientos de rutas
+ * malas no puede inflar la opción del kit con un texto sin fin. Los primeros se nombran, el resto se
+ * cuenta.
+ */
+function beaos_aos_discarded_message( array $bad, $max = 10 ) {
+	$max = max( 1, (int) $max );
+	if ( ! $bad ) {
+		return '';
+	}
+	$shown = array_slice( $bad, 0, $max );
+	$resto = count( $bad ) - count( $shown );
+	return 'descartados: ' . implode( ', ', $shown ) . ( $resto > 0 ? ', y ' . $resto . ' más' : '' );
 }
 
 /**
