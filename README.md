@@ -434,6 +434,44 @@ The public contract is unchanged: same 13 response keys, same `RateLimit-*` head
 `aos-audit` policy name. When the credential is valid those headers describe the `verify` quota,
 which is only observable to a caller that already presented the secret.
 
+### `POST /api/v1/enroll` — el código de conexión de un sitio
+
+The third anonymous endpoint, and anonymous for a different reason than the two above: **the caller does
+not have a credential yet** — the enrollment code *is* the credential. It exists so a WordPress (or any
+other site) can get **its own** product token without `ADMIN_API_KEYS` ever leaving BeAOS: that master
+key opens every brand, cannot be revoked per site and has no identity.
+
+```bash
+# 1 · En BeAOS: Configuración → Brand → "Generar código de conexión",
+#     o en el servidor:
+scripts/beaos-enroll.sh create <brandId> <entityId> wordpress-mi-sitio
+
+# 2 · El sitio lo canjea UNA vez:
+curl -i -X POST https://beaos.believe-global.com/api/v1/enroll \
+  -H "Content-Type: application/json" \
+  -d '{"code":"beaos_…"}'
+# → {"token":"beaos_…","brandId":"…","entityId":"…"}
+```
+
+- The code is `beaos_` + base64url of 24 random bytes, is valid for **24 hours**, is bound to **one
+  brand and one entity**, and is stored as **sha256 only**: the clear code exists exactly once, when it
+  is generated. Lose it and you generate another.
+- **It can be redeemed exactly once.** The use mark is a single statement
+  (`UPDATE … WHERE code_hash = $1 AND used_at IS NULL AND expires_at > now() RETURNING brand_id,
+  entity_id`) inside the same transaction that issues the token, so two simultaneous redemptions cannot
+  both win: the loser gets no row back, waits on the row lock and re-evaluates against the committed
+  version. There is no window between the check and the mark because they are the same operation.
+- Invalid, expired and already-used codes all answer the **same** `400` with the same message: telling
+  them apart would confirm to a prober which codes exist. The real reason goes to the server log.
+- Rate limited per IP with the **same counter** as the public audit (`aos_public_usage`), as one more
+  lane (`enroll`) with its own bucket and its own small cap: `AOS_PUBLIC_ENROLL_PER_DAY` (default 10) and
+  `AOS_PUBLIC_ENROLL_PER_DAY_GLOBAL` (default 200). Same hashed IP, same UTC day, same
+  `insert … on conflict … where count < limit` and the same `RateLimit-*` headers, which is why there is
+  no second counter to keep in sync. The global pool is separate on purpose: an enrollment attack must
+  not switch off the public meter, and a pile of audits must not stop customers from connecting.
+- Deployment mode `demo` blocks it (it writes a token, unlike the audit) and `ADMIN_API_KEYS` is not
+  involved anywhere in this flow.
+
 ## Database
 
 - **PostgreSQL 16+**, accessed via **Drizzle ORM** (schema in `packages/lib/src/db`). Docker Compose defaults new installations to PostgreSQL 18.

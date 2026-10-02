@@ -499,9 +499,23 @@ export function rateLimitHeaders(
 	return headers;
 }
 
-/** Cabeceras del 429: las mismas cinco más el `Retry-After`. */
-export function rateLimitedResponse(decision: QuotaDecision, message: string): Response {
-	return Response.json({ error: "Too Many Requests", message }, { status: 429, headers: rateLimitHeaders(decision) });
+/**
+ * Cabeceras del 429: las mismas cinco más el `Retry-After`.
+ *
+ * `policy` es el nombre de la política que decide, y **no siempre es `aos-audit`**: el canje de códigos
+ * de conexión usa el mismo contador y las mismas cabeceras, con su propia etiqueta (`ENROLL_POLICY`),
+ * porque quien lee un log o un `curl` tiene que poder decir de qué límite le están hablando. El default
+ * queda en la del audit para no cambiarle el contrato a los llamadores que ya existían.
+ */
+export function rateLimitedResponse(
+	decision: QuotaDecision,
+	message: string,
+	policy: string = PUBLIC_AUDIT_POLICY,
+): Response {
+	return Response.json(
+		{ error: "Too Many Requests", message },
+		{ status: 429, headers: rateLimitHeaders(decision, policy) },
+	);
 }
 
 /** Mezcla las cabeceras de límite en una respuesta que ya existe. */

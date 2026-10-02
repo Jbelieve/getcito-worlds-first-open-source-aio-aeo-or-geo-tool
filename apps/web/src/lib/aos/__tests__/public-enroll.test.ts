@@ -26,6 +26,7 @@ import {
 	quotaGlobalLimitForLane,
 	quotaLimitForLane,
 	rateLimitHeaders,
+	rateLimitedResponse,
 	VERIFY_QUOTA_BUCKET,
 } from "@/lib/aos/public-audit";
 
@@ -130,5 +131,30 @@ describe("el carril `enroll` del contador", () => {
 			"RateLimit-Reset",
 		]);
 		expect(headers["Retry-After"]).toBeUndefined();
+	});
+
+	it("el 429 dice `enroll`, no `aos-audit`: quien lee el log tiene que saber de qué límite es", async () => {
+		const limits = publicAuditLimits({});
+		const agotado = decidePublicQuota({
+			ipCount: quotaLimitForLane("enroll", limits),
+			globalCount: 0,
+			ipLimit: quotaLimitForLane("enroll", limits),
+			globalLimit: quotaGlobalLimitForLane("enroll", limits),
+			now: new Date("2026-03-14T22:30:00.000Z"),
+		});
+		const response = rateLimitedResponse(
+			agotado,
+			"Alcanzaste el límite de 10 intentos de conexión por día.",
+			ENROLL_POLICY,
+		);
+		expect(response.status).toBe(429);
+		expect(response.headers.get("RateLimit-Policy")).toContain(ENROLL_POLICY);
+		expect(response.headers.get("RateLimit-Policy")).not.toContain("aos-audit");
+		expect(response.headers.get("Retry-After")).not.toBeNull();
+		await expect(response.json()).resolves.toMatchObject({ error: "Too Many Requests" });
+
+		// Y el default sigue siendo el del audit: el contrato de la extensión pública no cambió.
+		const porDefecto = rateLimitedResponse(agotado, "…");
+		expect(porDefecto.headers.get("RateLimit-Policy")).toContain("aos-audit");
 	});
 });

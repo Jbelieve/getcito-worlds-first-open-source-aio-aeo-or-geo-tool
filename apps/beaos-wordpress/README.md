@@ -25,12 +25,9 @@ Sin dependencias: PHP 7.4+, WordPress 6.0+, ningún paquete de Composer ni de np
 | Cron y candado de corrida | **Listo** |
 | Página de ajustes (con categoría y token) | **Lista** |
 | Cliente del MCP (`class-beaos-mcp.php`) | **Listo** |
+| **Canje del código de conexión** (paso 1, flujo A) | **Listo** |
 | Desinstalación limpia | **Lista** |
-| Asistente de 3 pasos (conectar → la marca → generar y publicar) | **Falta**: depende de qué flujo de conexión elija Jorge |
-| Canje del código de conexión | **Falta**: depende del mismo flujo |
-
-Mientras tanto el **flujo manual funciona**: se crea un token por producto en BeAOS, se saca el
-`entityId` y se pegan los dos en los ajustes.
+| Asistente de 3 pasos completo (conectar → la marca → generar y publicar) | **Falta**: los pasos 2 y 3 |
 
 ## Instalar
 
@@ -42,14 +39,27 @@ Mientras tanto el **flujo manual funciona**: se crea un token por producto en Be
 
 **Ajustes → BeAOS by Believe.**
 
-### Conexión
+### Conexión: el código de un solo uso
 
-- **Token del producto**: tiene que ser un token **por producto** de BeAOS
-  (`scripts/beaos-token.sh create wordpress-tu-sitio`), **no** una llave maestra. Una llave maestra
-  (`ADMIN_API_KEYS`) abre todas las marcas y no se puede revocar por sitio. El campo se pinta vacío y
-  dejarlo vacío al guardar **conserva** el token guardado, para que la credencial no viaje al navegador.
-- **Id de la marca** (`brandId`): lo devuelve `ensure_brand`; por ejemplo `perez-com`.
-- **Entity id**: el UUID de la entidad, que sale de `get_brand`. Sin esto no hay a quién pedirle el kit.
+1. En BeAOS, **Configuración → Brand → "Generar código de conexión"** (o, en el servidor,
+   `scripts/beaos-enroll.sh create <brandId> <entityId> wordpress-tu-sitio`). El código se muestra
+   **una sola vez**: en BeAOS queda sólo su hash.
+2. Pegarlo acá y tocar **Conectar**. El plugin lo canjea en `POST /api/v1/enroll` y guarda lo que BeAOS
+   devuelve: el token **de este sitio**, su `brandId` y su `entityId`.
+
+El código sirve **una sola vez**, vence en **24 horas** y está atado a **una marca y una entidad**. Lo que
+viaja a este WordPress es un secreto corto y revocable por sitio, nunca `ADMIN_API_KEYS`.
+
+**Es el único `/api/v1/*` que el plugin usa, y puede usarlo porque es público**: no pide credencial previa
+—el código *es* la credencial— y su cota es un cupo de intentos por IP. Cualquier otro `/api/v1/*` valida
+sólo contra la llave maestra, así que no se usa: el test puro tiene la guarda que lo exige.
+
+Los cuatro campos de abajo (token, marca, entidad) los llena la conexión sola; quedan a la vista para
+revisar o corregir a mano. El token nunca se imprime en el navegador: un vacío al guardar **conserva** el
+que ya está.
+
+Si el canje falla, el aviso dice por qué: **código vencido o ya usado**, o **límite de intentos
+alcanzado**. Un canje fallido no toca la credencial que ya estuviera guardada.
 
 ### La marca
 

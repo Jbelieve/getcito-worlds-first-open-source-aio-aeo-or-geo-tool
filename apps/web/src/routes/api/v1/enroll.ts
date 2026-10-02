@@ -68,7 +68,7 @@ export const Route = createFileRoute("/api/v1/enroll")({
 							quota.reason === "global_limit"
 								? "El canje de códigos alcanzó su tope diario. Probá más tarde."
 								: `Alcanzaste el límite de ${quota.limit} intentos de conexión por día.`;
-						return rateLimitedResponse(quota, message);
+						return rateLimitedResponse(quota, message, ENROLL_POLICY);
 					}
 
 					// 2. El canje. Devuelve el token una sola vez, o nada.
