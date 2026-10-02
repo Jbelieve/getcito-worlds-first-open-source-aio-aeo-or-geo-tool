@@ -1,0 +1,16 @@
+apps/beaos-wordpress/beaos-aos-pure.php
+  h_c5ca005a78c880 256-295,297-298,300-353,355,357,360,363-402,404,440-442,527-541
+apps/beaos-wordpress/beaos-aos.php
+  h_c5ca005a78c880 114-151,230-236,272,310-314,316-318,438-448,451,453,457-458
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "91d21bd68b64edf7eb805b022e2418e763006fb8",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
