@@ -18,10 +18,23 @@ describe("queryTargetsFrom", () => {
 		expect(targets.map((target) => target.target)).toEqual(["chatgpt", "claude"]);
 		expect(duplicateModels).toEqual([]);
 
-		// Each client passes its own config through, so provider and version are not lost.
+		// Cada cliente pasa su propio config, así que el proveedor y la versión no se
+		// pierden. El texto suelto se normaliza: sin versión reportada, no hay clave.
 		const answer = await targets[1]?.query("mejor opcion");
-		expect(answer).toBe("respuesta de claude");
+		expect(answer).toEqual({ text: "respuesta de claude" });
 		expect(calls).toEqual([{ provider: "anthropic-api", prompt: "mejor opcion" }]);
+	});
+
+	it("arrastra la versión del modelo cuando el invocador la informa", async () => {
+		const { targets } = queryTargetsFrom([config({ model: "claude", provider: "anthropic-api" })], async () => ({
+			text: "respuesta de claude",
+			modelVersion: "claude-sonnet-4-5-20250929",
+		}));
+
+		expect(await targets[0]?.query("mejor opcion")).toEqual({
+			text: "respuesta de claude",
+			modelVersion: "claude-sonnet-4-5-20250929",
+		});
 	});
 
 	it("keeps the first config when two share a model and reports the collision", () => {

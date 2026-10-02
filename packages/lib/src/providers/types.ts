@@ -30,6 +30,21 @@ export interface ScrapeResult {
 	rawOutput: unknown;
 	webQueries: string[];
 	citations: Citation[];
+	/**
+	 * El modelo que el proveedor **informó** en su respuesta, o ausente cuando no lo
+	 * informó.
+	 *
+	 * Es un hecho distinto del alias pedido, y por eso va aparte: un scraper que no lo
+	 * reporta deja este campo ausente (nunca el nombre pedido). Ver
+	 * `resolveReportedModelVersion` en `./model-version`.
+	 */
+	reportedModelVersion?: string;
+	/**
+	 * **Legado.** Lo que cada implementación devolvía como "versión" con semántica
+	 * mixta: a veces la reportada, a veces el alias pedido. Se conserva porque los
+	 * caminos de research lo usan como identificador a mostrar, pero lo que se persiste
+	 * para medir es `reportedModelVersion`.
+	 */
 	modelVersion?: string;
 	/** Consumo que reportó el proveedor. Ausente cuando no lo reporta (scrapers). */
 	usage?: ProviderUsage;
@@ -71,6 +86,11 @@ export interface StructuredResearchResult<T> {
 	object: T;
 	/** Resolved model id (after any `:online` suffixing etc.). */
 	modelVersion?: string;
+	/**
+	 * El modelo que el proveedor **informó** en su respuesta, o ausente cuando no lo
+	 * informó. Misma regla que en `ScrapeResult`: nunca el nombre pedido.
+	 */
+	reportedModelVersion?: string;
 	/**
 	 * Consumo y costo que reportó el proveedor, igual que en `ScrapeResult`.
 	 *

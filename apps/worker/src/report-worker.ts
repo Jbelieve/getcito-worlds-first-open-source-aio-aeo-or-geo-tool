@@ -14,6 +14,7 @@ import {
 	getProvider,
 	type ModelConfig,
 	parseScrapeTargets,
+	resolveReportedModelVersion,
 	withProviderCallTracking,
 } from "@workspace/lib/providers";
 import { computeSystemTags, isPromptBranded } from "@workspace/lib/tag-utils";
@@ -79,9 +80,20 @@ export interface ReportJobContext {
 
 interface PromptRunResult {
 	promptValue: string;
+	/**
+	 * Cuántos intentos se planearon para este prompt. `undefined` en un reporte viejo
+	 * que no lo guardó: la cobertura de ese histórico no se puede reconstruir.
+	 */
+	attempted?: number;
 	runs: Array<{
 		model: string;
+		/** El modelo **pedido** (el alias de SCRAPE_TARGETS). */
 		version: string;
+		/**
+		 * El modelo que **contestó**, cuando el proveedor lo informó. `undefined` es "no
+		 * lo informó", nunca el nombre pedido. Ver `resolveReportedModelVersion`.
+		 */
+		reportedModelVersion?: string;
 		webSearchEnabled: boolean;
 		rawOutput: any;
 		webQueries: string[];
@@ -258,9 +270,15 @@ async function runPrompt(
 				brandWebsite,
 				competitors,
 			);
+			const reportedVersion = resolveReportedModelVersion(result.reportedModelVersion);
 			return {
 				model: config.model,
-				version: result.modelVersion ?? config.version ?? config.provider,
+				// Legado: se sigue escribiendo para no romper a quien lo lee, pero el pedido
+				// y la respuesta ya no se mezclan.
+				version: reportedVersion ?? config.version ?? config.provider,
+				plannedVersion: config.version ?? config.provider,
+				// Solo cuando el proveedor lo informó. Sin dato, la clave no viaja.
+				...(reportedVersion === null ? {} : { reportedModelVersion: reportedVersion }),
 				webSearchEnabled: config.webSearch,
 				rawOutput: result.rawOutput,
 				webQueries: result.webQueries,
@@ -288,6 +306,8 @@ async function runPrompt(
 
 	return {
 		promptValue,
+		// El denominador planeado, para que la cobertura del reporte se pueda declarar.
+		attempted: runPromises.length,
 		runs: runResults,
 	};
 }
@@ -402,9 +422,12 @@ export async function processReportJob(job: ReportJobContext) {
 		const candidateResults: Array<{
 			promptValue: string;
 			brandedPrompt: boolean;
+			attempted?: number;
 			runs: Array<{
 				model: string;
 				version: string;
+				plannedVersion?: string;
+				reportedModelVersion?: string;
 				webSearchEnabled: boolean;
 				rawOutput: any;
 				webQueries: string[];
@@ -443,6 +466,9 @@ export async function processReportJob(job: ReportJobContext) {
 					candidateResults.push({
 						promptValue: candidate.prompt,
 						brandedPrompt: candidate.brandedPrompt,
+						// No hay prompt guardado para este candidato, así que tampoco hay plan
+						// que declarar.
+						attempted: undefined,
 						runs: [],
 					});
 					continue;
@@ -461,6 +487,8 @@ export async function processReportJob(job: ReportJobContext) {
 				const formattedRuns = Array.from(latestByModel.values()).map((r) => ({
 					model: r.model,
 					version: r.version,
+					plannedVersion: r.requestedVersion ?? undefined,
+					...(r.reportedModelVersion === null ? {} : { reportedModelVersion: r.reportedModelVersion }),
 					webSearchEnabled: r.webSearchEnabled,
 					rawOutput: r.rawOutput,
 					webQueries: r.webQueries,
@@ -472,6 +500,9 @@ export async function processReportJob(job: ReportJobContext) {
 				candidateResults.push({
 					promptValue: candidate.prompt,
 					brandedPrompt: candidate.brandedPrompt,
+					// `useExistingData` lee lo que ya está guardado: no sabe cuántos intentos
+					// se planearon ni cuántos fallaron. No se inventa; queda sin dato.
+					attempted: undefined,
 					runs: formattedRuns,
 				});
 			}
@@ -506,6 +537,9 @@ export async function processReportJob(job: ReportJobContext) {
 						return {
 							promptValue: candidate.prompt,
 							brandedPrompt: candidate.brandedPrompt,
+							// El fallo es del prompt entero y no quedó registrado el plan: no se
+							// inventa un denominador.
+							attempted: undefined,
 							runs: [],
 						};
 					}
@@ -543,6 +577,7 @@ export async function processReportJob(job: ReportJobContext) {
 		for (const result of selectedPromptResults) {
 			promptRuns.push({
 				promptValue: result.promptValue,
+				...(result.attempted === undefined ? {} : { attempted: result.attempted }),
 				runs: result.runs,
 			});
 			completedFinalRuns++;

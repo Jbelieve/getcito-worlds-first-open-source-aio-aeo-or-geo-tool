@@ -6,6 +6,7 @@ import {
 	type Competitor,
 	citations,
 	competitors,
+	promptRunAttempts,
 	promptRuns,
 	prompts,
 } from "@workspace/lib/db/schema";
@@ -15,6 +16,7 @@ import {
 	type ModelConfig,
 	type Provider,
 	parseScrapeTargets,
+	resolveReportedModelVersion,
 	selectTargetsForBrand,
 	withProviderCallTracking,
 } from "@workspace/lib/providers";
@@ -142,7 +144,12 @@ async function savePromptRun(
 	brandId: string,
 	model: string,
 	provider: string | null,
-	version: string,
+	requestedVersion: string,
+	/**
+	 * La versión que reportó el proveedor, o `null` cuando no la informó. Nunca el
+	 * nombre pedido: pedido y respuesta son dos datos distintos.
+	 */
+	reportedModelVersion: string | null,
 	webSearchEnabled: boolean,
 	rawOutput: unknown,
 	webQueries: string[],
@@ -156,7 +163,11 @@ async function savePromptRun(
 			brandId,
 			model,
 			provider,
-			version,
+			// Legado: se sigue escribiendo para no romper a quien lee `version`, pero ahora
+			// el pedido y la respuesta también viven en sus propias columnas.
+			version: reportedModelVersion ?? requestedVersion,
+			requestedVersion,
+			reportedModelVersion,
 			webSearchEnabled,
 			rawOutput,
 			webQueries,
@@ -166,6 +177,33 @@ async function savePromptRun(
 		.returning({ id: promptRuns.id, createdAt: promptRuns.createdAt });
 
 	return result;
+}
+
+/**
+ * Registra el intento —haya respondido o no— y devuelve la fila de `prompt_runs` que
+ * produjo, si produjo.
+ *
+ * Es el denominador honesto de la medición: sin esta fila, un fallo de proveedor no
+ * aparecía como fallo y el Share of Voice se calculaba sobre las corridas que salieron
+ * bien, así que una caída **subía** el porcentaje.
+ */
+async function savePromptRunAttempt(input: {
+	promptId: string;
+	brandId: string;
+	model: string;
+	provider: string | null;
+	runIndex: number;
+	cycleDate: string;
+	success: boolean;
+	errorMessage: string | null;
+	promptRunId: string | null;
+}): Promise<void> {
+	await db.insert(promptRunAttempts).values(input);
+}
+
+/** Día del ciclo en UTC, `YYYY-MM-DD`: agrupa los intentos de una misma corrida. */
+export function cycleDateOf(now: Date): string {
+	return now.toISOString().slice(0, 10);
 }
 
 async function saveCitations(
@@ -201,6 +239,7 @@ async function runModelIteration({
 	config,
 	providerImpl,
 	runIndex,
+	cycleDate,
 }: {
 	promptId: string;
 	promptValue: string;
@@ -209,7 +248,8 @@ async function runModelIteration({
 	config: ModelConfig;
 	providerImpl: Provider;
 	runIndex: number;
-}): Promise<void> {
+	cycleDate: string;
+}): Promise<{ promptRunId: string }> {
 	const logPrefix = `[${config.model}_${runIndex}]`;
 
 	// Locale and web search silently degrade rather than fail: a provider with no
@@ -239,21 +279,25 @@ async function runModelIteration({
 	// fan-out page excludes verbatim repeats at read time as a display rule;
 	// providers whose query field is fabricated (DataForSEO) write the
 	// `unavailable` sentinel in their own extractor instead.
-	const { rawOutput, textContent, webQueries, citations: extractedCitations, modelVersion } = result;
+	const { rawOutput, textContent, webQueries, citations: extractedCitations, reportedModelVersion } = result;
 	console.log(`${logPrefix} AI call completed, textContent length: ${textContent?.length ?? "null"}`);
 
 	const safeTextContent = typeof textContent === "string" ? textContent : "";
 
 	const { brandMentioned, competitorsMentioned } = analyzeMentions(safeTextContent, brand, competitorsList);
 
-	const recordedVersion = modelVersion ?? config.version ?? config.provider;
+	// El modelo **pedido** y el que **contestó** son dos datos distintos. Acá no se
+	// coalescen: `reportedVersion` es la versión que el proveedor informó, o `null` si no
+	// la informó. El nombre pedido nunca se escribe como si fuera la respuesta.
+	const reportedVersion = resolveReportedModelVersion(reportedModelVersion);
 
 	const { id: promptRunId, createdAt } = await savePromptRun(
 		promptId,
 		brand.id,
 		config.model,
 		config.provider,
-		recordedVersion,
+		config.version ?? config.provider,
+		reportedVersion,
 		config.webSearch,
 		rawOutput,
 		webQueries,
@@ -262,7 +306,23 @@ async function runModelIteration({
 	);
 	console.log(`${logPrefix} Saved prompt run ${promptRunId}`);
 
+	// El intento exitoso también queda en el denominador: es un renglón por combinación
+	// prompt x modelo x repetición, responda o no.
+	await savePromptRunAttempt({
+		promptId,
+		brandId: brand.id,
+		model: config.model,
+		provider: config.provider,
+		runIndex,
+		cycleDate,
+		success: true,
+		errorMessage: null,
+		promptRunId,
+	});
+
 	await saveCitations(promptRunId, promptId, brand.id, config.model, extractedCitations, createdAt);
+
+	return { promptRunId };
 }
 
 /**
@@ -313,15 +373,25 @@ export async function processPromptJob(jobs: Job<ProcessPromptData>[]): Promise<
 		console.log(`Processing prompt "${prompt.value}" for brand "${brand.name}"`);
 
 		// Run all model iterations in parallel
-		const runPromises: Promise<void>[] = [];
+		const runPromises: Promise<{ promptRunId: string }>[] = [];
 		// Same order as runPromises, so a rejection can name the model that failed
 		// instead of an index into the (shorter) failures array.
 		const runLabels: string[] = [];
+		/**
+		 * Cada plan: modelo, proveedor, repetición. Es lo que se registra como intento
+		 * responda o no, así que el denominador de la medición es exactamente lo
+		 * planificado y no lo que sobrevivió.
+		 */
+		const runPlans: Array<{ model: string; provider: string; runIndex: number }> = [];
+		// Un solo día para todo el ciclo: agrupa los intentos de la corrida sin depender
+		// del orden de escritura.
+		const cycleDate = cycleDateOf(new Date());
 
 		for (const config of selectedConfigs) {
 			const providerImpl = getProvider(config.provider);
 			for (let i = 0; i < RUNS_PER_PROMPT; i++) {
 				runLabels.push(`${config.model}_${i + 1}`);
+				runPlans.push({ model: config.model, provider: config.provider, runIndex: i + 1 });
 				runPromises.push(
 					runModelIteration({
 						promptId,
@@ -331,6 +401,7 @@ export async function processPromptJob(jobs: Job<ProcessPromptData>[]): Promise<
 						config,
 						providerImpl,
 						runIndex: i + 1,
+						cycleDate,
 					}),
 				);
 			}
@@ -350,6 +421,41 @@ export async function processPromptJob(jobs: Job<ProcessPromptData>[]): Promise<
 				.join("; ");
 
 			console.error(`Prompt ${promptId} had ${failures.length}/${runPromises.length} failed runs: ${errorMessages}`);
+		}
+
+		/**
+		 * Los fallos se **persisten**, no solo se loguean.
+		 *
+		 * Antes de esto, un ciclo con proveedores caídos no dejaba ninguna fila: el único
+		 * rastro durable era `provider_calls.success = false`, y el SoV se calculaba sobre
+		 * las corridas que sí habían salido. Con este registro, el denominador incluye los
+		 * intentos que fallaron y la cobertura se puede publicar como "N de M".
+		 *
+		 * Best-effort a propósito: si la fila de intento no se puede escribir, el ciclo ya
+		 * falló y no tiene sentido tirar el trabajo que sí se hizo. Se loguea.
+		 */
+		const failedAttempts = results
+			.map((result, i) => (result.status === "rejected" ? { plan: runPlans[i], reason: result.reason } : null))
+			.filter((entry): entry is { plan: (typeof runPlans)[number]; reason: unknown } => entry !== null);
+
+		if (failedAttempts.length > 0) {
+			try {
+				await db.insert(promptRunAttempts).values(
+					failedAttempts.map(({ plan, reason }) => ({
+						promptId,
+						brandId: brand.id,
+						model: plan.model,
+						provider: plan.provider,
+						runIndex: plan.runIndex,
+						cycleDate,
+						success: false,
+						errorMessage: reason instanceof Error ? reason.message : String(reason),
+						promptRunId: null,
+					})),
+				);
+			} catch (error) {
+				console.error(`Prompt ${promptId}: no se pudieron registrar los intentos fallidos:`, error);
+			}
 		}
 
 		const successCount = runPromises.length - failures.length;

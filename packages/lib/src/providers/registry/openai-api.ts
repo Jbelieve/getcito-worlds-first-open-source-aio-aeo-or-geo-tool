@@ -3,6 +3,7 @@ import { generateText, Output } from "ai";
 import { extractCitationsFromOpenAI, extractTextFromOpenAI } from "../../text-extraction";
 import { localeCountryCode, localeSystemPrompt } from "../locale";
 import { usageFromResponse } from "../token-usage";
+import { reportedModelVersion } from "../model-version";
 import type {
 	Provider,
 	ProviderOptions,
@@ -62,6 +63,9 @@ async function runOpenAI(prompt: string, model: string, options?: ProviderOption
 		textContent: extractTextFromOpenAI(responseBody),
 		citations: extractCitationsFromOpenAI(responseBody),
 		modelVersion: model,
+		// La respuesta de la API trae el modelo resuelto; el alias pedido no se usa
+		// como si fuera la respuesta.
+		reportedModelVersion: reportedModelVersion(responseBody?.model) ?? undefined,
 		// El consumo que reporta la API. El costo NO se deriva de acá: OpenAI no lo informa en la
 		// respuesta y la tarifa del modelo no vive en el sistema, así que el costo queda `null` y
 		// el dato que sí existe (tokens) se guarda.

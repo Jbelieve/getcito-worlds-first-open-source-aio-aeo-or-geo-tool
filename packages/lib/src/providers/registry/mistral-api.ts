@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Citation } from "../../text-extraction";
 import { localeSystemMessages, localeSystemPrompt } from "../locale";
+import { reportedModelVersion } from "../model-version";
 import { usageFromResponse } from "../token-usage";
 import type {
 	Provider,
@@ -107,6 +108,7 @@ export const mistralApi: Provider = {
 				...parsed,
 				rawOutput: data,
 				modelVersion: data?.model ?? version,
+				reportedModelVersion: reportedModelVersion(data?.model) ?? undefined,
 				usage: usageFromResponse(data),
 			};
 		}

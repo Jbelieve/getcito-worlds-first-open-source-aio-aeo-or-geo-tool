@@ -8,6 +8,7 @@ import {
 	extractTextFromDataforseoLlm,
 	extractTextFromGoogle,
 } from "../../text-extraction";
+import { reportedModelVersion } from "../model-version";
 import type { ModelConfig, Provider, ProviderOptions, ScrapeResult } from "../types";
 
 /**
@@ -134,7 +135,10 @@ async function runGoogleAiMode(prompt: string, options?: ProviderOptions): Promi
 		webQueries: citations.length > 0 ? [WEB_QUERIES_UNAVAILABLE] : [],
 		textContent: extractTextFromGoogle(response),
 		citations,
-		modelVersion: "dataforseo",
+		// DataForSEO no informa qué modelo contestó en esta ruta; devolver "dataforseo"
+		// era afirmar un modelo que no existe. Sin dato, `undefined`.
+		modelVersion: undefined,
+		reportedModelVersion: undefined,
 	};
 }
 
@@ -241,7 +245,10 @@ async function runLlmResponse(model: string, prompt: string, options?: ProviderO
 		webQueries: webSearch ? (fanOut.length > 0 ? fanOut : citations.length > 0 ? [WEB_QUERIES_UNAVAILABLE] : []) : [],
 		textContent: extractTextFromDataforseoLlm(raw),
 		citations,
-		modelVersion: result.model_name ?? modelName,
+		// `result.model_name ?? modelName` afirmaba el nombre pedido como si fuera el que
+		// contestó. Donde el proveedor no informa, el dato no está.
+		modelVersion: reportedModelVersion(result.model_name) ?? undefined,
+		reportedModelVersion: reportedModelVersion(result.model_name) ?? undefined,
 	};
 }
 

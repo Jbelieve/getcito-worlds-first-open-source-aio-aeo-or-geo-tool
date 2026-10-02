@@ -15,16 +15,23 @@ import { db } from "@workspace/lib/db/db";
 import { brands } from "@workspace/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { APP_TIMEZONE } from "@/lib/app-locale";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { coerceLookbackPeriod, generateDateRange, type LookbackPeriod } from "@/lib/chart-utils";
 import {
 	getBrandMentionTotals,
 	getPerPromptDailyCompetitorMentions,
 	getPerPromptDailyMentions,
+	getProviderAttemptCycles,
 } from "@/lib/postgres-read";
-import { APP_TIMEZONE } from "@/lib/app-locale";
 import { getTimezoneLookbackRange, resolveTimezone } from "@/lib/timezone-utils";
-import { computeShareOfVoice, shareOfVoiceLeaderboardLVCF, shareOfVoiceTimeSeriesLVCF } from "@/lib/visibility-stats";
+import {
+	computeShareOfVoice,
+	type ProviderResponseCoverage,
+	shareOfVoiceLeaderboardLVCF,
+	shareOfVoiceTimeSeriesLVCF,
+	summarizeProviderResponseCoverage,
+} from "@/lib/visibility-stats";
 import { resolveFilteredPrompts } from "@/server/prompt-resolution";
 
 /** Accepts the presets plus `custom:YYYY-MM-DD:YYYY-MM-DD`; anything unrecognised
@@ -62,6 +69,15 @@ export interface ShareOfVoiceResponse {
 	model: string | null;
 	/** Brand share of voice over time (percentage 0..100, null on days with no runs). */
 	shareTimeSeries: Array<{ date: string; share: number | null }>;
+	/**
+	 * Cuántas corridas respondieron de cuántas se planearon.
+	 *
+	 * Va al lado de `brandShare` a propósito: un Share of Voice calculado sobre las
+	 * corridas que salieron bien es un número que **parece** completo. Cuando el
+	 * histórico no permite reconstruir el denominador, `state` es `unverifiable` y se
+	 * declara incompleto en vez de rellenarlo.
+	 */
+	coverage: ProviderResponseCoverage;
 }
 
 export const getShareOfVoiceFn = createServerFn({ method: "GET" })
@@ -89,14 +105,25 @@ export const getShareOfVoiceFn = createServerFn({ method: "GET" })
 		const promptIds = resolved.map((p) => p.id);
 
 		if (promptIds.length === 0) {
-			return { brandName, entries: [], brandShare: null, totalRuns: 0, model: data.model ?? null, shareTimeSeries: [] };
+			return {
+				brandName,
+				entries: [],
+				brandShare: null,
+				totalRuns: 0,
+				model: data.model ?? null,
+				shareTimeSeries: [],
+				coverage: summarizeProviderResponseCoverage([], 0),
+			};
 		}
 
 		const dateRange = generateDateRange(new Date(fromDateStr), new Date(toDateStr));
-		const [totals, perPromptDaily, perPromptCompetitorDaily] = await Promise.all([
+		const [totals, perPromptDaily, perPromptCompetitorDaily, attemptCycles] = await Promise.all([
 			getBrandMentionTotals(data.brandId, fromDateStr, toDateStr, timezone, promptIds, data.model),
 			getPerPromptDailyMentions(data.brandId, fromDateStr, toDateStr, timezone, promptIds, data.model),
 			getPerPromptDailyCompetitorMentions(data.brandId, fromDateStr, toDateStr, timezone, promptIds, data.model),
+			// El denominador honesto del mismo rango y los mismos filtros. Sin filas no
+			// significa "todo respondió": significa que no hay cobertura registrada.
+			getProviderAttemptCycles(data.brandId, fromDateStr, toDateStr, promptIds, data.model),
 		]);
 
 		// "Current standings": carry each prompt's latest brand + per-competitor counts
@@ -137,6 +164,17 @@ export const getShareOfVoiceFn = createServerFn({ method: "GET" })
 			totalRuns: totals.total_runs,
 			model: data.model ?? null,
 			shareTimeSeries,
+			coverage: summarizeProviderResponseCoverage(
+				attemptCycles.map((row) => ({
+					date: row.cycle_date,
+					planned: row.planned,
+					succeeded: row.succeeded,
+					failed: row.failed,
+				})),
+				totals.total_runs,
+				// Las menciones de marca observadas, para la proporción sobre intentos.
+				totals.brand_mentioned_runs,
+			),
 			entries: entries.map((e) => ({
 				...e,
 				prompts: e.isBrand ? standings.brandPrompts : (promptsByName.get(e.name) ?? 0),

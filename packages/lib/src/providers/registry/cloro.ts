@@ -1,6 +1,7 @@
 import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
 import { type Citation, cloroAnswer, extractCitationsFromCloro, extractTextFromCloro } from "../../text-extraction";
 import { localeCountryCode } from "../locale";
+import { reportedModelVersion } from "../model-version";
 import type { ModelConfig, Provider, ProviderOptions, ScrapeResult } from "../types";
 
 // Cloro monitors live AI answer engines. Each tracked model maps to a Cloro task
@@ -234,6 +235,10 @@ export const cloro: Provider = {
 			webQueries: webQueries.length > 0 ? webQueries : citations.length > 0 ? [WEB_QUERIES_UNAVAILABLE] : [],
 			citations,
 			modelVersion: typeof answer.model === "string" ? answer.model : undefined,
+			// Solo cuando Cloro lo informa; sin dato no se afirma nada.
+			reportedModelVersion:
+				reportedModelVersion(typeof answer.model === "string" ? answer.model : undefined) ??
+				undefined,
 		};
 	},
 };

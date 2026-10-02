@@ -20,6 +20,7 @@ import { PageHeader, FilterSection } from "@/components/page-header";
 import { FilterBar, getAvailableModels, ALL_MODELS_VALUE } from "@/components/filter-bar";
 import { useListFilters } from "@/hooks/use-list-filters";
 import { ColHead } from "@/components/col-head";
+import { ProviderCoverageNote } from "@/components/provider-coverage-note";
 import { ShareOfVoiceDonut } from "@/components/share-of-voice-donut";
 import { TrendChart } from "@/components/trend-chart";
 import { WebLogo } from "@/components/web-logo";
@@ -131,6 +132,8 @@ function ShareOfVoicePage() {
 									{data.brandName} across {data.totalRuns.toLocaleString()} runs
 									{data.entries.length > 1 ? ` and ${data.entries.length - 1} competitors` : ""}.
 								</p>
+								{/* El porcentaje no sale solo: al lado va cuántas corridas no respondieron. */}
+								<ProviderCoverageNote coverage={data.coverage} className="text-xs mt-2" />
 							</div>
 							<ShareOfVoiceDonut entries={data.entries} />
 						</CardContent>

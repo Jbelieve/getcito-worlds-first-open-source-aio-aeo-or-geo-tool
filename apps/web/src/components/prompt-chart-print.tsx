@@ -26,6 +26,9 @@ interface PromptRunData {
 	model: string;
 	provider: string | null;
 	version: string;
+	/** El modelo pedido y el que contestó: columnas propias del esquema `prompt_runs`. */
+	requestedVersion: string | null;
+	reportedModelVersion: string | null;
 	webSearchEnabled: boolean;
 	rawOutput: any;
 	webQueries: string[];

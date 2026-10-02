@@ -15,7 +15,15 @@ import { type CaptureOutcome, captureSummary } from "./runPlan";
 export interface QueryTarget {
 	/** Matches ApsQueryJob.model. */
 	target: string;
-	query: (prompt: string) => Promise<string | null>;
+	/**
+	 * La respuesta, y la versión del modelo que **contestó** cuando el proveedor la
+	 * informa.
+	 *
+	 * El texto suelto sigue siendo válido para los fakes y para los proveedores que no
+	 * reportan nada. Cuando el proveedor sí lo informa, viaja acá y se persiste en su
+	 * propia columna: el modelo **pedido** no se usa como si fuera el que contestó.
+	 */
+	query: (prompt: string) => Promise<{ text: string; modelVersion?: string } | string | null>;
 	/**
 	 * Ceiling for THIS model, when it differs from the run-wide one.
 	 *
@@ -31,6 +39,11 @@ export interface QueryTarget {
 export interface CapturedAnswer {
 	job: ApsQueryJob;
 	response: string;
+	/**
+	 * La versión que reportó el proveedor para **esta** respuesta, o `undefined` cuando
+	 * no la informó. Nunca el nombre pedido: ver `resolveReportedModelVersion`.
+	 */
+	modelVersion?: string;
 }
 
 export interface CaptureFailure {
@@ -77,7 +90,25 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 interface Slot {
 	response: string;
+	/** Lo que el proveedor informó en **esta** llamada. Ausente si no lo informó. */
+	modelVersion?: string;
 	failure: CaptureFailure | null;
+}
+
+/**
+ * Lo que devolvió un cliente: texto suelto (fakes, proveedores que no reportan nada) o
+ * texto con la versión que informó el proveedor.
+ */
+function normalizeQueryResult(value: { text: string; modelVersion?: string } | string | null): {
+	response: string;
+	modelVersion?: string;
+} {
+	if (typeof value === "string") return { response: value };
+	if (value === null || value === undefined) return { response: "" };
+	const response = typeof value.text === "string" ? value.text : "";
+	return value.modelVersion === undefined
+		? { response }
+		: { response, modelVersion: value.modelVersion };
 }
 
 async function queryOne(
@@ -91,8 +122,8 @@ async function queryOne(
 	}
 	const timeoutMs = Math.max(1000, target.timeoutMs ?? defaultTimeoutMs);
 	try {
-		const response = await withTimeout(target.query(job.promptText), timeoutMs, job.model);
-		return { response: typeof response === "string" ? response : "", failure: null };
+		const raw = await withTimeout(target.query(job.promptText), timeoutMs, job.model);
+		return { ...normalizeQueryResult(raw), failure: null };
 	} catch (error) {
 		return { response: "", failure: { job, reason: error instanceof Error ? error.message : String(error) } };
 	}
@@ -145,17 +176,23 @@ export async function captureRun(
 	await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, () => worker()));
 
 	const responses: string[] = new Array(jobs.length).fill("");
+	const reportedVersions: Array<string | undefined> = new Array(jobs.length).fill(undefined);
 	const failures: CaptureFailure[] = [];
 	for (const [position, slot] of slots.entries()) {
 		if (slot === undefined) continue;
 		responses[position] = slot.response;
+		reportedVersions[position] = slot.modelVersion;
 		if (slot.failure !== null) failures.push(slot.failure);
 	}
 
 	const answers: CapturedAnswer[] = [];
 	for (const [position, job] of jobs.entries()) {
 		const response = responses[position] ?? "";
-		if (response.length > 0) answers.push({ job, response });
+		if (response.length === 0) continue;
+		const reported = reportedVersions[position];
+		// La versión viaja solo cuando el proveedor la informó: sin dato, la clave no
+		// existe (y la columna queda `null`, que es "no lo sé").
+		answers.push(reported === undefined ? { job, response } : { job, response, modelVersion: reported });
 	}
 
 	return { answers, summary: captureSummary(responses), failures };

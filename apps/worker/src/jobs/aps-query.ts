@@ -24,6 +24,7 @@ import {
 	callCostFromResult,
 	getProvider,
 	parseScrapeTargets,
+	resolveReportedModelVersion,
 	selectTargetsForBrand,
 	withProviderCallTracking,
 } from "@workspace/lib/providers";
@@ -114,7 +115,12 @@ export async function apsQueryJob(
 				// ninguno de los dos y la fila queda con `cost_usd` en null.
 				callCostFromResult,
 			);
-			return typeof result.textContent === "string" ? result.textContent : "";
+			// Lo que el proveedor informó sobre el modelo que contestó. Sin dato, la
+			// columna queda `null` (nunca el nombre pedido, que vive en `model`).
+			const reportedModelVersion = resolveReportedModelVersion(result.reportedModelVersion);
+			return reportedModelVersion === null
+				? { text: typeof result.textContent === "string" ? result.textContent : "" }
+				: { text: typeof result.textContent === "string" ? result.textContent : "", modelVersion: reportedModelVersion };
 		});
 	const { targets, duplicateModels } = queryTargetsFrom(selected as MeasurementTargetConfig[], invoke);
 	if (duplicateModels.length > 0) {
@@ -137,7 +143,12 @@ export async function apsQueryJob(
 				return {
 					runId,
 					promptId: prompt?.id ?? prompts[0]?.id ?? "",
+					// El modelo **pedido**.
 					model: answer.job.model,
+					// El modelo que **contestó**, en su propia columna: `null` cuando el
+					// proveedor no lo informó. El pedido nunca se rellena acá.
+					modelVersionReported: answer.modelVersion ?? null,
+					requestedModelVersion: selected.find((config) => config.model === answer.job.model)?.version ?? null,
 					runIndex: answer.job.runIndex,
 					promptText: answer.job.promptText,
 					fullResponse: answer.response,

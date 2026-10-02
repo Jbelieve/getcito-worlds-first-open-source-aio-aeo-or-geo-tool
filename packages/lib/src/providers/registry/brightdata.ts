@@ -4,6 +4,7 @@ import type { Citation } from "../../text-extraction";
 import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
 import { DATAFORSEO_LOCATION_LANGUAGES } from "../../location-languages";
 import { BRIGHTDATA_COUNTRIES } from "../../brightdata-locations";
+import { reportedModelVersion } from "../model-version";
 
 const BD_DATASET_IDS: Record<string, string> = {
 	chatgpt: "gd_m7aof0k82r803d5bjm",
@@ -231,6 +232,8 @@ export const brightdata: Provider = {
 					: [],
 				citations,
 				modelVersion: record?.model ?? undefined,
+				// Lo que el dataset informa, o nada: nunca el nombre pedido.
+				reportedModelVersion: reportedModelVersion(record?.model) ?? undefined,
 			};
 		} finally {
 			// A triggered snapshot we never consumed (timeout, terminal failure, an

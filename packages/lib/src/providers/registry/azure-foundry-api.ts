@@ -4,6 +4,7 @@ import { extractCitationsFromChatCompletion } from "../../text-extraction";
 import { createGate } from "../concurrency";
 import { localeCountryCode, localeSystemMessages } from "../locale";
 import { usageFromResponse } from "../token-usage";
+import { reportedModelVersion } from "../model-version";
 import type {
 	Provider,
 	ProviderOptions,
@@ -155,6 +156,7 @@ export const azureFoundryApi: Provider = {
 			webQueries: citations.length > 0 ? [WEB_QUERIES_UNAVAILABLE] : [],
 			citations,
 			modelVersion: data?.model ?? targetModel,
+			reportedModelVersion: reportedModelVersion(data?.model) ?? undefined,
 			// Foundry es OpenAI-compatible, así que `usage` viene cuando el deployment lo reporta.
 			usage: usageFromResponse(data),
 		};

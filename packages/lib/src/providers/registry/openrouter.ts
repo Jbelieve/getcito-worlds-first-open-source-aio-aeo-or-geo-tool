@@ -2,6 +2,7 @@ import { z } from "zod";
 import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
 import type { Citation } from "../../text-extraction";
 import { localeSystemMessages } from "../locale";
+import { reportedModelVersion } from "../model-version";
 import { costFromResponse, usageFromResponse } from "../token-usage";
 import type {
 	Provider,
@@ -121,10 +122,12 @@ export const openrouter: Provider = {
 		const parsed = (schema as z.ZodType).parse(JSON.parse(content));
 		return {
 			object: parsed as T,
-			// Report the alias we sent, not OpenRouter's resolved version
-			// (e.g. "openai/gpt-5-mini" vs "openai/gpt-5-mini-2025-08-07") —
-			// matches what openai-api and anthropic-api do.
-			modelVersion: DEFAULT_RESEARCH_MODEL,
+			// `modelVersion` conserva lo que este camino siempre devolvió: la versión
+			// **resuelta** si OpenRouter la informa, y si no el alias pedido (lo usan los
+			// caminos de research como identificador a mostrar). Lo que se persiste para
+			// medir es `reportedModelVersion`, que sin `data.model` queda sin dato.
+			modelVersion: reportedModelVersion(data?.model) ?? DEFAULT_RESEARCH_MODEL,
+			reportedModelVersion: reportedModelVersion(data?.model) ?? undefined,
 			usage: usageFromResponse(data),
 			costUsd: costFromResponse(data),
 		};
@@ -180,7 +183,11 @@ export const openrouter: Provider = {
 			textContent: extractTextFromOpenRouterResponse(data),
 			webQueries,
 			citations,
-			modelVersion: data?.model ?? modelSlug.replace(":online", ""),
+			// La versión **resuelta** que devuelve OpenRouter (`data.model`), no el alias
+			// que mandamos: "openai/gpt-5-mini" y "openai/gpt-5-mini-2025-08-07" son dos
+			// hechos distintos. Sin `data.model` no se afirma nada.
+			modelVersion: reportedModelVersion(data?.model) ?? undefined,
+			reportedModelVersion: reportedModelVersion(data?.model) ?? undefined,
 			usage: usageFromResponse(data),
 			// OpenRouter es el único proveedor que informa el costo en su propia respuesta
 			// (`usage.cost`). Cuando lo hace, el costo es un dato medido y no una estimación.
