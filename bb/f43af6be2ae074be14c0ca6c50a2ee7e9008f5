@@ -1,0 +1,44 @@
+packages/aos-aps/src/assets/kit-routes.ts
+  h_c5ca005a78c880 1-236
+apps/web/src/server/mcp/tools/actions.ts
+  h_c5ca005a78c880 439,442-447
+packages/lib/src/db/migrations/meta/0031_snapshot.json
+  h_c5ca005a78c880 1-3882
+packages/aos-aps/src/db/schema.ts
+  h_c5ca005a78c880 3,7,17-23,101-147,164-167
+packages/lib/src/db/migrations/0031_agent_assets_path_guard.sql
+  h_c5ca005a78c880 1-30
+apps/web/src/routes/_authed/app/$brand/agent-assets.tsx
+  h_c5ca005a78c880 44-51
+packages/aos-aps/src/server/bundle.ts
+  h_c5ca005a78c880 5,11-15,19,135-150,154-162,167-183
+packages/aos-aps/src/assets/index.ts
+  h_c5ca005a78c880 2
+apps/web/src/server/agent-assets-core.ts
+  h_c5ca005a78c880 18-19,412-459,465-470,472,598-614,616-619
+packages/aos-aps/src/server/bundle.test.ts
+  h_c5ca005a78c880 1,5,9,11-13,151-226
+scripts/agent-assets-path-guard-check.sh
+  h_c5ca005a78c880 1-220
+apps/web/src/lib/__tests__/agent-assets-discovery.test.ts
+  h_c5ca005a78c880 18,487-554
+packages/lib/src/db/migrations/meta/_journal.json
+  h_c5ca005a78c880 221-227,230
+packages/aos-aps/src/assets/kit-routes.test.ts
+  h_c5ca005a78c880 1-162
+apps/beaos-wordpress/beaos-aos-pure.php
+  h_c5ca005a78c880 296-302,372-373
+apps/beaos-wordpress/tests/pure.php
+  h_c5ca005a78c880 599-706
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bbf43af6be2ae074be14c0ca6c50a2ee7e9008f5",
+  "prompts": {},
+  "humans": {
+    "h_c5ca005a78c880": {
+      "author": "Jbelieve <jorge@believe-global.com>"
+    }
+  }
+}
